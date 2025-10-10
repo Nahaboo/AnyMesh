@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { uploadMesh } from '../utils/api'
 
 function FileUpload({ onUploadSuccess }) {
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
 
   // Formats supportes (memes que le backend)
   const SUPPORTED_FORMATS = ['.obj', '.stl', '.ply', '.off', '.gltf', '.glb']
@@ -38,6 +40,7 @@ function FileUpload({ onUploadSuccess }) {
   const handleFile = async (file) => {
     // Reset error
     setError(null)
+    setUploadProgress(0)
 
     // Verifier l'extension
     const fileExt = '.' + file.name.split('.').pop().toLowerCase()
@@ -46,22 +49,41 @@ function FileUpload({ onUploadSuccess }) {
       return
     }
 
-    // Pour l'instant, on affiche juste les infos du fichier
-    // On connectera au backend dans la prochaine etape
-    console.log('Fichier selectionne:', file.name, file.size, 'bytes')
-
-    // Simuler un upload pour tester l'UI
+    // Upload vers le backend
     setIsUploading(true)
-    setTimeout(() => {
-      setIsUploading(false)
+    setUploadProgress(10)
+
+    try {
+      // Simuler la progression
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 10, 90))
+      }, 200)
+
+      // Appel API
+      const response = await uploadMesh(file)
+
+      clearInterval(progressInterval)
+      setUploadProgress(100)
+
+      // Success
+      console.log('Upload reussi:', response)
+
       if (onUploadSuccess) {
-        onUploadSuccess({
-          filename: file.name,
-          size: file.size,
-          format: fileExt
-        })
+        onUploadSuccess(response.mesh_info)
       }
-    }, 1000)
+
+      // Reset apres 1 seconde
+      setTimeout(() => {
+        setIsUploading(false)
+        setUploadProgress(0)
+      }, 1000)
+
+    } catch (err) {
+      console.error('Erreur upload:', err)
+      setError(err.response?.data?.detail || 'Erreur lors de l\'upload du fichier')
+      setIsUploading(false)
+      setUploadProgress(0)
+    }
   }
 
   return (
@@ -116,10 +138,25 @@ function FileUpload({ onUploadSuccess }) {
             </p>
           </div>
 
+          {/* Barre de progression */}
+          {isUploading && (
+            <div className="max-w-xs mx-auto">
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-2">{uploadProgress}%</p>
+            </div>
+          )}
+
           {/* Formats supportes */}
-          <div className="text-xs text-gray-400">
-            Formats supportes: {SUPPORTED_FORMATS.join(', ')}
-          </div>
+          {!isUploading && (
+            <div className="text-xs text-gray-400">
+              Formats supportes: {SUPPORTED_FORMATS.join(', ')}
+            </div>
+          )}
         </div>
       </div>
 

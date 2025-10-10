@@ -3,13 +3,15 @@ Backend FastAPI pour MeshSimplifier
 Fournit les endpoints pour l'upload et le traitement de maillages 3D
 """
 
+import os
+import shutil
+from pathlib import Path
+from typing import Optional
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pathlib import Path
 from pydantic import BaseModel
-from typing import Optional
-import shutil
 import open3d as o3d
 
 from .task_manager import task_manager, Task
@@ -22,9 +24,13 @@ app = FastAPI(
 )
 
 # Configuration CORS pour permettre les requetes depuis le frontend React
+# En developpement : autorise tous les localhost
+# En production : specifier les domaines exacts
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React dev server
+    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ["*"] else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
