@@ -1,0 +1,12 @@
+# Pour la manipulation et simplification de maillages
+open3d>=0.18.0
+numpy>=1.21.0
+scipy>=1.7.0
+
+# Backend API
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# Pour les tests
+pytest>=7.0.0
