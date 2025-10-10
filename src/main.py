@@ -220,9 +220,24 @@ async def list_tasks():
     }
 
 
+@app.get("/mesh/input/{filename}")
+async def get_input_mesh(filename: str):
+    """Sert un fichier de maillage depuis data/input pour la visualisation"""
+    file_path = DATA_INPUT / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouve")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type="model/obj"
+    )
+
+
 @app.get("/download/{filename}")
 async def download_mesh(filename: str):
-    """Telecharge un fichier de maillage simplifie"""
+    """Telecharge un fichier de maillage simplifie depuis data/output"""
     file_path = DATA_OUTPUT / filename
 
     if not file_path.exists():

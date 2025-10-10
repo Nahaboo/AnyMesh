@@ -1,5 +1,7 @@
+import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Grid, Center } from '@react-three/drei'
+import { OrbitControls, Grid } from '@react-three/drei'
+import MeshModel from './MeshModel'
 
 function MeshViewer({ meshInfo }) {
   return (
@@ -18,13 +20,15 @@ function MeshViewer({ meshInfo }) {
               <directionalLight position={[10, 10, 5]} intensity={1} />
               <pointLight position={[-10, -10, -5]} intensity={0.5} />
 
-              {/* Objet 3D placeholder */}
-              <Center>
+              {/* Chargement du modèle 3D */}
+              <Suspense fallback={
                 <mesh>
-                  <boxGeometry args={[2, 2, 2]} />
-                  <meshStandardMaterial color="#4A90E2" />
+                  <boxGeometry args={[1, 1, 1]} />
+                  <meshStandardMaterial color="#9CA3AF" wireframe />
                 </mesh>
-              </Center>
+              }>
+                <MeshModel filename={meshInfo.filename} />
+              </Suspense>
 
               {/* Grille */}
               <Grid args={[10, 10]} />
@@ -78,10 +82,10 @@ function MeshViewer({ meshInfo }) {
             </div>
           </div>
 
-          {/* Note */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-xs text-blue-700">
-              <strong>Note:</strong> La visualisation 3D complete avec chargement des fichiers OBJ/STL sera implementee dans une prochaine version. Pour l'instant, un cube placeholder est affiche.
+          {/* Controles de la vue */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p className="text-xs text-gray-600">
+              <strong>Contrôles 3D :</strong> Clic gauche pour tourner • Molette pour zoomer • Clic droit pour déplacer
             </p>
           </div>
         </div>
