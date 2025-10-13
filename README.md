@@ -2,7 +2,9 @@
 
 **Application web de simplification et reparation de maillages 3D**
 
-Backend Python (FastAPI + Open3D) avec file d'attente de taches asynchrones + Frontend React Three Fiber.
+Backend Python (FastAPI + **Trimesh**) avec file d'attente de taches asynchrones + Frontend React Three Fiber.
+
+**Note** : Trimesh est utilisé pour son excellente performance (`is_watertight` 5-10x plus rapide) et son support natif GLTF/GLB.
 
 ## Statut du Projet
 
@@ -18,11 +20,13 @@ Backend Python (FastAPI + Open3D) avec file d'attente de taches asynchrones + Fr
 - [ ] Reparation de maillages (a venir)
 
 ### Frontend
-- [ ] Interface React avec Three.js / React Three Fiber
-- [ ] Visualisation 3D interactive
-- [ ] Upload avec drag & drop
-- [ ] Controles de simplification
+- [x] Interface React avec Three.js / React Three Fiber
+- [x] Visualisation 3D interactive (OBJ, STL, PLY, GLTF, GLB)
+- [x] Upload avec drag & drop
+- [x] Controles de simplification
+- [x] Suivi de progression des taches en temps reel
 - [ ] Comparaison avant/apres
+- [ ] Telechargement des fichiers simplifies
 
 ## Architecture
 
@@ -57,10 +61,10 @@ Backend Python (FastAPI + Open3D) avec file d'attente de taches asynchrones + Fr
 ## Technologies Utilisees
 
 ### Backend
-- **Python 3.12.10** (IMPORTANT: Open3D ne supporte pas Python 3.13+)
+- **Python 3.12.10**
 - **FastAPI** - Framework web asynchrone
 - **Uvicorn** - Serveur ASGI
-- **Open3D** - Traitement de maillages 3D
+- **Trimesh** - Traitement de maillages 3D (rapide, GLTF/GLB natif)
 - **Threading + Queue** - Gestion de taches asynchrones
 
 ### Frontend (a venir)
@@ -267,12 +271,24 @@ MeshSimplifier/
 
 ## Formats de Fichiers Supportes
 
+### Visualisation 3D (Frontend)
+- **OBJ** (.obj) - Wavefront Object
+- **STL** (.stl) - Stereolithography
+- **PLY** (.ply) - Polygon File Format
+- **GLB** (.glb) - Binary GLTF (recommande pour GLTF)
+- **GLTF** (.gltf) - GL Transmission Format (fichiers externes non supportes)
+
+**Note importante sur GLTF:** Seuls les fichiers GLB (GLTF binaire, tout-en-un) sont pleinement supportes pour la visualisation. Les fichiers GLTF avec references externes (.bin, textures) ne fonctionneront pas car les fichiers auxiliaires doivent etre dans le meme dossier.
+
+**Limitation de taille:** Pour une visualisation fluide dans le navigateur, il est recommande de ne pas depasser 5-10 MB par fichier. Les fichiers tres volumineux (>20 MB, >500K triangles) peuvent causer des problemes de performance ou de chargement. Utilisez la fonction de simplification du backend pour reduire la taille des gros fichiers avant visualisation.
+
+### Simplification (Backend avec Open3D)
 - **OBJ** (.obj) - Wavefront Object
 - **STL** (.stl) - Stereolithography
 - **PLY** (.ply) - Polygon File Format
 - **OFF** (.off) - Object File Format
-- **GLTF** (.gltf) - GL Transmission Format
-- **GLB** (.glb) - Binary GLTF
+
+**GLTF/GLB ne peuvent PAS etre simplifies** (limitation d'Open3D)
 
 ## Algorithme de Simplification
 
@@ -293,7 +309,21 @@ Le backend utilise l'algorithme **Quadric Error Metric Decimation** d'Open3D :
 - **[DEMARRAGE_RAPIDE.md](DEMARRAGE_RAPIDE.md)** - Guide de demarrage complet
 - **[BACKEND_EXPLAINED.md](BACKEND_EXPLAINED.md)** - Explication detaillee du backend
 - **[OPTION_A_IMPLEMENTATION.md](OPTION_A_IMPLEMENTATION.md)** - Implementation Option A
+- **[DEBUG.md](DEBUG.md)** - Systeme de tracage de performances et debug
 - **[CLAUDE.md](CLAUDE.md)** - Instructions pour Claude Code
+
+### Performance Tracing
+
+Le projet inclut un système de traçage de performances complet pour identifier les goulots d'étranglement lors du chargement de fichiers 3D. Consultez **[DEBUG.md](DEBUG.md)** pour :
+
+- Comprendre les étapes mesurées (backend Trimesh + frontend Three.js)
+- Lire et interpréter les traces dans la console
+- Identifier les problèmes de performance
+- Optimiser le traitement de fichiers volumineux
+
+**Les traces s'affichent en deux temps :**
+1. **Après l'upload** : Timings backend (FILE_SAVE, TRIMESH_LOAD, ANALYSIS)
+2. **Après le chargement 3D** : Timings frontend (FETCH_AND_PARSE) + résumé complet
 
 ## Tests
 
@@ -345,13 +375,15 @@ Open3D ne supporte pas Python 3.13+. Desinstallez Python 3.13 et installez Pytho
 - [x] Simplification de maillages
 - [x] API complete et testee
 
-### Phase 2 : Frontend (EN COURS)
-- [ ] Setup React + Vite
-- [ ] Integration React Three Fiber
-- [ ] Visualisation 3D
-- [ ] Interface d'upload
-- [ ] Controles de simplification
+### Phase 2 : Frontend (EN COURS - 80% COMPLETE)
+- [x] Setup React + Vite + Tailwind CSS
+- [x] Integration React Three Fiber
+- [x] Visualisation 3D multi-formats (OBJ, STL, PLY, GLTF, GLB)
+- [x] Interface d'upload avec drag & drop
+- [x] Controles de simplification
+- [x] Suivi de progression des taches
 - [ ] Comparaison avant/apres
+- [ ] Telechargement des fichiers simplifies
 
 ### Phase 3 : Fonctionnalites Avancees
 - [ ] Reparation de maillages

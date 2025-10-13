@@ -12,8 +12,27 @@ function MeshViewer({ meshInfo }) {
 
       {meshInfo ? (
         <div className="space-y-4">
+          {/* Avertissement pour les gros fichiers */}
+          {meshInfo.file_size > 5000000 && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <div className="flex items-start space-x-2">
+                <svg className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-orange-800">
+                    Fichier volumineux ({(meshInfo.file_size / 1024 / 1024).toFixed(1)} MB)
+                  </p>
+                  <p className="text-xs text-orange-700 mt-1">
+                    Le chargement peut prendre quelques secondes. Pour de meilleures performances, pensez à simplifier le fichier.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Canvas 3D */}
-          <div className="w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+          <div className="w-full h-96 bg-gray-100 rounded-lg overflow-hidden relative">
             <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
               {/* Lumieres */}
               <ambientLight intensity={0.5} />
@@ -22,12 +41,21 @@ function MeshViewer({ meshInfo }) {
 
               {/* Chargement du modèle 3D */}
               <Suspense fallback={
-                <mesh>
-                  <boxGeometry args={[1, 1, 1]} />
-                  <meshStandardMaterial color="#9CA3AF" wireframe />
-                </mesh>
+                <group>
+                  <mesh>
+                    <boxGeometry args={[2, 2, 2]} />
+                    <meshStandardMaterial color="#3B82F6" wireframe />
+                  </mesh>
+                  <mesh rotation={[0, Math.PI / 4, 0]}>
+                    <boxGeometry args={[1.5, 1.5, 1.5]} />
+                    <meshStandardMaterial color="#60A5FA" wireframe />
+                  </mesh>
+                </group>
               }>
-                <MeshModel filename={meshInfo.filename} />
+                <MeshModel
+                  key={meshInfo.uploadId || meshInfo.filename}
+                  filename={meshInfo.filename}
+                />
               </Suspense>
 
               {/* Grille */}
@@ -76,7 +104,7 @@ function MeshViewer({ meshInfo }) {
               <div>
                 <p className="text-gray-500">Manifold:</p>
                 <p className="font-semibold text-gray-900">
-                  {meshInfo.is_manifold ? '✓ Oui' : '✗ Non'}
+                  {meshInfo.is_manifold === null ? 'N/A' : (meshInfo.is_manifold ? 'Oui' : 'Non')}
                 </p>
               </div>
             </div>
