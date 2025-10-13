@@ -45,6 +45,9 @@ yarn-error.log*
 *~
 .DS_Store
 
+# Archive
+archive/
+
 # Fichiers de documentation (EXCLUS des commits)
 *.md
 !README.md
