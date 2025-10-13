@@ -127,6 +127,18 @@ async def upload_mesh(file: UploadFile = File(...)):
                 # Ignorer si le calcul échoue (mesh invalide)
                 pass
 
+        # Bounding box pour ajuster la caméra frontend
+        bounds = mesh.bounds  # [[min_x, min_y, min_z], [max_x, max_y, max_z]]
+        bounding_box = {
+            "min": [float(bounds[0][0]), float(bounds[0][1]), float(bounds[0][2])],
+            "max": [float(bounds[1][0]), float(bounds[1][1]), float(bounds[1][2])],
+            "size": [float(bounds[1][0] - bounds[0][0]),
+                     float(bounds[1][1] - bounds[0][1]),
+                     float(bounds[1][2] - bounds[0][2])],
+            "center": [float(mesh.centroid[0]), float(mesh.centroid[1]), float(mesh.centroid[2])],
+            "diagonal": float(mesh.scale)  # Longueur de la diagonale de la bounding box
+        }
+
         mesh_info = {
             "filename": file.filename,
             "file_size": file_path.stat().st_size,
@@ -140,7 +152,8 @@ async def upload_mesh(file: UploadFile = File(...)):
             "is_manifold": None,  # Trimesh n'a pas d'équivalent direct simple
             # Propriétés supplémentaires trimesh
             "euler_number": int(mesh.euler_number) if hasattr(mesh, 'euler_number') else None,
-            "volume": volume
+            "volume": volume,
+            "bounding_box": bounding_box  # Pour ajuster la caméra Three.js
         }
         analyze_duration = (time.time() - start_analyze) * 1000
         print(f"  📊 Analysis: {analyze_duration:.2f}ms")

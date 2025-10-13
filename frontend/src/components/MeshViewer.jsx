@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Grid } from '@react-three/drei'
 import MeshModel from './MeshModel'
+import CameraController from './CameraController'
 
 function MeshViewer({ meshInfo }) {
   return (
@@ -34,6 +35,9 @@ function MeshViewer({ meshInfo }) {
           {/* Canvas 3D */}
           <div className="w-full h-96 bg-gray-100 rounded-lg overflow-hidden relative">
             <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
+              {/* Ajustement automatique de la caméra */}
+              {meshInfo.bounding_box && <CameraController boundingBox={meshInfo.bounding_box} />}
+
               {/* Lumieres */}
               <ambientLight intensity={0.5} />
               <directionalLight position={[10, 10, 5]} intensity={1} />
@@ -65,8 +69,6 @@ function MeshViewer({ meshInfo }) {
               <OrbitControls
                 enableDamping
                 dampingFactor={0.05}
-                minDistance={2}
-                maxDistance={20}
               />
             </Canvas>
           </div>
