@@ -1,15 +1,67 @@
-import { Suspense } from 'react'
+import { Suspense, useRef, useState, useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Grid } from '@react-three/drei'
 import MeshModel from './MeshModel'
 import CameraController from './CameraController'
 
 function MeshViewer({ meshInfo }) {
+  const canvasContainerRef = useRef(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  const toggleFullscreen = () => {
+    if (!canvasContainerRef.current) return
+
+    if (!document.fullscreenElement) {
+      // Entrer en plein écran
+      canvasContainerRef.current.requestFullscreen().then(() => {
+        setIsFullscreen(true)
+      }).catch((err) => {
+        console.error('Erreur plein écran:', err)
+      })
+    } else {
+      // Sortir du plein écran
+      document.exitFullscreen().then(() => {
+        setIsFullscreen(false)
+      })
+    }
+  }
+
+  // Ajouter/retirer l'écouteur au montage/démontage du composant
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
   return (
     <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-semibold text-gray-800 mb-4">
-        Visualisation 3D
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold text-gray-800">
+          Visualisation 3D
+        </h2>
+        {meshInfo && (
+          <button
+            onClick={toggleFullscreen}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
+          >
+            {isFullscreen ? (
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+            )}
+          </button>
+        )}
+      </div>
 
       {meshInfo ? (
         <div className="space-y-4">
@@ -33,7 +85,7 @@ function MeshViewer({ meshInfo }) {
           )}
 
           {/* Canvas 3D */}
-          <div className="w-full h-96 bg-gray-100 rounded-lg overflow-hidden relative">
+          <div ref={canvasContainerRef} className="w-full h-96 bg-gray-100 rounded-lg overflow-hidden relative">
             <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
               {/* Ajustement automatique de la caméra */}
               {meshInfo.bounding_box && <CameraController boundingBox={meshInfo.bounding_box} />}
