@@ -1,12 +1,18 @@
 # Pour la manipulation et simplification de maillages
-open3d>=0.18.0
+trimesh>=4.0.0
 numpy>=1.21.0
 scipy>=1.7.0
+fast-simplification>=0.1.0  # Requis par Trimesh pour simplify_quadric_decimation
 
 # Backend API
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-multipart>=0.0.9
 
+# Conversion GLB (pas besoin de pygltflib, Trimesh le gère nativement)
+# Note: Compression Draco nécessite gltf-pipeline CLI: npm install -g gltf-pipeline
+
 # Pour les tests
 pytest>=7.0.0
+pytest-cov>=4.0.0
+httpx>=0.24.0

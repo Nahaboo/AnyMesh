@@ -51,6 +51,7 @@ archive/
 # Fichiers de documentation (EXCLUS des commits)
 *.md
 !README.md
+!tests/README.md
 
 # Donnees temporaires et generees
 data/output/*
@@ -81,6 +82,7 @@ coverage/
 # pytest
 .pytest_cache/
 .tox/
+tests/fixtures/  # Fixtures générées automatiquement
 
 # Jupyter Notebook
 .ipynb_checkpoints
