@@ -110,7 +110,7 @@ function MeshViewer({ meshInfo }) {
               }>
                 <MeshModel
                   key={meshInfo.uploadId || meshInfo.filename}
-                  filename={meshInfo.filename}
+                  filename={meshInfo.displayFilename || meshInfo.filename}
                 />
               </Suspense>
 

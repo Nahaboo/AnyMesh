@@ -18,7 +18,8 @@ function MeshModel({ filename }) {
   // Déterminer le format du fichier
   const extension = filename.split('.').pop().toLowerCase()
 
-  console.log('Chargement du mesh depuis:', meshUrl, 'Format:', extension)
+  console.log('🔵 [MeshModel] Chargement du mesh depuis:', meshUrl, 'Format:', extension)
+  console.log('🔵 [MeshModel] Filename reçu:', filename)
 
   // Démarrer le timer de chargement (une seule fois au montage)
   useEffect(() => {
@@ -40,11 +41,15 @@ function MeshModel({ filename }) {
   let model
 
   if (extension === 'obj') {
+    console.log('🔵 [MeshModel] Utilisation de OBJLoader')
     model = useLoader(OBJLoader, meshUrl)
   } else if (extension === 'gltf' || extension === 'glb') {
+    console.log('🔵 [MeshModel] Utilisation de GLTFLoader')
     const gltf = useLoader(GLTFLoader, meshUrl)
     model = gltf.scene
+    console.log('🔵 [MeshModel] GLTF chargé:', gltf)
   } else if (extension === 'stl') {
+    console.log('🔵 [MeshModel] Utilisation de STLLoader')
     const geometry = useLoader(STLLoader, meshUrl)
 
     // Pour STL, on doit créer un mesh manuellement
@@ -80,6 +85,10 @@ function MeshModel({ filename }) {
   // Log des statistiques du modèle et fin du timer
   useEffect(() => {
     if (model) {
+      console.log('🟢 [MeshModel] Model chargé:', model)
+      console.log('🟢 [MeshModel] Type:', model.type)
+      console.log('🟢 [MeshModel] Children:', model.children?.length)
+
       const totalLabel = `TOTAL_LOAD_${filename}`
       const fetchParseLabel = `FETCH_AND_PARSE_${extension.toUpperCase()}_${filename}`
 
@@ -88,9 +97,12 @@ function MeshModel({ filename }) {
 
       let vertexCount = 0
       let triangleCount = 0
+      let meshCount = 0
 
       model.traverse((child) => {
+        console.log('  🔹 Child:', child.type, child.name)
         if (child.geometry) {
+          meshCount++
           const positions = child.geometry.attributes.position
           if (positions) {
             vertexCount += positions.count
@@ -103,8 +115,13 @@ function MeshModel({ filename }) {
 
       console.log(`📊 [MODEL] ${filename}:`, {
         vertices: vertexCount.toLocaleString(),
-        triangles: Math.floor(triangleCount).toLocaleString()
+        triangles: Math.floor(triangleCount).toLocaleString(),
+        meshes: meshCount
       })
+
+      if (meshCount === 0) {
+        console.error('❌ [MODEL] AUCUN MESH TROUVÉ dans le modèle!')
+      }
 
       // Terminer le timer total et afficher le résumé
       perf.end(totalLabel)
