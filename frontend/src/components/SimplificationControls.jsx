@@ -11,8 +11,12 @@ function SimplificationControls({ meshInfo, onSimplify, isProcessing }) {
     e.preventDefault()
 
     if (onSimplify && !isGltfFormat) {
+      // Utiliser originalFilename pour la simplification (fichier source, pas GLB)
+      const filenameForSimplification = meshInfo.originalFilename || meshInfo.filename
+      console.log('[DEBUG] Simplification du fichier:', filenameForSimplification)
+
       onSimplify({
-        filename: meshInfo.filename,
+        filename: filenameForSimplification,
         reduction_ratio: reductionRatio,
         preserve_boundary: preserveBoundary
       })

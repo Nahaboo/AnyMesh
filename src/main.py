@@ -18,6 +18,13 @@ import trimesh
 from .task_manager import task_manager, Task
 from .simplify import simplify_mesh
 from .converter import convert_and_compress
+from .glb_cache import (
+    invalidate_glb_cache,
+    should_convert_to_glb,
+    cleanup_orphaned_glb_files,
+    get_cache_stats,
+    is_glb_file
+)
 
 app = FastAPI(
     title="MeshSimplifier API",
@@ -185,43 +192,57 @@ async def upload_mesh(file: UploadFile = File(...)):
         print(f"     Vertices: {mesh_info['vertices_count']:,}")
         print(f"     Triangles: {mesh_info['triangles_count']:,}")
 
-        # Conversion automatique vers GLB avec compression Draco
-        # Ne pas convertir si le fichier est déjà GLB
+        # Conversion automatique vers GLB pour la visualisation frontend
+        # IMPORTANT: Le GLB sert UNIQUEMENT à la visualisation
+        # Toutes les opérations (simplification, réparation) utilisent le fichier original
         glb_filename = file.filename
         conversion_result = None
 
-        if file_ext not in {".glb", ".gltf"}:
-            # Générer le nom du fichier GLB
-            glb_filename = f"{file_path.stem}.glb"
-            glb_path = DATA_INPUT / glb_filename
-
-            # Supprimer l'ancien GLB s'il existe pour forcer la reconversion
-            # Cela garantit que le GLB correspond toujours au fichier source actuel
-            if glb_path.exists():
-                print(f"  🗑️ Removing old GLB to force reconversion: {glb_filename}")
-                glb_path.unlink()
-
-            # Convertir vers GLB + compression Draco
-            conversion_result = convert_and_compress(
-                input_path=file_path,
-                output_path=glb_path,
-                enable_draco=False,
-                compression_level=7
+        if not is_glb_file(file.filename):
+            # Vérifier si la conversion est recommandée (limite de taille)
+            should_convert, reason = should_convert_to_glb(
+                file.filename,
+                file_path.stat().st_size,
+                max_size_mb=50
             )
 
-            if conversion_result['success']:
-                # Mettre à jour mesh_info avec le nouveau filename GLB
-                mesh_info['glb_filename'] = glb_filename
-                mesh_info['glb_size'] = conversion_result['final_size']
-                mesh_info['original_filename'] = file.filename
-                mesh_info['original_size'] = file_path.stat().st_size
+            if should_convert:
+                # Générer le nom du fichier GLB
+                glb_filename = f"{file_path.stem}.glb"
+                glb_path = DATA_INPUT / glb_filename
+
+                # Invalider le cache GLB existant pour forcer la reconversion
+                invalidate_glb_cache(file.filename, DATA_INPUT)
+
+                # Convertir vers GLB
+                conversion_result = convert_and_compress(
+                    input_path=file_path,
+                    output_path=glb_path,
+                    enable_draco=False,
+                    compression_level=7
+                )
+
+                if conversion_result['success']:
+                    # Mettre à jour mesh_info avec le nouveau filename GLB
+                    mesh_info['glb_filename'] = glb_filename
+                    mesh_info['glb_size'] = conversion_result['final_size']
+                    mesh_info['original_filename'] = file.filename
+                    mesh_info['original_size'] = file_path.stat().st_size
+                    print(f"  ✓ GLB generated for visualization: {glb_filename}")
+                else:
+                    print(f"  ⚠️ GLB conversion failed: {conversion_result.get('error')}")
+                    # Continuer avec le fichier original
+                    glb_filename = file.filename
             else:
-                print(f"  ⚠️ GLB conversion failed: {conversion_result.get('error')}")
-                # Continuer avec le fichier original
-                glb_filename = file.filename
+                # Conversion non recommandée (fichier trop gros)
+                print(f"  ⚠️ Skipping GLB conversion: {reason}")
+                conversion_result = {
+                    'skipped': True,
+                    'reason': reason
+                }
         else:
             # Fichier déjà GLB/GLTF, pas de conversion nécessaire
-            print(f"  ⚡ File is already GLB/GLTF, no conversion needed")
+            print("  ⚡ File is already GLB/GLTF, no conversion needed")
             conversion_result = {
                 'skipped': True,
                 'reason': 'File is already GLB/GLTF'
@@ -284,6 +305,10 @@ def simplify_task_handler(task: Task):
     reduction_ratio = params.get("reduction_ratio")
     preserve_boundary = params.get("preserve_boundary", True)
 
+    print(f"\n🔵 [SIMPLIFY] Starting simplification")
+    print(f"  Input: {Path(input_file).name}")
+    print(f"  Output: {Path(output_file).name}")
+
     # Exécute la simplification
     result = simplify_mesh(
         input_path=Path(input_file),
@@ -292,6 +317,17 @@ def simplify_task_handler(task: Task):
         reduction_ratio=reduction_ratio,
         preserve_boundary=preserve_boundary
     )
+
+    # IMPORTANT: Après simplification, invalider le cache GLB du fichier SOURCE
+    # Le fichier source n'a pas changé, mais on veut régénérer le GLB si l'utilisateur
+    # re-upload le fichier simplifié pour remplacement
+    if result.get('success'):
+        print(f"  ✓ Simplification completed successfully")
+
+        # Note: On n'invalide PAS le cache du fichier d'entrée car il n'a pas changé
+        # Le GLB du fichier d'entrée reste valide
+        # Si l'utilisateur veut visualiser le résultat, il devra uploader le fichier de sortie
+        # qui générera automatiquement son propre GLB
 
     return result
 
@@ -439,12 +475,74 @@ async def debug_download_glb(original_filename: str):
         headers={"Content-Disposition": f'attachment; filename="{glb_filename}"'}
     )
 
+@app.get("/cache/glb/stats")
+async def get_glb_cache_stats():
+    """
+    Retourne des statistiques sur le cache GLB
+
+    Utile pour monitoring et debugging
+    """
+    stats = get_cache_stats(DATA_INPUT)
+    return {
+        "cache_stats": stats,
+        "message": "GLB cache statistics"
+    }
+
+@app.post("/cache/glb/cleanup")
+async def cleanup_glb_cache():
+    """
+    Nettoie les fichiers GLB orphelins (sans fichier source correspondant)
+
+    Les fichiers GLB sont générés automatiquement pour la visualisation.
+    Cet endpoint supprime les GLB dont le fichier source a été supprimé.
+    """
+    deleted = cleanup_orphaned_glb_files(DATA_INPUT)
+
+    return {
+        "deleted_files": deleted,
+        "count": len(deleted),
+        "message": f"Cleaned up {len(deleted)} orphaned GLB file(s)"
+    }
+
+@app.delete("/cache/glb/{original_filename}")
+async def invalidate_glb_cache_endpoint(original_filename: str):
+    """
+    Invalide le cache GLB d'un fichier spécifique
+
+    Force la régénération du GLB au prochain chargement.
+    Utile après une modification manuelle du fichier source.
+
+    Args:
+        original_filename: Nom du fichier source (ex: bunny.obj)
+    """
+    was_deleted = invalidate_glb_cache(original_filename, DATA_INPUT)
+
+    if was_deleted:
+        return {
+            "message": f"GLB cache invalidated for {original_filename}",
+            "deleted": True
+        }
+    else:
+        return {
+            "message": f"No GLB cache found for {original_filename}",
+            "deleted": False
+        }
+
 # Initialisation du gestionnaire de tâches
 @app.on_event("startup")
 async def startup_event():
     """Démarre le gestionnaire de tâches"""
     task_manager.register_handler("simplify", simplify_task_handler)
     task_manager.start()
+
+    # Afficher les statistiques du cache GLB au démarrage
+    print("\n📊 [GLB CACHE] Statistics at startup:")
+    stats = get_cache_stats(DATA_INPUT)
+    print(f"  Total GLB files: {stats['total_glb_files']}")
+    print(f"  Total size: {stats['total_size_mb']:.2f} MB")
+    if stats['orphaned_count'] > 0:
+        print(f"  ⚠️ Orphaned files: {stats['orphaned_count']}")
+        print(f"     Use POST /cache/glb/cleanup to clean them up")
 
 @app.on_event("shutdown")
 async def shutdown_event():

@@ -126,20 +126,20 @@ function TaskStatus({ task, onComplete }) {
             <div className="bg-gray-50 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">Original</p>
               <p className="text-sm font-semibold text-gray-900">
-                {task.result.original.vertices.toLocaleString()} vertices
+                {task.result.original_vertices?.toLocaleString()} vertices
               </p>
               <p className="text-sm font-semibold text-gray-900">
-                {task.result.original.triangles.toLocaleString()} triangles
+                {task.result.original_triangles?.toLocaleString()} triangles
               </p>
             </div>
 
             <div className="bg-green-50 rounded-lg p-4">
               <p className="text-xs text-green-600 mb-1">Simplifié</p>
               <p className="text-sm font-semibold text-green-700">
-                {task.result.simplified.vertices.toLocaleString()} vertices
+                {task.result.simplified_vertices?.toLocaleString()} vertices
               </p>
               <p className="text-sm font-semibold text-green-700">
-                {task.result.simplified.triangles.toLocaleString()} triangles
+                {task.result.simplified_triangles?.toLocaleString()} triangles
               </p>
             </div>
           </div>
@@ -151,15 +151,15 @@ function TaskStatus({ task, onComplete }) {
               <div className="flex justify-between">
                 <span className="text-gray-600">Vertices supprimés:</span>
                 <span className="font-semibold text-blue-700">
-                  {task.result.reduction.vertices_removed.toLocaleString()}
-                  ({(task.result.reduction.vertices_ratio * 100).toFixed(1)}%)
+                  {task.result.vertices_removed?.toLocaleString()}
+                  {task.result.vertices_ratio && ` (${(task.result.vertices_ratio * 100).toFixed(1)}%)`}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Triangles supprimés:</span>
                 <span className="font-semibold text-blue-700">
-                  {task.result.reduction.triangles_removed.toLocaleString()}
-                  ({(task.result.reduction.triangles_ratio * 100).toFixed(1)}%)
+                  {task.result.triangles_removed?.toLocaleString()}
+                  {task.result.triangles_ratio && ` (${(task.result.triangles_ratio * 100).toFixed(1)}%)`}
                 </span>
               </div>
             </div>

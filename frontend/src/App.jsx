@@ -22,10 +22,12 @@ function App() {
     const meshWithId = {
       ...pendingMesh,
       uploadId: Date.now(), // Timestamp unique
-      // Utiliser glb_filename si disponible (fichier converti), sinon filename original
-      displayFilename: pendingMesh.glb_filename || pendingMesh.filename
+      // displayFilename: pour la visualisation 3D (GLB si converti)
+      displayFilename: pendingMesh.glb_filename || pendingMesh.filename,
+      // originalFilename: pour la simplification (toujours le fichier source)
+      originalFilename: pendingMesh.original_filename || pendingMesh.filename
     }
-    console.log('[DEBUG] Chargement du mesh:', meshWithId.displayFilename, 'Original:', pendingMesh.filename)
+    console.log('[DEBUG] Chargement du mesh:', meshWithId.displayFilename, 'Original:', meshWithId.originalFilename)
     setUploadedMesh(meshWithId)
     setPendingMesh(null)
     // Reset task quand un nouveau fichier est uploade
