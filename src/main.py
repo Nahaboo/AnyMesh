@@ -17,6 +17,7 @@ import trimesh
 
 from .task_manager import task_manager, Task
 from .simplify import simplify_mesh
+from .converter import convert_and_compress
 
 app = FastAPI(
     title="MeshSimplifier API",
@@ -24,13 +25,11 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# Configuration CORS
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
-
+# Configuration CORS - Permettre toutes les origines en développement
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ["*"] else ["*"],
-    allow_credentials=True,
+    allow_origins=["*"],  # En production, spécifier les origines autorisées
+    allow_credentials=False,  # Doit être False si allow_origins=["*"]
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -101,14 +100,40 @@ async def upload_mesh(file: UploadFile = File(...)):
     # Utilisation de trimesh pour toutes les analyses
     start_load = time.time()
     try:
-        mesh = trimesh.load(str(file_path))
+        loaded = trimesh.load(str(file_path))
         load_duration = (time.time() - start_load) * 1000
         print(f"  🔷 trimesh load: {load_duration:.2f}ms")
+
+        # Si c'est une Scene, extraire et fusionner les géométries
+        if hasattr(loaded, 'geometry'):
+            # C'est une Scene avec potentiellement plusieurs meshes
+            print(f"  🔍 Scene détectée avec {len(loaded.geometry)} géométrie(s)")
+            meshes = list(loaded.geometry.values())
+            if len(meshes) == 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="La scène ne contient aucune géométrie"
+                )
+            elif len(meshes) == 1:
+                mesh = meshes[0]
+            else:
+                # Fusionner plusieurs meshes
+                mesh = trimesh.util.concatenate(meshes)
+                print(f"  🔗 {len(meshes)} meshes fusionnés")
+        else:
+            # C'est directement un Mesh
+            mesh = loaded
 
         if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:
             raise HTTPException(
                 status_code=400,
                 detail="Le fichier ne contient pas de vertices valides"
+            )
+
+        if not hasattr(mesh, 'faces') or len(mesh.faces) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Le fichier ne contient pas de faces (mesh vide ou nuage de points)"
             )
 
         # Extraction des propriétés du maillage
@@ -160,6 +185,48 @@ async def upload_mesh(file: UploadFile = File(...)):
         print(f"     Vertices: {mesh_info['vertices_count']:,}")
         print(f"     Triangles: {mesh_info['triangles_count']:,}")
 
+        # Conversion automatique vers GLB avec compression Draco
+        # Ne pas convertir si le fichier est déjà GLB
+        glb_filename = file.filename
+        conversion_result = None
+
+        if file_ext not in {".glb", ".gltf"}:
+            # Générer le nom du fichier GLB
+            glb_filename = f"{file_path.stem}.glb"
+            glb_path = DATA_INPUT / glb_filename
+
+            # Supprimer l'ancien GLB s'il existe pour forcer la reconversion
+            # Cela garantit que le GLB correspond toujours au fichier source actuel
+            if glb_path.exists():
+                print(f"  🗑️ Removing old GLB to force reconversion: {glb_filename}")
+                glb_path.unlink()
+
+            # Convertir vers GLB + compression Draco
+            conversion_result = convert_and_compress(
+                input_path=file_path,
+                output_path=glb_path,
+                enable_draco=False,
+                compression_level=7
+            )
+
+            if conversion_result['success']:
+                # Mettre à jour mesh_info avec le nouveau filename GLB
+                mesh_info['glb_filename'] = glb_filename
+                mesh_info['glb_size'] = conversion_result['final_size']
+                mesh_info['original_filename'] = file.filename
+                mesh_info['original_size'] = file_path.stat().st_size
+            else:
+                print(f"  ⚠️ GLB conversion failed: {conversion_result.get('error')}")
+                # Continuer avec le fichier original
+                glb_filename = file.filename
+        else:
+            # Fichier déjà GLB/GLTF, pas de conversion nécessaire
+            print(f"  ⚡ File is already GLB/GLTF, no conversion needed")
+            conversion_result = {
+                'skipped': True,
+                'reason': 'File is already GLB/GLTF'
+            }
+
         total_duration = (time.time() - start_total) * 1000
         print(f"🟢 [PERF] Upload completed: {total_duration:.2f}ms\n")
 
@@ -171,10 +238,18 @@ async def upload_mesh(file: UploadFile = File(...)):
             "total_ms": round(total_duration, 2)
         }
 
+        # Ajouter les timings de conversion si disponibles
+        if conversion_result and not conversion_result.get('skipped'):
+            if conversion_result.get('conversion'):
+                backend_timings['glb_conversion_ms'] = conversion_result['conversion'].get('conversion_time_ms', 0)
+            if conversion_result.get('compression'):
+                backend_timings['draco_compression_ms'] = conversion_result['compression'].get('compression_time_ms', 0)
+
         return {
             "message": "Fichier uploadé avec succès",
             "mesh_info": mesh_info,
-            "backend_timings": backend_timings
+            "backend_timings": backend_timings,
+            "conversion": conversion_result  # Informations sur la conversion GLB
         }
 
     except Exception as e:
@@ -284,14 +359,27 @@ async def list_tasks():
 
 @app.get("/mesh/input/{filename}")
 async def get_input_mesh(filename: str):
-    """Sert un fichier de maillage depuis data/input pour la visualisation"""
+    """
+    Sert un fichier de maillage depuis data/input pour la visualisation
+    Si un fichier GLB converti existe, il sera servi en priorité
+    """
     file_path = DATA_INPUT / filename
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Fichier non trouvé")
 
-    # Déterminer le media_type
+    # Stratégie: Servir le GLB s'il existe, sinon le fichier original
     file_ext = file_path.suffix.lower()
+
+    # Si le fichier demandé n'est pas GLB, vérifier si une version GLB existe
+    if file_ext not in {".glb", ".gltf"}:
+        glb_path = DATA_INPUT / f"{file_path.stem}.glb"
+        if glb_path.exists():
+            print(f"  ⚡ Serving GLB instead of {filename}: {glb_path.name}")
+            file_path = glb_path
+            file_ext = ".glb"
+
+    # Déterminer le media_type
     media_type_mapping = {
         ".obj": "model/obj",
         ".stl": "model/stl",
@@ -310,7 +398,7 @@ async def get_input_mesh(filename: str):
     return StreamingResponse(
         iterfile(),
         media_type=media_type,
-        headers={"Content-Disposition": f'inline; filename="{filename}"'}
+        headers={"Content-Disposition": f'inline; filename="{file_path.name}"'}
     )
 
 @app.get("/download/{filename}")
@@ -325,6 +413,30 @@ async def download_mesh(filename: str):
         path=str(file_path),
         filename=filename,
         media_type="application/octet-stream"
+    )
+
+@app.get("/debug/download-glb/{original_filename}")
+async def debug_download_glb(original_filename: str):
+    """
+    [DEBUG] Télécharge le fichier GLB converti depuis data/input
+    Usage: /debug/download-glb/bunny.obj → télécharge bunny.glb
+    """
+    # Extraire le nom sans extension
+    file_stem = Path(original_filename).stem
+    glb_filename = f"{file_stem}.glb"
+    glb_path = DATA_INPUT / glb_filename
+
+    if not glb_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"GLB converti non trouvé: {glb_filename}. Uploadez d'abord le fichier."
+        )
+
+    return FileResponse(
+        path=str(glb_path),
+        filename=glb_filename,
+        media_type="model/gltf-binary",
+        headers={"Content-Disposition": f'attachment; filename="{glb_filename}"'}
     )
 
 # Initialisation du gestionnaire de tâches
