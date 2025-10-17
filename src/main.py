@@ -426,15 +426,21 @@ async def get_input_mesh(filename: str):
     }
     media_type = media_type_mapping.get(file_ext, "application/octet-stream")
 
-    # Streamer le fichier
+    # Streamer le fichier avec des chunks optimisés (1MB par chunk)
+    CHUNK_SIZE = 1024 * 1024  # 1 MB chunks pour de meilleures performances
+
     def iterfile():
         with open(file_path, mode="rb") as file_like:
-            yield from file_like
+            while chunk := file_like.read(CHUNK_SIZE):
+                yield chunk
 
     return StreamingResponse(
         iterfile(),
         media_type=media_type,
-        headers={"Content-Disposition": f'inline; filename="{file_path.name}"'}
+        headers={
+            "Content-Disposition": f'inline; filename="{file_path.name}"',
+            "Content-Length": str(file_path.stat().st_size)  # Important pour la barre de progression
+        }
     )
 
 @app.get("/download/{filename}")
