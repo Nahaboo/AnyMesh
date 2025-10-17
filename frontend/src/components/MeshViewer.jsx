@@ -3,10 +3,49 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Grid } from '@react-three/drei'
 import MeshModel from './MeshModel'
 import CameraController from './CameraController'
+import { analyzeMesh } from '../utils/api'
 
 function MeshViewer({ meshInfo }) {
   const canvasContainerRef = useRef(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [meshStats, setMeshStats] = useState(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState(null)
+
+  // Lancer l'analyse en arrière-plan quand le mesh change
+  useEffect(() => {
+    if (!meshInfo) return
+
+    // Utiliser originalFilename si disponible, sinon filename
+    const filenameToAnalyze = meshInfo.originalFilename || meshInfo.filename
+
+    if (!filenameToAnalyze) return
+
+    const runAnalysis = async () => {
+      setIsAnalyzing(true)
+      setAnalysisError(null)
+      setMeshStats(null)
+
+      try {
+        console.log(`🔵 [MeshViewer] Lancement analyse en arrière-plan: ${filenameToAnalyze}`)
+        const result = await analyzeMesh(filenameToAnalyze)
+
+        if (result.success) {
+          console.log(`🟢 [MeshViewer] Analyse terminée: ${result.analysis_time_ms}ms`)
+          setMeshStats(result.mesh_stats)
+        }
+      } catch (error) {
+        console.error('❌ [MeshViewer] Erreur analyse:', error)
+        setAnalysisError(error.message || 'Erreur lors de l\'analyse')
+      } finally {
+        setIsAnalyzing(false)
+      }
+    }
+
+    // Délai plus long pour vraiment laisser le 3D se charger d'abord
+    const timeout = setTimeout(runAnalysis, 500)
+    return () => clearTimeout(timeout)
+  }, [meshInfo])
 
   const toggleFullscreen = () => {
     if (!canvasContainerRef.current) return
@@ -128,7 +167,9 @@ function MeshViewer({ meshInfo }) {
           {/* Informations du maillage */}
           <div className="bg-gray-50 rounded-lg p-4">
             <h3 className="font-medium text-gray-800 mb-3">Informations du maillage</h3>
-            <div className="grid grid-cols-2 gap-3 text-sm">
+
+            {/* Informations de base (toujours disponibles) */}
+            <div className="grid grid-cols-2 gap-3 text-sm mb-3">
               <div>
                 <p className="text-gray-500">Fichier:</p>
                 <p className="font-semibold text-gray-900">{meshInfo.filename}</p>
@@ -138,30 +179,71 @@ function MeshViewer({ meshInfo }) {
                 <p className="font-semibold text-gray-900">{meshInfo.format}</p>
               </div>
               <div>
-                <p className="text-gray-500">Vertices:</p>
-                <p className="font-semibold text-gray-900">
-                  {meshInfo.vertices_count?.toLocaleString() || 'N/A'}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500">Triangles:</p>
-                <p className="font-semibold text-gray-900">
-                  {meshInfo.triangles_count?.toLocaleString() || 'N/A'}
-                </p>
-              </div>
-              <div>
                 <p className="text-gray-500">Taille:</p>
                 <p className="font-semibold text-gray-900">
-                  {(meshInfo.file_size / 1024).toFixed(2)} KB
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500">Manifold:</p>
-                <p className="font-semibold text-gray-900">
-                  {meshInfo.is_manifold === null ? 'N/A' : (meshInfo.is_manifold ? 'Oui' : 'Non')}
+                  {(meshInfo.file_size / 1024 / 1024).toFixed(2)} MB
                 </p>
               </div>
             </div>
+
+            {/* Statistiques détaillées (chargées en arrière-plan) */}
+            {isAnalyzing && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Analyse du maillage en cours...</span>
+                </div>
+              </div>
+            )}
+
+            {analysisError && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <p className="text-sm text-red-600">⚠️ {analysisError}</p>
+              </div>
+            )}
+
+            {meshStats && !isAnalyzing && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <p className="text-xs text-gray-500 mb-2">Statistiques détaillées:</p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-gray-500">Vertices:</p>
+                    <p className="font-semibold text-gray-900">
+                      {meshStats.vertices_count?.toLocaleString() || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Triangles:</p>
+                    <p className="font-semibold text-gray-900">
+                      {meshStats.triangles_count?.toLocaleString() || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Watertight:</p>
+                    <p className="font-semibold text-gray-900">
+                      {meshStats.is_watertight ? 'Oui' : 'Non'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Manifold:</p>
+                    <p className="font-semibold text-gray-900">
+                      {meshStats.is_manifold === null ? 'N/A' : (meshStats.is_manifold ? 'Oui' : 'Non')}
+                    </p>
+                  </div>
+                  {meshStats.volume && (
+                    <div className="col-span-2">
+                      <p className="text-gray-500">Volume:</p>
+                      <p className="font-semibold text-gray-900">
+                        {meshStats.volume.toFixed(3)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Controles de la vue */}

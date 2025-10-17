@@ -32,7 +32,25 @@ export const listMeshes = async () => {
 }
 
 /**
- * Upload un fichier de maillage 3D
+ * Upload rapide d'un fichier de maillage 3D (pour visualisation immédiate)
+ * @param {File} file - Le fichier a uploader
+ * @returns {Promise} Les informations minimales du maillage (sans analyse complète)
+ */
+export const uploadMeshFast = async (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await api.post('/upload-fast', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+
+  return response.data
+}
+
+/**
+ * Upload un fichier de maillage 3D avec analyse complète
  * @param {File} file - Le fichier a uploader
  * @returns {Promise} Les informations du maillage uploade
  */
@@ -46,6 +64,16 @@ export const uploadMesh = async (file) => {
     },
   })
 
+  return response.data
+}
+
+/**
+ * Analyse détaillée d'un fichier déjà uploadé
+ * @param {string} filename - Nom du fichier à analyser
+ * @returns {Promise} Les statistiques complètes du maillage
+ */
+export const analyzeMesh = async (filename) => {
+  const response = await api.get(`/analyze/${filename}`)
   return response.data
 }
 

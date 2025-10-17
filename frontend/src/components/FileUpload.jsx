@@ -1,39 +1,6 @@
 import { useState } from 'react'
-import { uploadMesh } from '../utils/api'
+import { uploadMeshFast } from '../utils/api'
 
-/**
- * Affiche les timings backend dans la console
- */
-function displayBackendTimings(timings) {
-  const getColor = (ms) => ms < 100 ? '🟢' : ms < 1000 ? '🟡' : '🔴'
-  const formatLine = (label, value) =>
-    `${getColor(value)} ${label.padEnd(15)} ${value.toFixed(2).padStart(10)}ms`
-
-  console.log('\n📊 [BACKEND PERF] Upload & Analysis completed:')
-  console.log('='.repeat(60))
-
-  if (timings.file_save_ms != null) {
-    console.log(formatLine('FILE_SAVE:', timings.file_save_ms))
-  }
-
-  // Support Open3D et Trimesh
-  const meshLoadMs = timings.trimesh_load_ms || timings.open3d_load_ms
-  if (meshLoadMs != null) {
-    const label = timings.trimesh_load_ms ? 'TRIMESH_LOAD:' : 'OPEN3D_LOAD:'
-    console.log(formatLine(label, meshLoadMs))
-  }
-
-  if (timings.analysis_ms != null) {
-    console.log(formatLine('ANALYSIS:', timings.analysis_ms))
-  }
-
-  if (timings.total_ms != null) {
-    console.log('='.repeat(60))
-    console.log(formatLine('BACKEND TOTAL:', timings.total_ms))
-  }
-
-  console.log('\n')
-}
 
 function FileUpload({ onUploadSuccess }) {
   const [isDragging, setIsDragging] = useState(false)
@@ -93,23 +60,27 @@ function FileUpload({ onUploadSuccess }) {
         setUploadProgress(prev => Math.min(prev + 10, 90))
       }, 200)
 
-      // Appel API
-      const response = await uploadMesh(file)
+      // Appel API rapide (pas d'analyse complète)
+      const response = await uploadMeshFast(file)
 
       clearInterval(progressInterval)
       setUploadProgress(100)
 
       // Success
-      console.log('Upload reussi:', response)
-
-      // Afficher les traces backend immédiatement après l'upload
-      if (response.backend_timings) {
-        displayBackendTimings(response.backend_timings)
-      }
+      console.log('🟢 [FileUpload] Upload rapide réussi:', response)
 
       if (onUploadSuccess) {
-        // Passer uniquement mesh_info (pas de backend_timings pour garder la séparation)
-        onUploadSuccess(response.mesh_info)
+        // Créer un objet meshInfo avec les données minimales
+        const meshInfo = {
+          filename: response.filename,
+          displayFilename: response.glb_filename || response.filename,
+          originalFilename: response.original_filename || response.filename,
+          file_size: response.file_size,
+          format: response.format,
+          bounding_box: response.bounding_box,
+          uploadId: Date.now() // Pour forcer le rechargement
+        }
+        onUploadSuccess(meshInfo)
       }
 
       // Reset apres 1 seconde

@@ -72,10 +72,121 @@ async def health_check():
     """Vérification de l'état de l'API"""
     return {"status": "healthy"}
 
+@app.post("/upload-fast")
+async def upload_mesh_fast(file: UploadFile = File(...)):
+    """
+    Upload rapide d'un fichier de maillage 3D pour visualisation immédiate
+    Sauvegarde le fichier et convertit en GLB sans analyse détaillée
+    Formats supportés: OBJ, STL, PLY, OFF, GLTF, GLB
+    """
+    start_total = time.time()
+    print(f"\n🔵 [UPLOAD-FAST] Upload started: {file.filename}")
+
+    # Vérification de l'extension
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in SUPPORTED_FORMATS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Format non supporté. Formats acceptés: {', '.join(SUPPORTED_FORMATS)}"
+        )
+
+    # Sauvegarde du fichier
+    start_save = time.time()
+    file_path = DATA_INPUT / file.filename
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors de la sauvegarde: {str(e)}"
+        ) from e
+
+    save_duration = (time.time() - start_save) * 1000
+    file_size = file_path.stat().st_size
+    print(f"  📁 File save: {save_duration:.2f}ms ({file_size / 1024 / 1024:.2f} MB)")
+
+    # Bounding box basique (rapide, juste pour la caméra)
+    # On charge le mesh uniquement pour avoir la bounding box
+    try:
+        loaded = trimesh.load(str(file_path))
+        if hasattr(loaded, 'geometry'):
+            meshes = list(loaded.geometry.values())
+            if len(meshes) > 0:
+                mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
+            else:
+                raise HTTPException(status_code=400, detail="La scène ne contient aucune géométrie")
+        else:
+            mesh = loaded
+
+        bounds = mesh.bounds
+        bounding_box = {
+            "min": [float(bounds[0][0]), float(bounds[0][1]), float(bounds[0][2])],
+            "max": [float(bounds[1][0]), float(bounds[1][1]), float(bounds[1][2])],
+            "center": [float(mesh.centroid[0]), float(mesh.centroid[1]), float(mesh.centroid[2])],
+            "diagonal": float(mesh.scale)
+        }
+    except Exception as e:
+        print(f"  ⚠️ Could not compute bounding box: {e}")
+        # Bounding box par défaut si le calcul échoue
+        bounding_box = {
+            "min": [-1.0, -1.0, -1.0],
+            "max": [1.0, 1.0, 1.0],
+            "center": [0.0, 0.0, 0.0],
+            "diagonal": 1.732
+        }
+
+    # Conversion automatique vers GLB si nécessaire
+    glb_filename = file.filename
+    conversion_result = None
+
+    if not is_glb_file(file.filename):
+        should_convert, reason = should_convert_to_glb(
+            file.filename,
+            file_size,
+            max_size_mb=50
+        )
+
+        if should_convert:
+            glb_filename = f"{file_path.stem}.glb"
+            glb_path = DATA_INPUT / glb_filename
+
+            invalidate_glb_cache(file.filename, DATA_INPUT)
+
+            conversion_result = convert_and_compress(
+                input_path=file_path,
+                output_path=glb_path,
+                enable_draco=False,
+                compression_level=7
+            )
+
+            if conversion_result['success']:
+                glb_filename = glb_filename
+                print(f"  ✓ GLB generated: {glb_filename}")
+            else:
+                print(f"  ⚠️ GLB conversion failed: {conversion_result.get('error')}")
+                glb_filename = file.filename
+        else:
+            print(f"  ⚠️ Skipping GLB conversion: {reason}")
+
+    total_duration = (time.time() - start_total) * 1000
+    print(f"🟢 [UPLOAD-FAST] Completed: {total_duration:.2f}ms\n")
+
+    return {
+        "message": "Fichier uploadé avec succès",
+        "filename": file.filename,
+        "glb_filename": glb_filename,
+        "original_filename": file.filename if glb_filename != file.filename else None,
+        "file_size": file_size,
+        "format": file_ext,
+        "bounding_box": bounding_box,
+        "upload_time_ms": round(total_duration, 2)
+    }
+
 @app.post("/upload")
 async def upload_mesh(file: UploadFile = File(...)):
     """
-    Upload un fichier de maillage 3D
+    Upload un fichier de maillage 3D avec analyse complète
     Formats supportés: OBJ, STL, PLY, OFF, GLTF, GLB
     """
     start_total = time.time()
@@ -280,6 +391,84 @@ async def upload_mesh(file: UploadFile = File(...)):
         raise HTTPException(
             status_code=400,
             detail=f"Erreur lors du chargement du maillage: {str(e)}"
+        ) from e
+
+@app.get("/analyze/{filename}")
+async def analyze_mesh(filename: str):
+    """
+    Analyse détaillée d'un fichier de maillage déjà uploadé
+    Retourne les statistiques complètes (vertices, triangles, propriétés)
+    """
+    start_analyze = time.time()
+    print(f"\n🔵 [ANALYZE] Starting analysis: {filename}")
+
+    file_path = DATA_INPUT / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+
+    try:
+        loaded = trimesh.load(str(file_path))
+
+        # Si c'est une Scene, extraire et fusionner les géométries
+        if hasattr(loaded, 'geometry'):
+            meshes = list(loaded.geometry.values())
+            if len(meshes) == 0:
+                raise HTTPException(status_code=400, detail="La scène ne contient aucune géométrie")
+            elif len(meshes) == 1:
+                mesh = meshes[0]
+            else:
+                mesh = trimesh.util.concatenate(meshes)
+        else:
+            mesh = loaded
+
+        if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:
+            raise HTTPException(status_code=400, detail="Le fichier ne contient pas de vertices valides")
+
+        if not hasattr(mesh, 'faces') or len(mesh.faces) == 0:
+            raise HTTPException(status_code=400, detail="Le fichier ne contient pas de faces")
+
+        # Extraction des propriétés du maillage
+        is_watertight = bool(mesh.is_watertight) if hasattr(mesh, 'is_watertight') else False
+        is_winding_consistent = bool(mesh.is_winding_consistent) if hasattr(mesh, 'is_winding_consistent') else None
+
+        # Volume - calcul sécurisé uniquement si watertight
+        volume = None
+        if is_watertight:
+            try:
+                volume = float(mesh.volume)
+            except Exception:
+                pass
+
+        mesh_stats = {
+            "filename": filename,
+            "vertices_count": int(len(mesh.vertices)),
+            "triangles_count": int(len(mesh.faces)),
+            "has_normals": hasattr(mesh, 'vertex_normals') and mesh.vertex_normals is not None,
+            "has_colors": bool(hasattr(mesh.visual, 'vertex_colors') and mesh.visual.vertex_colors is not None),
+            "is_watertight": is_watertight,
+            "is_orientable": is_winding_consistent,
+            "is_manifold": None,
+            "euler_number": int(mesh.euler_number) if hasattr(mesh, 'euler_number') else None,
+            "volume": volume
+        }
+
+        analyze_duration = (time.time() - start_analyze) * 1000
+        print(f"  📊 Analysis completed: {analyze_duration:.2f}ms")
+        print(f"     Vertices: {mesh_stats['vertices_count']:,}")
+        print(f"     Triangles: {mesh_stats['triangles_count']:,}")
+
+        return {
+            "success": True,
+            "mesh_stats": mesh_stats,
+            "analysis_time_ms": round(analyze_duration, 2)
+        }
+
+    except Exception as e:
+        print(f"  ❌ Analysis failed: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Erreur lors de l'analyse: {str(e)}"
         ) from e
 
 @app.get("/meshes")
