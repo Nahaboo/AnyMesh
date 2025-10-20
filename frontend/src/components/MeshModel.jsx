@@ -70,9 +70,8 @@ function MeshModel({ filename }) {
 
   // IMPORTANT: Démarrer le timer AVANT useLoader (qui s'exécute de manière synchrone)
   // On utilise une variable globale pour stocker le timestamp de début
-  if (!window.__meshLoadStart || window.__lastLoadedFile !== filename) {
+  if (!window.__meshLoadStart) {
     window.__meshLoadStart = performance.now()
-    window.__lastLoadedFile = filename
     perf.reset()
     console.log(`🔵 [MeshModel] Loading: ${filename} (${extension}) from ${meshUrl}`)
   }
@@ -178,7 +177,6 @@ function MeshModel({ filename }) {
 
         // Nettoyer
         window.__meshLoadStart = null
-        window.__lastLoadedFile = null
       })
     }
   }, [model, filename])

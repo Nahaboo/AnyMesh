@@ -148,7 +148,9 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
         )
 
         if should_convert:
-            glb_filename = f"{file_path.stem}.glb"
+            # Générer un nom unique pour éviter les conflits de cache
+            timestamp = int(time.time() * 1000)  # timestamp en millisecondes
+            glb_filename = f"{file_path.stem}_{timestamp}.glb"
             glb_path = DATA_INPUT / glb_filename
 
             invalidate_glb_cache(file.filename, DATA_INPUT)
