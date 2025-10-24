@@ -96,15 +96,13 @@ tests/fixtures/  # Fixtures générées automatiquement
 .ipynb_checkpoints
 *.ipynb
 
-# Fichiers de test et debug
-test_*.py
-debug_*.py
-check*.py
-cleanup_*.py
-deform.py
-
-# Fichiers de test unitaires (garder le dossier tests/ principal)
-run_tests.py
+# Fichiers de test et debug (racine uniquement, pas dans tests/)
+/test_*.py
+/debug_*.py
+/check*.py
+/cleanup_*.py
+/deform.py
+/run_tests.py
 
 # Fichiers 3D temporaires et de test
 *.obj
@@ -125,8 +123,8 @@ pytorch3d/
 pip-log.txt
 pip-delete-this-directory.txt
 
-# pytest config (garder dans le projet si nécessaire)
-pytest.ini
+# pytest config
+# pytest.ini - Commité dans le projet
 
 # Fichiers null/temporaires Windows
 nul
