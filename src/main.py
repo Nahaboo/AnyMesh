@@ -25,6 +25,7 @@ from .glb_cache import (
     get_cache_stats,
     is_glb_file
 )
+from .mesh_generator import generate_mesh_from_images
 
 app = FastAPI(
     title="MeshSimplifier API",
@@ -44,11 +45,16 @@ app.add_middleware(
 # Dossiers de données
 DATA_INPUT = Path("data/input")
 DATA_OUTPUT = Path("data/output")
+DATA_INPUT_IMAGES = Path("data/input_images")
+DATA_GENERATED_MESHES = Path("data/generated_meshes")
 DATA_INPUT.mkdir(parents=True, exist_ok=True)
 DATA_OUTPUT.mkdir(parents=True, exist_ok=True)
+DATA_INPUT_IMAGES.mkdir(parents=True, exist_ok=True)
+DATA_GENERATED_MESHES.mkdir(parents=True, exist_ok=True)
 
 # Formats de fichiers supportés
 SUPPORTED_FORMATS = {".obj", ".stl", ".ply", ".off", ".gltf", ".glb"}
+SUPPORTED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png"}
 
 # Modèles Pydantic
 class SimplifyRequest(BaseModel):
@@ -57,6 +63,12 @@ class SimplifyRequest(BaseModel):
     target_triangles: Optional[int] = None
     reduction_ratio: Optional[float] = None
     preserve_boundary: bool = True
+
+class GenerateMeshRequest(BaseModel):
+    """Paramètres de génération de maillage à partir d'images"""
+    session_id: str
+    resolution: str = "medium"  # 'low', 'medium', 'high'
+    output_format: str = "obj"  # 'obj', 'stl', 'ply'
 
 @app.get("/")
 async def root():
@@ -119,6 +131,22 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
         else:
             mesh = loaded
 
+        # 🎯 NORMALISATION DU MESH: Centrer à l'origine
+        # Cela garantit que tous les modèles sont centrés pour une visualisation cohérente
+        original_centroid = mesh.centroid.copy()
+        original_scale = mesh.scale
+
+        # Translater les vertices pour centrer le mesh à l'origine
+        mesh.vertices -= mesh.centroid
+
+        # Sauvegarder le mesh normalisé (écrase le fichier original)
+        mesh.export(str(file_path))
+
+        print(f"  🎯 Mesh normalized:")
+        print(f"     Original centroid: [{original_centroid[0]:.2f}, {original_centroid[1]:.2f}, {original_centroid[2]:.2f}]")
+        print(f"     Original scale: {original_scale:.2f}")
+        print(f"     New centroid: [0.00, 0.00, 0.00]")
+
         bounds = mesh.bounds
         bounding_box = {
             "min": [float(bounds[0][0]), float(bounds[0][1]), float(bounds[0][2])],
@@ -126,6 +154,12 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
             "center": [float(mesh.centroid[0]), float(mesh.centroid[1]), float(mesh.centroid[2])],
             "diagonal": float(mesh.scale)
         }
+
+        # Calculer les statistiques du mesh
+        vertices_count = int(len(mesh.vertices))
+        faces_count = int(len(mesh.faces))
+        print(f"  📊 Mesh stats: {vertices_count:,} vertices, {faces_count:,} faces")
+
     except Exception as e:
         print(f"  ⚠️ Could not compute bounding box: {e}")
         # Bounding box par défaut si le calcul échoue
@@ -135,6 +169,8 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
             "center": [0.0, 0.0, 0.0],
             "diagonal": 1.732
         }
+        vertices_count = 0
+        faces_count = 0
 
     # Conversion automatique vers GLB si nécessaire
     glb_filename = file.filename
@@ -182,6 +218,8 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
         "file_size": file_size,
         "format": file_ext,
         "bounding_box": bounding_box,
+        "vertices_count": vertices_count,
+        "faces_count": faces_count,
         "upload_time_ms": round(total_duration, 2)
     }
 
@@ -725,11 +763,248 @@ async def invalidate_glb_cache_endpoint(original_filename: str):
             "deleted": False
         }
 
+# ===== ENDPOINTS GÉNÉRATION DE MAILLAGES À PARTIR D'IMAGES =====
+
+@app.post("/upload-images")
+async def upload_images(files: list[UploadFile] = File(...)):
+    """
+    Upload multiple d'images pour génération de maillage 3D
+    Crée une session et sauvegarde les images
+
+    Returns:
+        session_id: Identifiant de session pour la génération
+        images: Liste des images uploadées avec preview
+    """
+    if len(files) == 0:
+        raise HTTPException(status_code=400, detail="Aucune image fournie")
+
+    # Créer un ID de session unique
+    session_id = f"session_{int(time.time() * 1000)}"
+    session_path = DATA_INPUT_IMAGES / session_id
+    session_path.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n🔵 [UPLOAD-IMAGES] Session: {session_id}")
+    print(f"  Images count: {len(files)}")
+
+    uploaded_images = []
+
+    for idx, file in enumerate(files):
+        # Vérification de l'extension
+        file_ext = Path(file.filename).suffix.lower()
+        if file_ext not in SUPPORTED_IMAGE_FORMATS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Format non supporté: {file.filename}. Formats acceptés: {', '.join(SUPPORTED_IMAGE_FORMATS)}"
+            )
+
+        # Sauvegarde du fichier
+        file_path = session_path / f"image_{idx:03d}{file_ext}"
+        try:
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Erreur lors de la sauvegarde de {file.filename}: {str(e)}"
+            ) from e
+
+        uploaded_images.append({
+            "filename": file.filename,
+            "saved_as": file_path.name,
+            "size": file_path.stat().st_size,
+            "format": file_ext
+        })
+
+        print(f"  ✓ Saved: {file.filename} → {file_path.name}")
+
+    print(f"🟢 [UPLOAD-IMAGES] Completed: {len(uploaded_images)} images")
+
+    return {
+        "message": "Images uploadées avec succès",
+        "session_id": session_id,
+        "images": uploaded_images,
+        "images_count": len(uploaded_images)
+    }
+
+@app.get("/sessions/{session_id}/images")
+async def list_session_images(session_id: str):
+    """
+    Liste les images d'une session
+    """
+    session_path = DATA_INPUT_IMAGES / session_id
+
+    if not session_path.exists():
+        raise HTTPException(status_code=404, detail="Session non trouvée")
+
+    images = []
+    for file_path in session_path.iterdir():
+        if file_path.suffix.lower() in SUPPORTED_IMAGE_FORMATS:
+            images.append({
+                "filename": file_path.name,
+                "size": file_path.stat().st_size,
+                "format": file_path.suffix.lower()
+            })
+
+    return {
+        "session_id": session_id,
+        "images": images,
+        "count": len(images)
+    }
+
+# Handler pour les tâches de génération de maillages
+def generate_mesh_task_handler(task: Task):
+    """Handler qui exécute la génération de maillage à partir d'images"""
+    params = task.params
+    session_id = params["session_id"]
+    resolution = params.get("resolution", "medium")
+    output_format = params.get("output_format", "obj")
+
+    session_path = DATA_INPUT_IMAGES / session_id
+
+    if not session_path.exists():
+        return {
+            'success': False,
+            'error': 'Session non trouvée'
+        }
+
+    print(f"\n🔵 [GENERATE-MESH] Starting generation")
+    print(f"  Session: {session_id}")
+    print(f"  Resolution: {resolution}")
+
+    # Récupérer toutes les images de la session
+    image_paths = sorted([
+        p for p in session_path.iterdir()
+        if p.suffix.lower() in SUPPORTED_IMAGE_FORMATS
+    ])
+
+    if len(image_paths) == 0:
+        return {
+            'success': False,
+            'error': 'Aucune image trouvée dans la session'
+        }
+
+    print(f"  Images found: {len(image_paths)}")
+
+    # Générer le nom de fichier de sortie
+    output_filename = f"{session_id}_generated.{output_format}"
+    output_path = DATA_GENERATED_MESHES / output_filename
+
+    # Exécuter la génération
+    result = generate_mesh_from_images(
+        image_paths=image_paths,
+        output_path=output_path,
+        resolution=resolution,
+        device=None  # Auto-détection GPU/CPU
+    )
+
+    if result.get('success'):
+        print(f"  ✓ Mesh generated: {output_filename}")
+        result['output_filename'] = output_filename
+        result['session_id'] = session_id
+        result['images_used'] = len(image_paths)
+
+    return result
+
+@app.post("/generate-mesh")
+async def generate_mesh_async(request: GenerateMeshRequest):
+    """
+    Lance une tâche de génération de maillage à partir d'images en arrière-plan
+    Retourne un task_id pour suivre la progression
+    """
+    session_path = DATA_INPUT_IMAGES / request.session_id
+
+    # Vérification que la session existe
+    if not session_path.exists():
+        raise HTTPException(status_code=404, detail="Session non trouvée")
+
+    # Vérifier qu'il y a des images dans la session
+    image_count = len([
+        p for p in session_path.iterdir()
+        if p.suffix.lower() in SUPPORTED_IMAGE_FORMATS
+    ])
+
+    if image_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Aucune image trouvée dans la session"
+        )
+
+    # Validation de la résolution
+    if request.resolution not in ['low', 'medium', 'high']:
+        raise HTTPException(
+            status_code=400,
+            detail="Résolution invalide. Valeurs acceptées: 'low', 'medium', 'high'"
+        )
+
+    # Validation du format de sortie
+    if request.output_format not in ['obj', 'stl', 'ply']:
+        raise HTTPException(
+            status_code=400,
+            detail="Format invalide. Valeurs acceptées: 'obj', 'stl', 'ply'"
+        )
+
+    # Création de la tâche
+    task_id = task_manager.create_task(
+        task_type="generate_mesh",
+        params={
+            "session_id": request.session_id,
+            "resolution": request.resolution,
+            "output_format": request.output_format
+        }
+    )
+
+    return {
+        "task_id": task_id,
+        "message": "Tâche de génération créée",
+        "session_id": request.session_id,
+        "images_count": image_count
+    }
+
+@app.get("/mesh/generated/{filename}")
+async def get_generated_mesh(filename: str):
+    """
+    Sert un fichier de maillage généré depuis data/generated_meshes pour la visualisation
+    """
+    file_path = DATA_GENERATED_MESHES / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+
+    file_ext = file_path.suffix.lower()
+
+    # Déterminer le media_type
+    media_type_mapping = {
+        ".obj": "model/obj",
+        ".stl": "model/stl",
+        ".ply": "application/ply",
+        ".gltf": "model/gltf+json",
+        ".glb": "model/gltf-binary",
+    }
+    media_type = media_type_mapping.get(file_ext, "application/octet-stream")
+
+    # Streamer le fichier
+    CHUNK_SIZE = 1024 * 1024  # 1 MB chunks
+
+    def iterfile():
+        with open(file_path, mode="rb") as file_like:
+            while chunk := file_like.read(CHUNK_SIZE):
+                yield chunk
+
+    return StreamingResponse(
+        iterfile(),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{file_path.name}"',
+            "Content-Length": str(file_path.stat().st_size)
+        }
+    )
+
 # Initialisation du gestionnaire de tâches
 @app.on_event("startup")
 async def startup_event():
     """Démarre le gestionnaire de tâches"""
     task_manager.register_handler("simplify", simplify_task_handler)
+    task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
     task_manager.start()
 
     # Afficher les statistiques du cache GLB au démarrage
