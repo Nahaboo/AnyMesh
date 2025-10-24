@@ -1,0 +1,308 @@
+/* ============================================
+   V2 Theme - Light Theme Variables
+   ============================================ */
+
+:root {
+  /* Colors - Light Theme */
+  --v2-bg-primary: #f5f5f5;
+  --v2-bg-secondary: #ffffff;
+  --v2-bg-tertiary: #e8e8e8;
+  --v2-bg-hover: #e0e0e0;
+  --v2-bg-active: #d0d0d0;
+
+  --v2-text-primary: #1a1a1a;
+  --v2-text-secondary: #4a4a4a;
+  --v2-text-tertiary: #7a7a7a;
+  --v2-text-muted: #a0a0a0;
+
+  --v2-border-primary: #d0d0d0;
+  --v2-border-secondary: #e0e0e0;
+
+  --v2-accent-primary: #6366f1;
+  --v2-accent-hover: #4f46e5;
+  --v2-accent-active: #4338ca;
+
+  --v2-success: #10b981;
+  --v2-warning: #f59e0b;
+  --v2-error: #ef4444;
+
+  /* Spacing */
+  --v2-spacing-xs: 0.25rem;
+  --v2-spacing-sm: 0.5rem;
+  --v2-spacing-md: 1rem;
+  --v2-spacing-lg: 1.5rem;
+  --v2-spacing-xl: 2rem;
+
+  /* Border Radius */
+  --v2-radius-sm: 0.25rem;
+  --v2-radius-md: 0.5rem;
+  --v2-radius-lg: 0.75rem;
+  --v2-radius-full: 9999px;
+
+  /* Shadows */
+  --v2-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --v2-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --v2-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+
+  /* Typography */
+  --v2-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  --v2-font-mono: 'Courier New', monospace;
+
+  /* Sidebar */
+  --v2-sidebar-width: 260px;
+  --v2-toolbar-left-width: 80px;
+
+  /* Header */
+  --v2-header-height: 60px;
+  --v2-toolbar-height: 50px;
+
+  /* Transitions */
+  --v2-transition-fast: 150ms ease;
+  --v2-transition-base: 200ms ease;
+  --v2-transition-slow: 300ms ease;
+}
+
+/* ============================================
+   Base Styles for V2
+   ============================================ */
+
+.v2-app {
+  font-family: var(--v2-font-sans);
+  color: var(--v2-text-primary);
+  background: var(--v2-bg-primary);
+  min-height: 100vh;
+}
+
+/* ============================================
+   Button Styles
+   ============================================ */
+
+.v2-btn {
+  padding: var(--v2-spacing-sm) var(--v2-spacing-md);
+  border-radius: var(--v2-radius-md);
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all var(--v2-transition-base);
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--v2-spacing-sm);
+}
+
+.v2-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.v2-btn-primary {
+  background: var(--v2-accent-primary);
+  color: white;
+  border-color: var(--v2-accent-primary);
+}
+
+.v2-btn-primary:hover:not(:disabled) {
+  background: var(--v2-accent-hover);
+  border-color: var(--v2-accent-hover);
+}
+
+.v2-btn-secondary {
+  background: var(--v2-bg-secondary);
+  color: var(--v2-text-primary);
+  border-color: var(--v2-border-primary);
+}
+
+.v2-btn-secondary:hover:not(:disabled) {
+  background: var(--v2-bg-hover);
+}
+
+.v2-btn-ghost {
+  background: transparent;
+  color: var(--v2-text-secondary);
+}
+
+.v2-btn-ghost:hover:not(:disabled) {
+  background: var(--v2-bg-hover);
+  color: var(--v2-text-primary);
+}
+
+/* ============================================
+   Card Styles
+   ============================================ */
+
+.v2-card {
+  background: var(--v2-bg-secondary);
+  border-radius: var(--v2-radius-lg);
+  border: 1px solid var(--v2-border-secondary);
+  box-shadow: var(--v2-shadow-sm);
+}
+
+.v2-card-header {
+  padding: var(--v2-spacing-lg);
+  border-bottom: 1px solid var(--v2-border-secondary);
+}
+
+.v2-card-body {
+  padding: var(--v2-spacing-lg);
+}
+
+/* ============================================
+   Toggle Switch
+   ============================================ */
+
+.v2-toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.v2-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.v2-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--v2-bg-tertiary);
+  transition: var(--v2-transition-base);
+  border-radius: var(--v2-radius-full);
+}
+
+.v2-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: var(--v2-transition-base);
+  border-radius: 50%;
+}
+
+.v2-toggle input:checked + .v2-toggle-slider {
+  background-color: var(--v2-accent-primary);
+}
+
+.v2-toggle input:checked + .v2-toggle-slider:before {
+  transform: translateX(20px);
+}
+
+/* ============================================
+   Toolbar Styles
+   ============================================ */
+
+.v2-toolbar-button {
+  padding: var(--v2-spacing-sm) var(--v2-spacing-md);
+  background: transparent;
+  border: none;
+  color: var(--v2-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--v2-transition-fast);
+  border-radius: var(--v2-radius-sm);
+  white-space: nowrap;
+}
+
+.v2-toolbar-button:hover {
+  background: var(--v2-bg-hover);
+  color: var(--v2-text-primary);
+}
+
+.v2-toolbar-button.active {
+  background: var(--v2-bg-active);
+  color: var(--v2-text-primary);
+  font-weight: 600;
+}
+
+.v2-toolbar-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============================================
+   Vertical Tool Button (Left Sidebar)
+   ============================================ */
+
+.v2-tool-button {
+  width: 100%;
+  padding: var(--v2-spacing-md);
+  background: transparent;
+  border: none;
+  color: var(--v2-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--v2-transition-fast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--v2-spacing-xs);
+  border-radius: var(--v2-radius-sm);
+}
+
+.v2-tool-button:hover:not(:disabled) {
+  background: var(--v2-bg-hover);
+  color: var(--v2-text-primary);
+}
+
+.v2-tool-button.active {
+  background: var(--v2-accent-primary);
+  color: white;
+}
+
+.v2-tool-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.v2-tool-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+
+.v2-text-xs { font-size: 0.75rem; }
+.v2-text-sm { font-size: 0.875rem; }
+.v2-text-base { font-size: 1rem; }
+.v2-text-lg { font-size: 1.125rem; }
+.v2-text-xl { font-size: 1.25rem; }
+
+.v2-font-medium { font-weight: 500; }
+.v2-font-semibold { font-weight: 600; }
+.v2-font-bold { font-weight: 700; }
+
+.v2-text-primary { color: var(--v2-text-primary); }
+.v2-text-secondary { color: var(--v2-text-secondary); }
+.v2-text-muted { color: var(--v2-text-muted); }
+
+/* ============================================
+   3D Viewer Specific
+   ============================================ */
+
+.v2-viewer-container {
+  background: var(--v2-bg-primary);
+  border: 1px solid var(--v2-border-secondary);
+  border-radius: var(--v2-radius-md);
+  overflow: hidden;
+}
+
+.v2-viewer-stats {
+  background: var(--v2-bg-secondary);
+  border: 1px solid var(--v2-border-secondary);
+  border-radius: var(--v2-radius-md);
+  padding: var(--v2-spacing-md);
+  box-shadow: var(--v2-shadow-sm);
+}

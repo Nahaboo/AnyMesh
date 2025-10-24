@@ -156,4 +156,64 @@ export const pollTaskStatus = async (taskId, onProgress, interval = 1000) => {
   })
 }
 
+// ===== API GÉNÉRATION DE MAILLAGES À PARTIR D'IMAGES =====
+
+/**
+ * Upload multiple d'images pour génération de maillage 3D
+ * @param {File[]} files - Les fichiers images à uploader
+ * @returns {Promise} session_id et informations des images uploadées
+ */
+export const uploadImages = async (files) => {
+  const formData = new FormData()
+
+  // Ajouter chaque image au FormData
+  files.forEach((file) => {
+    formData.append('files', file)
+  })
+
+  const response = await api.post('/upload-images', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+
+  return response.data
+}
+
+/**
+ * Lance une tâche de génération de maillage à partir d'images
+ * @param {Object} params - Paramètres de génération
+ * @param {string} params.sessionId - ID de session (images uploadées)
+ * @param {string} params.resolution - Résolution: 'low', 'medium', 'high'
+ * @param {string} params.outputFormat - Format de sortie: 'obj', 'stl', 'ply'
+ * @returns {Promise} task_id et infos
+ */
+export const generateMesh = async (params) => {
+  const response = await api.post('/generate-mesh', {
+    session_id: params.sessionId,
+    resolution: params.resolution,
+    output_format: params.outputFormat
+  })
+  return response.data
+}
+
+/**
+ * Liste les images d'une session
+ * @param {string} sessionId - ID de la session
+ * @returns {Promise} Liste des images de la session
+ */
+export const listSessionImages = async (sessionId) => {
+  const response = await api.get(`/sessions/${sessionId}/images`)
+  return response.data
+}
+
+/**
+ * Génère l'URL pour accéder à un maillage généré
+ * @param {string} filename - Nom du fichier généré
+ * @returns {string} URL du maillage généré
+ */
+export const getGeneratedMeshUrl = (filename) => {
+  return `${API_BASE_URL}/mesh/generated/${filename}`
+}
+
 export default api
