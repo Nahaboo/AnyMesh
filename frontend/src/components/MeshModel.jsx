@@ -60,10 +60,15 @@ class InstrumentedGLTFLoader extends GLTFLoader {
 
 /**
  * Composant qui charge et affiche un fichier 3D (OBJ, GLTF, GLB, STL, PLY)
+ *
+ * @param {string} filename - Nom du fichier à charger
+ * @param {boolean} isGenerated - true si le fichier provient de /mesh/generated/, false pour /mesh/input/
  */
-function MeshModel({ filename }) {
+function MeshModel({ filename, isGenerated = false }) {
   // Construire l'URL du fichier sur le backend
-  const meshUrl = `http://localhost:8000/mesh/input/${filename}`
+  const meshUrl = isGenerated
+    ? `http://localhost:8000/mesh/generated/${filename}`
+    : `http://localhost:8000/mesh/input/${filename}`
 
   // Déterminer le format du fichier
   const extension = filename.split('.').pop().toLowerCase()

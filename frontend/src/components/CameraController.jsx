@@ -19,8 +19,9 @@ function CameraController({ boundingBox }) {
     const fovRadians = (fov * Math.PI) / 180
     const distance = boundingBox.diagonal / (2 * Math.tan(fovRadians / 2))
 
-    // Ajouter une marge de 50% pour avoir de l'espace autour
-    const cameraDistance = distance * 1.5
+    // Ajouter une marge de 20% pour avoir de l'espace autour du modèle
+    // Facteur fixe car tous les meshes sont maintenant normalisés et centrés par le backend
+    const cameraDistance = distance * 1.2
 
     // Position de la caméra (vue isométrique 3/4)
     const angle = Math.PI / 4 // 45 degrés
