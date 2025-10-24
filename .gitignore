@@ -30,6 +30,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/build/
 frontend/.vite/
+node_modules/
+package-lock.json
+/package.json
 
 # Fichiers de log
 *.log
@@ -58,6 +61,11 @@ data/output/*
 !data/output/.gitkeep
 data/input/*
 !data/input/.gitkeep
+data/input_images/*
+!data/input_images/.gitkeep
+data/generated_meshes/*
+!data/generated_meshes/.gitkeep
+data/test_generation/
 
 # Fichiers systeme Windows
 Thumbs.db
@@ -86,3 +94,39 @@ tests/fixtures/  # Fixtures générées automatiquement
 
 # Jupyter Notebook
 .ipynb_checkpoints
+*.ipynb
+
+# Fichiers de test et debug
+test_*.py
+debug_*.py
+check*.py
+cleanup_*.py
+deform.py
+
+# Fichiers de test unitaires (garder le dossier tests/ principal)
+run_tests.py
+
+# Fichiers 3D temporaires et de test
+*.obj
+*.stl
+*.ply
+*.glb
+*.gltf
+!data/input/.gitkeep
+!data/output/.gitkeep
+
+# Dossiers de documentation temporaires
+documents/
+
+# Dossiers PyTorch3D compilés
+pytorch3d/
+
+# Fichiers pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# pytest config (garder dans le projet si nécessaire)
+pytest.ini
+
+# Fichiers null/temporaires Windows
+nul
