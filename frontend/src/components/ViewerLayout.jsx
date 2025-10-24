@@ -20,6 +20,7 @@ function ViewerLayout({
   onHomeClick,
   onSimplify,
   onGenerate,
+  onLoadSimplified,
   currentTask,
   isProcessing
 }) {
@@ -43,7 +44,8 @@ function ViewerLayout({
 
     // Build export URL with format conversion
     const isGenerated = meshInfo.isGenerated || false
-    const exportUrl = `http://localhost:8000/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}`
+    const isSimplified = meshInfo.isSimplified || false
+    const exportUrl = `http://localhost:8000/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}&is_simplified=${isSimplified}`
 
     console.log(`[ViewerLayout] Exporting ${meshInfo.filename} as ${format.label}`)
 
@@ -149,6 +151,8 @@ function ViewerLayout({
               <SimplificationControls
                 meshInfo={meshInfo}
                 onSimplify={onSimplify}
+                onLoadSimplified={onLoadSimplified}
+                currentTask={currentTask}
                 isProcessing={isProcessing}
               />
             ) : configData?.type === 'images' && sessionInfo ? (

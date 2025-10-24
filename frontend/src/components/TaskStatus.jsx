@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import { getDownloadUrl } from '../utils/api'
 
 function TaskStatus({ task, onComplete }) {
   useEffect(() => {
@@ -75,13 +74,6 @@ function TaskStatus({ task, onComplete }) {
     }
   }
 
-  const handleDownload = () => {
-    if (task.result && task.result.output_file) {
-      const filename = task.result.output_file.split('\\').pop().split('/').pop()
-      window.open(getDownloadUrl(filename), '_blank')
-    }
-  }
-
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold text-gray-800 mb-4">
@@ -126,20 +118,20 @@ function TaskStatus({ task, onComplete }) {
             <div className="bg-gray-50 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">Original</p>
               <p className="text-sm font-semibold text-gray-900">
-                {task.result.original_vertices?.toLocaleString()} vertices
+                {task.result.original?.vertices?.toLocaleString()} vertices
               </p>
               <p className="text-sm font-semibold text-gray-900">
-                {task.result.original_triangles?.toLocaleString()} triangles
+                {task.result.original?.triangles?.toLocaleString()} triangles
               </p>
             </div>
 
             <div className="bg-green-50 rounded-lg p-4">
               <p className="text-xs text-green-600 mb-1">Simplifié</p>
               <p className="text-sm font-semibold text-green-700">
-                {task.result.simplified_vertices?.toLocaleString()} vertices
+                {task.result.simplified?.vertices?.toLocaleString()} vertices
               </p>
               <p className="text-sm font-semibold text-green-700">
-                {task.result.simplified_triangles?.toLocaleString()} triangles
+                {task.result.simplified?.triangles?.toLocaleString()} triangles
               </p>
             </div>
           </div>
@@ -151,30 +143,19 @@ function TaskStatus({ task, onComplete }) {
               <div className="flex justify-between">
                 <span className="text-gray-600">Vertices supprimés:</span>
                 <span className="font-semibold text-blue-700">
-                  {task.result.vertices_removed?.toLocaleString()}
-                  {task.result.vertices_ratio && ` (${(task.result.vertices_ratio * 100).toFixed(1)}%)`}
+                  {(task.result.original?.vertices - task.result.simplified?.vertices)?.toLocaleString()}
+                  {task.result.reduction?.vertices_ratio && ` (${(task.result.reduction.vertices_ratio * 100).toFixed(1)}%)`}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Triangles supprimés:</span>
                 <span className="font-semibold text-blue-700">
-                  {task.result.triangles_removed?.toLocaleString()}
-                  {task.result.triangles_ratio && ` (${(task.result.triangles_ratio * 100).toFixed(1)}%)`}
+                  {(task.result.original?.triangles - task.result.simplified?.triangles)?.toLocaleString()}
+                  {task.result.reduction?.triangles_ratio && ` (${(task.result.reduction.triangles_ratio * 100).toFixed(1)}%)`}
                 </span>
               </div>
             </div>
           </div>
-
-          {/* Bouton de telechargement */}
-          <button
-            onClick={handleDownload}
-            className="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            <span>Télécharger le maillage simplifié</span>
-          </button>
         </div>
       )}
 

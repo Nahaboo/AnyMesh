@@ -71,21 +71,10 @@ function App() {
           console.log('[App] Task update:', task)
           setCurrentTask(task)
 
-          // If task is completed, update mesh info
+          // Task completed - don't auto-load the simplified mesh
+          // User will click a button to load it if they want
           if (task.status === 'completed' && task.result) {
-            const simplifiedMeshInfo = {
-              filename: task.result.output_filename,
-              displayFilename: task.result.output_filename,
-              file_size: 0,
-              format: meshInfo.format,
-              vertices_count: task.result.vertices_count,
-              faces_count: task.result.faces_count,
-              bounding_box: meshInfo.bounding_box,
-              uploadId: Date.now(),
-              isGenerated: false,
-              originalFilename: task.result.output_filename
-            }
-            setMeshInfo(simplifiedMeshInfo)
+            console.log('[App] Simplification completed:', task.result)
           }
         },
         1000
@@ -101,6 +90,37 @@ function App() {
         error: error.message || 'An error occurred'
       })
     }
+  }
+
+  // Handler to load the simplified mesh result
+  const handleLoadSimplified = () => {
+    if (!currentTask || currentTask.status !== 'completed' || !currentTask.result) {
+      console.error('[App] No completed task to load')
+      return
+    }
+
+    const result = currentTask.result
+
+    // Le backend convertit automatiquement en GLB
+    // Remplacer l'extension par .glb pour charger le fichier converti
+    const originalName = result.output_filename
+    const glbName = originalName.replace(/\.[^.]+$/, '.glb')
+
+    const simplifiedMeshInfo = {
+      filename: glbName,  // Fichier GLB converti
+      displayFilename: originalName,  // Nom original pour l'affichage
+      file_size: result.output_size || 0,
+      format: '.glb',  // Toujours GLB après conversion serveur
+      vertices_count: result.vertices_count,
+      faces_count: result.faces_count,
+      bounding_box: meshInfo.bounding_box,
+      uploadId: Date.now(),
+      isSimplified: true,  // Flag to indicate this is from /mesh/output
+      originalFilename: originalName
+    }
+
+    console.log('[App] Loading simplified mesh (GLB):', simplifiedMeshInfo)
+    setMeshInfo(simplifiedMeshInfo)
   }
 
   // Handler for mesh generation
@@ -164,6 +184,7 @@ function App() {
           onHomeClick={handleHomeClick}
           onSimplify={handleSimplify}
           onGenerate={handleGenerate}
+          onLoadSimplified={handleLoadSimplified}
           currentTask={currentTask}
           isProcessing={isProcessing}
         />

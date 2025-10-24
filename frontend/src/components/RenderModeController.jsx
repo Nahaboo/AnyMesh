@@ -11,16 +11,21 @@ import * as THREE from 'three'
  * RenderModeController - Handles different rendering modes for 3D models
  * Modes: solid, wireframe, normal (normal map visualization), smooth
  */
-function RenderModeController({ filename, isGenerated = false, renderMode = 'solid', uploadId }) {
+function RenderModeController({ filename, isGenerated = false, isSimplified = false, renderMode = 'solid', uploadId }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
 
-  // Build URL
-  const meshUrl = isGenerated
-    ? `http://localhost:8000/mesh/generated/${filename}`
-    : `http://localhost:8000/mesh/input/${filename}`
+  // Build URL - handle simplified meshes from /mesh/output
+  let meshUrl
+  if (isSimplified) {
+    meshUrl = `http://localhost:8000/mesh/output/${filename}`
+  } else if (isGenerated) {
+    meshUrl = `http://localhost:8000/mesh/generated/${filename}`
+  } else {
+    meshUrl = `http://localhost:8000/mesh/input/${filename}`
+  }
 
-  // Determine file format
-  const extension = filename.split('.').pop().toLowerCase()
+  // Determine file format (with safety check)
+  const extension = filename ? filename.split('.').pop().toLowerCase() : 'obj'
 
   // Light blue color for default rendering
   const DEFAULT_COLOR = 0xb3d9ff // Light blue

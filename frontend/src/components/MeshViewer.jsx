@@ -91,6 +91,7 @@ function MeshViewer({ meshInfo, renderMode = 'solid', onCameraUpdate }) {
           <RenderModeController
             filename={meshInfo.displayFilename || meshInfo.filename}
             isGenerated={meshInfo.isGenerated || false}
+            isSimplified={meshInfo.isSimplified || false}
             renderMode={renderMode}
             uploadId={meshInfo.uploadId}
           />

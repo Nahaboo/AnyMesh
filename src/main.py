@@ -558,6 +558,29 @@ def simplify_task_handler(task: Task):
         # Si l'utilisateur veut visualiser le résultat, il devra uploader le fichier de sortie
         # qui générera automatiquement son propre GLB
 
+        # Transformer le résultat pour le frontend
+        output_path = Path(output_file)
+        return {
+            'success': True,
+            'output_filename': output_path.name,
+            'output_file': str(output_path),
+            'output_size': result.get('output_size', 0),
+            'vertices_count': result.get('simplified_vertices', 0),
+            'faces_count': result.get('simplified_triangles', 0),
+            'original': {
+                'vertices': result.get('original_vertices', 0),
+                'triangles': result.get('original_triangles', 0)
+            },
+            'simplified': {
+                'vertices': result.get('simplified_vertices', 0),
+                'triangles': result.get('simplified_triangles', 0)
+            },
+            'reduction': {
+                'vertices_ratio': result.get('vertices_ratio', 0),
+                'triangles_ratio': result.get('triangles_ratio', 0)
+            }
+        }
+
     return result
 
 @app.post("/simplify")
@@ -672,6 +695,65 @@ async def get_input_mesh(filename: str):
         }
     )
 
+@app.get("/mesh/output/{filename}")
+async def get_output_mesh(filename: str):
+    """
+    Sert un fichier de maillage depuis data/output pour la visualisation
+    Utilisé pour visualiser les meshes simplifiés
+    Convertit automatiquement en GLB pour de meilleures performances
+    """
+    file_path = DATA_OUTPUT / filename
+
+    # Si on demande un fichier GLB qui n'existe pas, essayer de le convertir depuis le fichier source
+    if not file_path.exists() and filename.endswith('.glb'):
+        # Chercher le fichier source (OBJ, STL, PLY, etc.)
+        stem = file_path.stem
+        for ext in ['.obj', '.stl', '.ply', '.off']:
+            source_path = DATA_OUTPUT / f"{stem}{ext}"
+            if source_path.exists():
+                print(f"  🔄 Converting {source_path.name} to GLB for visualization...")
+                try:
+                    result = convert_and_compress(source_path, file_path)
+                    if result and result.get('success'):
+                        print(f"  ✓ GLB created: {file_path.name}")
+                        break
+                    else:
+                        print(f"  ⚠️ GLB conversion failed: {result.get('error', 'Unknown error')}")
+                except Exception as e:
+                    print(f"  ⚠️ GLB conversion failed: {e}")
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+
+    # Déterminer le media_type
+    file_ext = file_path.suffix.lower()
+    media_type_mapping = {
+        ".obj": "model/obj",
+        ".stl": "model/stl",
+        ".ply": "application/ply",
+        ".gltf": "model/gltf+json",
+        ".glb": "model/gltf-binary",
+        ".off": "application/octet-stream"
+    }
+    media_type = media_type_mapping.get(file_ext, "application/octet-stream")
+
+    # Streamer le fichier
+    CHUNK_SIZE = 1024 * 1024
+
+    def iterfile():
+        with open(file_path, mode="rb") as file_like:
+            while chunk := file_like.read(CHUNK_SIZE):
+                yield chunk
+
+    return StreamingResponse(
+        iterfile(),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{file_path.name}"',
+            "Content-Length": str(file_path.stat().st_size)
+        }
+    )
+
 @app.get("/download/{filename}")
 async def download_mesh(filename: str):
     """Télécharge un fichier de maillage simplifié depuis data/output"""
@@ -687,21 +769,41 @@ async def download_mesh(filename: str):
     )
 
 @app.get("/export/{filename}")
-async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False):
+async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False, is_simplified: bool = False):
     """
     Exporte un fichier de maillage dans le format demandé
 
     Args:
         filename: Nom du fichier source
         format: Format de sortie ('obj', 'stl', 'ply', 'glb')
-        is_generated: Si True, cherche dans data/generated_meshes, sinon dans data/input
+        is_generated: Si True, cherche dans data/generated_meshes
+        is_simplified: Si True, cherche dans data/output (meshes simplifiés)
 
     Returns:
         Le fichier converti au format demandé
     """
     # Déterminer le dossier source
-    source_dir = DATA_GENERATED_MESHES if is_generated else DATA_INPUT
+    if is_simplified:
+        source_dir = DATA_OUTPUT
+    elif is_generated:
+        source_dir = DATA_GENERATED_MESHES
+    else:
+        source_dir = DATA_INPUT
+
     source_path = source_dir / filename
+
+    # Si on exporte un mesh simplifié et que le fichier est un GLB,
+    # essayer de trouver le fichier source original (OBJ, STL, PLY)
+    # pour une meilleure conversion
+    if is_simplified and filename.endswith('.glb'):
+        stem = source_path.stem
+        for ext in ['.obj', '.stl', '.ply', '.off']:
+            original_source = source_dir / f"{stem}{ext}"
+            if original_source.exists():
+                print(f"  📄 Using original source {original_source.name} instead of GLB")
+                source_path = original_source
+                filename = original_source.name
+                break
 
     # Vérifier que le fichier existe
     if not source_path.exists():
