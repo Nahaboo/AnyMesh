@@ -78,6 +78,8 @@ function FileUpload({ onUploadSuccess }) {
           file_size: response.file_size,
           format: response.format,
           bounding_box: response.bounding_box,
+          vertices_count: response.vertices_count,
+          faces_count: response.faces_count,
           uploadId: Date.now() // Pour forcer le rechargement
         }
         onUploadSuccess(meshInfo)
