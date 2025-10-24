@@ -17,7 +17,7 @@ import trimesh
 
 from .task_manager import task_manager, Task
 from .simplify import simplify_mesh
-from .converter import convert_and_compress
+from .converter import convert_and_compress, convert_mesh_format
 from .glb_cache import (
     invalidate_glb_cache,
     should_convert_to_glb,
@@ -683,6 +683,62 @@ async def download_mesh(filename: str):
     return FileResponse(
         path=str(file_path),
         filename=filename,
+        media_type="application/octet-stream"
+    )
+
+@app.get("/export/{filename}")
+async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False):
+    """
+    Exporte un fichier de maillage dans le format demandé
+
+    Args:
+        filename: Nom du fichier source
+        format: Format de sortie ('obj', 'stl', 'ply', 'glb')
+        is_generated: Si True, cherche dans data/generated_meshes, sinon dans data/input
+
+    Returns:
+        Le fichier converti au format demandé
+    """
+    # Déterminer le dossier source
+    source_dir = DATA_GENERATED_MESHES if is_generated else DATA_INPUT
+    source_path = source_dir / filename
+
+    # Vérifier que le fichier existe
+    if not source_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+
+    # Si le format demandé est le même que le fichier source, le renvoyer directement
+    source_ext = source_path.suffix.lower().lstrip('.')
+    target_format = format.lower()
+
+    if source_ext == target_format:
+        return FileResponse(
+            path=str(source_path),
+            filename=filename,
+            media_type="application/octet-stream"
+        )
+
+    # Sinon, convertir vers le format demandé
+    output_filename = f"{source_path.stem}.{target_format}"
+    output_path = DATA_OUTPUT / output_filename
+
+    print(f"\n🔵 [EXPORT] Converting {filename} to {target_format.upper()}")
+
+    # Convertir le fichier
+    result = convert_mesh_format(source_path, output_path, target_format)
+
+    if not result['success']:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors de la conversion: {result.get('error', 'Unknown error')}"
+        )
+
+    print(f"  ✓ Export successful: {output_filename}")
+
+    # Retourner le fichier converti
+    return FileResponse(
+        path=str(output_path),
+        filename=output_filename,
         media_type="application/octet-stream"
     )
 

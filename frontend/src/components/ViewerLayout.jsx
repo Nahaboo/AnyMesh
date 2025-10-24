@@ -41,16 +41,16 @@ function ViewerLayout({
   const handleExport = (format) => {
     if (!meshInfo) return
 
-    const downloadUrl = meshInfo.isGenerated
-      ? `http://localhost:8000/mesh/generated/${meshInfo.filename}`
-      : `http://localhost:8000/download/${meshInfo.filename}`
+    // Build export URL with format conversion
+    const isGenerated = meshInfo.isGenerated || false
+    const exportUrl = `http://localhost:8000/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}`
 
     console.log(`[ViewerLayout] Exporting ${meshInfo.filename} as ${format.label}`)
 
     // Create temporary link and trigger download
     const link = document.createElement('a')
-    link.href = downloadUrl
-    link.download = meshInfo.filename
+    link.href = exportUrl
+    link.download = `${meshInfo.filename.split('.')[0]}${format.extension}`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

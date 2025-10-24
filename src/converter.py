@@ -268,6 +268,104 @@ def _command_exists(command: str) -> bool:
         return False
 
 
+def convert_mesh_format(
+    input_path: Path,
+    output_path: Path,
+    output_format: str
+) -> dict:
+    """
+    Convertit un fichier 3D vers un autre format
+
+    Args:
+        input_path: Chemin du fichier source
+        output_path: Chemin du fichier de sortie
+        output_format: Format de sortie ('obj', 'stl', 'ply', 'glb')
+
+    Returns:
+        dict: Statistiques de la conversion {
+            'success': bool,
+            'output_file': str,
+            'output_size': int (bytes),
+            'vertices': int,
+            'triangles': int,
+            'error': str (si échec)
+        }
+    """
+    import time
+    start_time = time.time()
+
+    try:
+        # Charger le mesh avec Trimesh
+        print(f"  🔄 Converting {input_path.name} to {output_format.upper()}...")
+        loaded = trimesh.load(str(input_path))
+
+        # Si c'est une Scene, extraire et fusionner les meshes
+        if hasattr(loaded, 'geometry'):
+            print(f"  🔍 Scene detected with {len(loaded.geometry)} geometry(ies)")
+            meshes = list(loaded.geometry.values())
+            if len(meshes) == 0:
+                return {
+                    'success': False,
+                    'error': 'Scene contains no geometry'
+                }
+            elif len(meshes) == 1:
+                mesh = meshes[0]
+            else:
+                mesh = trimesh.util.concatenate(meshes)
+                print(f"  🔗 {len(meshes)} meshes merged")
+        else:
+            mesh = loaded
+
+        # Vérifier que le mesh est valide
+        if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:
+            return {
+                'success': False,
+                'error': 'File contains no valid vertices'
+            }
+
+        if not hasattr(mesh, 'faces') or len(mesh.faces) == 0:
+            return {
+                'success': False,
+                'error': 'File contains no faces (empty mesh or point cloud)'
+            }
+
+        # Extraire les statistiques
+        vertices_count = len(mesh.vertices)
+        triangles_count = len(mesh.faces)
+
+        print(f"  📊 Mesh: {vertices_count} vertices, {triangles_count} faces")
+
+        # Exporter dans le format demandé
+        mesh.export(str(output_path), file_type=output_format)
+
+        # Vérifier que le fichier a été créé
+        if not output_path.exists():
+            return {
+                'success': False,
+                'error': f'{output_format.upper()} file was not created'
+            }
+
+        output_size = output_path.stat().st_size
+        conversion_time = (time.time() - start_time) * 1000
+
+        print(f"  ✓ Conversion to {output_format.upper()}: {conversion_time:.2f}ms ({output_size / 1024:.1f} KB)")
+
+        return {
+            'success': True,
+            'output_file': str(output_path),
+            'output_size': output_size,
+            'vertices': vertices_count,
+            'triangles': triangles_count,
+            'conversion_time_ms': round(conversion_time, 2)
+        }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Error during format conversion: {str(e)}"
+        }
+
+
 def convert_and_compress(
     input_path: Path,
     output_path: Path,
