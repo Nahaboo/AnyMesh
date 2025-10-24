@@ -21,19 +21,19 @@ function AxesDisplay({ mainCameraQuaternion, size, thickness }) {
       {/* X axis - Red */}
       <mesh position={[halfSize, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[thickness, thickness, size, 8]} />
-        <meshStandardMaterial color="#ff0000ff" />
+        <meshStandardMaterial color="#ff0000" />
       </mesh>
 
       {/* Y axis - Green */}
       <mesh position={[0, halfSize, 0]}>
         <cylinderGeometry args={[thickness, thickness, size, 8]} />
-        <meshStandardMaterial color="#15ff00ff" />
+        <meshStandardMaterial color="#00ff00" />
       </mesh>
 
       {/* Z axis - Blue */}
       <mesh position={[0, 0, halfSize]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[thickness, thickness, size, 8]} />
-        <meshStandardMaterial color="#0000ffff" />
+        <meshStandardMaterial color="#0000ff" />
       </mesh>
     </group>
   )
