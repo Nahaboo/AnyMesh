@@ -17,6 +17,7 @@ function App() {
 
   // Mesh data
   const [meshInfo, setMeshInfo] = useState(null)
+  const [originalMeshInfo, setOriginalMeshInfo] = useState(null)  // Keep original mesh reference
   const [sessionInfo, setSessionInfo] = useState(null)
 
   // Task management
@@ -31,11 +32,13 @@ function App() {
     if (config.type === 'file') {
       // File uploaded, prepare for visualization
       setMeshInfo(config.data)
+      setOriginalMeshInfo(config.data)  // Save original mesh info
       setSessionInfo(null)
     } else if (config.type === 'images') {
       // Images uploaded, prepare for generation
       setSessionInfo(config.data)
       setMeshInfo(null)
+      setOriginalMeshInfo(null)
     }
 
     // Switch to viewer
@@ -48,6 +51,7 @@ function App() {
     setCurrentView('config')
     setConfigData(null)
     setMeshInfo(null)
+    setOriginalMeshInfo(null)
     setSessionInfo(null)
     setCurrentTask(null)
     setIsProcessing(false)
@@ -107,20 +111,36 @@ function App() {
     const glbName = originalName.replace(/\.[^.]+$/, '.glb')
 
     const simplifiedMeshInfo = {
-      filename: glbName,  // Fichier GLB converti
+      filename: glbName,  // Fichier GLB converti pour la visualisation
       displayFilename: originalName,  // Nom original pour l'affichage
       file_size: result.output_size || 0,
-      format: '.glb',  // Toujours GLB après conversion serveur
+      format: originalMeshInfo.format,  // Format du mesh ORIGINAL (avant simplification)
       vertices_count: result.vertices_count,
       faces_count: result.faces_count,
+      triangles_count: result.faces_count,  // Pour compatibilité avec SimplificationControls
       bounding_box: meshInfo.bounding_box,
       uploadId: Date.now(),
       isSimplified: true,  // Flag to indicate this is from /mesh/output
-      originalFilename: originalName
+      originalFilename: originalName  // Fichier source simplifié (bunny_simplified.obj)
     }
 
     console.log('[App] Loading simplified mesh (GLB):', simplifiedMeshInfo)
     setMeshInfo(simplifiedMeshInfo)
+  }
+
+  // Handler to reload the original mesh
+  const handleLoadOriginal = () => {
+    if (!originalMeshInfo) {
+      console.error('[App] No original mesh to load')
+      return
+    }
+
+    console.log('[App] Reloading original mesh:', originalMeshInfo)
+    // Reload original mesh with new uploadId to force refresh
+    setMeshInfo({
+      ...originalMeshInfo,
+      uploadId: Date.now()
+    })
   }
 
   // Handler for mesh generation
@@ -185,6 +205,7 @@ function App() {
           onSimplify={handleSimplify}
           onGenerate={handleGenerate}
           onLoadSimplified={handleLoadSimplified}
+          onLoadOriginal={handleLoadOriginal}
           currentTask={currentTask}
           isProcessing={isProcessing}
         />

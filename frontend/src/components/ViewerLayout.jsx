@@ -21,6 +21,7 @@ function ViewerLayout({
   onSimplify,
   onGenerate,
   onLoadSimplified,
+  onLoadOriginal,
   currentTask,
   isProcessing
 }) {
@@ -152,6 +153,7 @@ function ViewerLayout({
                 meshInfo={meshInfo}
                 onSimplify={onSimplify}
                 onLoadSimplified={onLoadSimplified}
+                onLoadOriginal={onLoadOriginal}
                 currentTask={currentTask}
                 isProcessing={isProcessing}
               />
