@@ -1,12 +1,11 @@
 """
-Module de simplification de maillages 3D avec trimesh
+Module de simplification de maillages 3D avec Open3D
 """
 
-import trimesh
+import open3d as o3d
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any
-import copy
 
 def simplify_mesh(
     input_path: Path,
@@ -16,14 +15,16 @@ def simplify_mesh(
     preserve_boundary: bool = True
 ) -> Dict[str, Any]:
     """
-    Simplifie un maillage 3D en réduisant le nombre de triangles.
+    Simplifie un maillage 3D en réduisant le nombre de triangles avec Open3D.
+
+    Utilise l'algorithme Quadric Error Metric (QEM) de Garland & Heckbert (1997).
 
     Args:
         input_path: Chemin vers le fichier d'entrée
         output_path: Chemin vers le fichier de sortie
         target_triangles: Nombre cible de triangles (prioritaire sur reduction_ratio)
         reduction_ratio: Ratio de réduction (0.0 - 1.0), ex: 0.5 = réduction de 50%
-        preserve_boundary: Préserve les bords du maillage
+        preserve_boundary: Préserve les bords du maillage (boundary_weight=3.0 si True)
 
     Returns:
         Dictionnaire contenant les statistiques de simplification ou erreur
@@ -43,17 +44,17 @@ def simplify_mesh(
                 'error': "Vous devez spécifier target_triangles ou reduction_ratio"
             }
 
-        # Chargement du maillage original avec trimesh
-        mesh_original = trimesh.load(str(input_path))
+        # Chargement du maillage original avec Open3D
+        mesh_original = o3d.io.read_triangle_mesh(str(input_path))
 
-        if not hasattr(mesh_original, 'vertices') or len(mesh_original.vertices) == 0:
+        if not mesh_original.has_vertices() or len(mesh_original.vertices) == 0:
             return {
                 'success': False,
                 'error': "Le maillage ne contient pas de vertices valides"
             }
 
         original_vertices = len(mesh_original.vertices)
-        original_triangles = len(mesh_original.faces)
+        original_triangles = len(mesh_original.triangles)
 
         # Calcul du nombre cible de triangles
         if target_triangles is None:
@@ -65,25 +66,30 @@ def simplify_mesh(
         # S'assurer que target_triangles est valide (minimum 4 faces pour un tétraèdre)
         target_triangles = max(4, min(target_triangles, original_triangles))
 
-        # Création d'une copie profonde
-        mesh_simplified = copy.deepcopy(mesh_original)
+        # Déterminer le boundary_weight en fonction de preserve_boundary
+        # boundary_weight > 1.0 augmente le coût de fusion des vertices de bord
+        # 3.0 est une bonne valeur pour préserver les bords sans trop rigidifier
+        boundary_weight = 3.0 if preserve_boundary else 1.0
 
-        # Simplification avec l'algorithme Quadric Error Metric
-        # Trimesh utilise face_count (nombre de faces cibles) comme paramètre
-        mesh_simplified = mesh_simplified.simplify_quadric_decimation(
-            face_count=target_triangles
+        # Simplification avec l'algorithme Quadric Error Metric (Open3D)
+        # - target_number_of_triangles: nombre de triangles cibles
+        # - maximum_error: erreur max autorisée (inf = pas de limite)
+        # - boundary_weight: poids pour préserver les bords (>1.0 = préservation)
+        mesh_simplified = mesh_original.simplify_quadric_decimation(
+            target_number_of_triangles=target_triangles,
+            maximum_error=float('inf'),
+            boundary_weight=boundary_weight
         )
 
-        # Optionnel: recalcul des normales si nécessaire
-        if hasattr(mesh_original, 'vertex_normals') and mesh_original.vertex_normals.any():
-            mesh_simplified.vertex_normals = mesh_simplified.vertex_normals
+        # Recalcul des normales pour un meilleur rendu
+        mesh_simplified.compute_vertex_normals()
 
         # Sauvegarde du maillage simplifié
-        mesh_simplified.export(str(output_path))
+        o3d.io.write_triangle_mesh(str(output_path), mesh_simplified)
 
         # Statistiques
         simplified_vertices = len(mesh_simplified.vertices)
-        simplified_triangles = len(mesh_simplified.faces)
+        simplified_triangles = len(mesh_simplified.triangles)
 
         stats = {
             'success': True,
