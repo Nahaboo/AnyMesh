@@ -6,13 +6,20 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader'
 import { Center } from '@react-three/drei'
 import * as THREE from 'three'
+import ShaderMaterialController from './ShaderMaterialController'
+import { getMaterialShader } from '../shaders/materials'
 
 /**
  * RenderModeController - Handles different rendering modes for 3D models
- * Modes: solid, wireframe, normal (normal map visualization), smooth
+ * Modes: solid, wireframe, normal (normal map visualization), smooth, shader:*
  */
-function RenderModeController({ filename, isGenerated = false, isSimplified = false, renderMode = 'solid', uploadId }) {
+function RenderModeController({ filename, isGenerated = false, isSimplified = false, renderMode = 'solid', shaderParams = {}, uploadId }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
+
+  // Check if renderMode is a custom shader (format: "shader:toon")
+  const isShaderMode = renderMode.startsWith('shader:')
+  const shaderId = isShaderMode ? renderMode.split(':')[1] : null
+  const shaderConfig = shaderId ? getMaterialShader(shaderId) : null
 
   // Build URL - handle simplified meshes from /mesh/output
   let meshUrl
@@ -181,6 +188,21 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
     setNeedsUpdate(prev => prev + 1)
   }, [renderMode])
 
+  // If shader mode is active, delegate to ShaderMaterialController
+  if (isShaderMode && shaderConfig) {
+    // Only log once on shader change, not every frame
+    // console.log(`[RenderModeController] Using custom shader: ${shaderConfig.name}`)
+    return (
+      <ShaderMaterialController
+        model={loadedModel}
+        shader={shaderConfig}
+        params={shaderParams}
+        uploadId={uploadId}
+      />
+    )
+  }
+
+  // Otherwise, use standard material processing
   if (!processedModel) return null
 
   return (

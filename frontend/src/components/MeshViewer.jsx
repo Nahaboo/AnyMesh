@@ -21,9 +21,9 @@ function CameraSync({ onCameraUpdate }) {
 
 /**
  * MeshViewer - 3D viewer with render mode support
- * Supports: solid, wireframe, normal, smooth rendering modes
+ * Supports: solid, wireframe, normal, smooth rendering modes + custom shaders
  */
-function MeshViewer({ meshInfo, renderMode = 'solid', onCameraUpdate }) {
+function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate }) {
   if (!meshInfo) {
     return (
       <div className="v2-viewer-container" style={{
@@ -93,6 +93,7 @@ function MeshViewer({ meshInfo, renderMode = 'solid', onCameraUpdate }) {
             isGenerated={meshInfo.isGenerated || false}
             isSimplified={meshInfo.isSimplified || false}
             renderMode={renderMode}
+            shaderParams={shaderParams}
             uploadId={meshInfo.uploadId}
           />
         </Suspense>

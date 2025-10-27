@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import TopToolbar from './TopToolbar'
 import LeftToolbar from './LeftToolbar'
 import BottomToolbar from './BottomToolbar'
@@ -8,6 +8,8 @@ import SimplificationControls from './SimplificationControls'
 import MeshGenerationControls from './MeshGenerationControls'
 import TaskStatus from './TaskStatus'
 import * as THREE from 'three'
+import { useShaderDebugGUI } from '../hooks/useShaderDebugGUI'
+import { getMaterialShader } from '../shaders/materials'
 
 /**
  * ViewerLayout - Main layout for the 3D visualization page
@@ -29,6 +31,13 @@ function ViewerLayout({
   const [activeTool, setActiveTool] = useState('refine')
   const [showRefinePanel, setShowRefinePanel] = useState(false)
   const [cameraQuaternion, setCameraQuaternion] = useState(new THREE.Quaternion())
+  const [shaderParams, setShaderParams] = useState({})
+  const [debugMode, setDebugMode] = useState(false)
+
+  // Get active shader config
+  const isShaderMode = renderMode.startsWith('shader:')
+  const shaderId = isShaderMode ? renderMode.split(':')[1] : null
+  const shaderConfig = shaderId ? getMaterialShader(shaderId) : null
 
   const handleCameraUpdate = (quaternion) => {
     setCameraQuaternion(quaternion.clone())
@@ -39,6 +48,49 @@ function ViewerLayout({
     // Show refine panel when Refine is selected
     setShowRefinePanel(tool === 'refine')
   }
+
+  // Handler for shader parameter changes from debug GUI
+  const handleShaderParamChange = (key, value) => {
+    if (value === 'RESET_ALL') {
+      // Reset to defaults
+      setShaderParams({})
+      console.log('[ViewerLayout] Shader params reset to defaults')
+    } else {
+      // Update specific parameter
+      setShaderParams(prev => ({
+        ...prev,
+        [key]: value
+      }))
+    }
+  }
+
+  // Initialize shader debug GUI
+  useShaderDebugGUI(
+    shaderConfig,
+    shaderParams,
+    handleShaderParamChange,
+    debugMode && isShaderMode
+  )
+
+  // Keyboard shortcut: Ctrl+D to toggle debug mode
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+D (or Cmd+D on Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault()
+        if (isShaderMode) {
+          setDebugMode(prev => {
+            const newValue = !prev
+            console.log(`[ViewerLayout] Debug mode ${newValue ? 'enabled' : 'disabled'}`)
+            return newValue
+          })
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [debugMode, isShaderMode])
 
   const handleExport = (format) => {
     if (!meshInfo) return
@@ -72,6 +124,9 @@ function ViewerLayout({
         renderMode={renderMode}
         onRenderModeChange={setRenderMode}
         onHomeClick={onHomeClick}
+        debugMode={debugMode}
+        onDebugModeChange={setDebugMode}
+        isShaderMode={isShaderMode}
       />
 
       {/* Main Content Area */}
@@ -96,6 +151,7 @@ function ViewerLayout({
           <MeshViewer
             meshInfo={meshInfo}
             renderMode={renderMode}
+            shaderParams={shaderParams}
             onCameraUpdate={handleCameraUpdate}
           />
 
