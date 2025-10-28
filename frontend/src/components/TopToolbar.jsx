@@ -9,7 +9,8 @@ function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, on
     { id: 'wireframe', label: 'Wireframe' },
     { id: 'normal', label: 'Normal Map' },
     { id: 'flat', label: 'Flat' },
-    { id: 'shader:toon', label: 'Toon', isShader: true }
+    { id: 'shader:toon', label: 'Toon', isShader: true },
+    { id: 'shader:organic-solid', label: 'Organic', isShader: true }
   ]
 
   return (

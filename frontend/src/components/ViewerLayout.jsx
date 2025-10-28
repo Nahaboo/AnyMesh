@@ -28,7 +28,7 @@ function ViewerLayout({
   isProcessing
 }) {
   const [renderMode, setRenderMode] = useState('solid')
-  const [activeTool, setActiveTool] = useState('refine')
+  const [activeTool, setActiveTool] = useState('simplification')
   const [showRefinePanel, setShowRefinePanel] = useState(false)
   const [cameraQuaternion, setCameraQuaternion] = useState(new THREE.Quaternion())
   const [shaderParams, setShaderParams] = useState({})
@@ -45,8 +45,8 @@ function ViewerLayout({
 
   const handleToolChange = (tool) => {
     setActiveTool(tool)
-    // Show refine panel when Refine is selected
-    setShowRefinePanel(tool === 'refine')
+    // Show refine panel when Simplification is selected
+    setShowRefinePanel(tool === 'simplification')
   }
 
   // Handler for shader parameter changes from debug GUI
@@ -190,7 +190,7 @@ function ViewerLayout({
                 fontWeight: 600,
                 color: 'var(--v2-text-primary)'
               }}>
-                Refine Mesh
+                Simplification
               </h3>
               <button
                 onClick={() => setShowRefinePanel(false)}

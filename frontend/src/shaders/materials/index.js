@@ -2,10 +2,12 @@
 // All custom material shaders available in the application
 
 import ToonShader from './toon/ToonShader'
+import OrganicSolidShader from './organic-solid/OrganicSolidShader'
 
 // Export all material shaders
 export const materialShaders = {
-  toon: ToonShader
+  toon: ToonShader,
+  'organic-solid': OrganicSolidShader
 }
 
 // Helper function to get shader by ID

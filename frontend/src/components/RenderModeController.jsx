@@ -22,13 +22,14 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
   const shaderConfig = shaderId ? getMaterialShader(shaderId) : null
 
   // Build URL - handle simplified meshes from /mesh/output
+  // Add uploadId as cache-busting parameter to force browser to reload file
   let meshUrl
   if (isSimplified) {
-    meshUrl = `http://localhost:8000/mesh/output/${filename}`
+    meshUrl = `http://localhost:8000/mesh/output/${filename}?v=${uploadId || Date.now()}`
   } else if (isGenerated) {
-    meshUrl = `http://localhost:8000/mesh/generated/${filename}`
+    meshUrl = `http://localhost:8000/mesh/generated/${filename}?v=${uploadId || Date.now()}`
   } else {
-    meshUrl = `http://localhost:8000/mesh/input/${filename}`
+    meshUrl = `http://localhost:8000/mesh/input/${filename}?v=${uploadId || Date.now()}`
   }
 
   // Determine file format (with safety check)
