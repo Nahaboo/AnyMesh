@@ -106,6 +106,8 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
     }
 
     // Apply shader material to all meshes in the model
+    const nodesToReplace = []
+
     cloned.traverse((child) => {
       if (child.isMesh) {
         // Ensure geometry has normals
@@ -120,17 +122,45 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
         }
 
         // Create ShaderMaterial with custom GLSL
-        child.material = new THREE.ShaderMaterial({
+        const materialConfig = {
           uniforms: uniforms,
           vertexShader: shader.vertexShader,
           fragmentShader: shader.fragmentShader,
           side: THREE.DoubleSide,
           lights: false, // We handle lighting in the shader
-          transparent: shaderId === 'organic-wireframe', // Enable transparency for wireframe
+          transparent: shaderId === 'organic-wireframe' || shaderId === 'point-cloud', // Enable transparency
           depthWrite: shaderId !== 'organic-wireframe' // Disable depth write for wireframe
-        })
+        }
 
-        child.material.needsUpdate = true
+        // Special config for point cloud shader
+        if (shaderId === 'point-cloud') {
+          materialConfig.transparent = true
+          materialConfig.depthWrite = true
+          materialConfig.vertexColors = false
+
+          // Convert Mesh to Points for point cloud rendering
+          const pointsMaterial = new THREE.ShaderMaterial(materialConfig)
+          const points = new THREE.Points(child.geometry, pointsMaterial)
+
+          // Copy transform from original mesh
+          points.position.copy(child.position)
+          points.rotation.copy(child.rotation)
+          points.scale.copy(child.scale)
+
+          // Mark for replacement
+          nodesToReplace.push({ oldNode: child, newNode: points })
+        } else {
+          child.material = new THREE.ShaderMaterial(materialConfig)
+          child.material.needsUpdate = true
+        }
+      }
+    })
+
+    // Replace meshes with points for point-cloud shader
+    nodesToReplace.forEach(({ oldNode, newNode }) => {
+      if (oldNode.parent) {
+        oldNode.parent.add(newNode)
+        oldNode.parent.remove(oldNode)
       }
     })
 
@@ -145,7 +175,10 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
     if (!processedModel || !shader) return
 
     processedModel.traverse((child) => {
-      if (child.isMesh && child.material.uniforms) {
+      // Handle both Mesh and Points objects
+      const hasMaterial = (child.isMesh || child.isPoints) && child.material && child.material.uniforms
+
+      if (hasMaterial) {
         const uniforms = child.material.uniforms
 
         // Update time uniform for animation

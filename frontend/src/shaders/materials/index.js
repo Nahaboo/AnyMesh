@@ -3,11 +3,13 @@
 
 import ToonShader from './toon/ToonShader'
 import OrganicSolidShader from './organic-solid/OrganicSolidShader'
+import PointCloudShader from './point-cloud/PointCloudShader'
 
 // Export all material shaders
 export const materialShaders = {
   toon: ToonShader,
-  'organic-solid': OrganicSolidShader
+  'organic-solid': OrganicSolidShader,
+  'point-cloud': PointCloudShader
 }
 
 // Helper function to get shader by ID
