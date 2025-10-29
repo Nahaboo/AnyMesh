@@ -25,6 +25,37 @@
   --v2-success: #10b981;
   --v2-warning: #f59e0b;
   --v2-error: #ef4444;
+  --v2-info: #3b82f6;
+
+  /* Contextual backgrounds (light theme) */
+  --v2-success-bg: #ecfdf5;
+  --v2-success-border: #d1fae5;
+  --v2-success-text: #059669;
+
+  --v2-warning-bg: #fefce8;
+  --v2-warning-border: #fef08a;
+  --v2-warning-text: #d97706;
+
+  --v2-error-bg: #fef2f2;
+  --v2-error-border: #fecaca;
+  --v2-error-text: #dc2626;
+
+  --v2-info-bg: #eff6ff;
+  --v2-info-border: #bfdbfe;
+  --v2-info-text: #2563eb;
+
+  /* Input/form colors */
+  --v2-input-bg: #ffffff;
+  --v2-input-border: #d1d5db;
+  --v2-input-text: #1f2937;
+  --v2-input-placeholder: #9ca3af;
+  --v2-input-disabled-bg: #f3f4f6;
+  --v2-input-disabled-text: #9ca3af;
+
+  /* 3D Axes colors (light theme) */
+  --v2-axis-x: #ff0000;  /* Red */
+  --v2-axis-y: #00ff00;  /* Green */
+  --v2-axis-z: #77adff;  /* Blue */
 
   /* Spacing */
   --v2-spacing-xs: 0.25rem;
@@ -60,6 +91,71 @@
   --v2-transition-fast: 150ms ease;
   --v2-transition-base: 200ms ease;
   --v2-transition-slow: 300ms ease;
+}
+
+/* ============================================
+   V2 Theme - Dark Theme Variables
+   ============================================ */
+
+[data-theme="dark"] {
+  /* Colors - Dark Theme (plus clair, moins noir) */
+  --v2-bg-primary: #1e1e1e;
+  --v2-bg-secondary: #2a2a2a;
+  --v2-bg-tertiary: #333333;
+  --v2-bg-hover: #3a3a3a;
+  --v2-bg-active: #404040;
+
+  --v2-text-primary: #e8e8e8;
+  --v2-text-secondary: #c0c0c0;
+  --v2-text-tertiary: #9a9a9a;
+  --v2-text-muted: #757575;
+
+  --v2-border-primary: #404040;
+  --v2-border-secondary: #353535;
+
+  --v2-accent-primary: #818cf8;
+  --v2-accent-hover: #a5b4fc;
+  --v2-accent-active: #6366f1;
+
+  --v2-success: #34d399;
+  --v2-warning: #fbbf24;
+  --v2-error: #f87171;
+  --v2-info: #60a5fa;
+
+  /* Contextual backgrounds (dark theme) */
+  --v2-success-bg: #064e3b;
+  --v2-success-border: #065f46;
+  --v2-success-text: #6ee7b7;
+
+  --v2-warning-bg: #451a03;
+  --v2-warning-border: #78350f;
+  --v2-warning-text: #fcd34d;
+
+  --v2-error-bg: #450a0a;
+  --v2-error-border: #7f1d1d;
+  --v2-error-text: #fca5a5;
+
+  --v2-info-bg: #172554;
+  --v2-info-border: #1e3a8a;
+  --v2-info-text: #93c5fd;
+
+  /* Input/form colors */
+  --v2-input-bg: #1a1a1a;
+  --v2-input-border: #374151;
+  --v2-input-text: #e0e0e0;
+  --v2-input-placeholder: #6b7280;
+  --v2-input-disabled-bg: #252525;
+  --v2-input-disabled-text: #6b7280;
+
+  /* 3D Axes colors (dark theme - éclaircies pour meilleure visibilité) */
+  --v2-axis-x: #ff6b6b;  /* Red - lightened */
+  --v2-axis-y: #51cf66;  /* Green - lightened */
+  --v2-axis-z: #74c0fc;  /* Blue - lightened */
+
+  /* Shadows - Dark theme needs more pronounced shadows */
+  --v2-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --v2-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --v2-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
 }
 
 /* ============================================

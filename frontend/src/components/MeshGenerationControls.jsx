@@ -22,23 +22,38 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-semibold text-gray-800 mb-4">
+    <div style={{
+      background: 'var(--v2-bg-secondary)',
+      borderRadius: 'var(--v2-radius-lg)',
+      boxShadow: 'var(--v2-shadow-md)',
+      padding: 'var(--v2-spacing-lg)'
+    }}>
+      <h2 style={{
+        fontSize: '1.25rem',
+        fontWeight: 600,
+        color: 'var(--v2-text-primary)',
+        marginBottom: 'var(--v2-spacing-md)'
+      }}>
         Générer un modèle 3D
       </h2>
 
       {/* Informations de session */}
       {sessionInfo && (
-        <div className="mb-6 p-4 bg-purple-50 rounded-lg">
-          <div className="flex items-center space-x-2 text-sm text-purple-800">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <div style={{
+          marginBottom: 'var(--v2-spacing-lg)',
+          padding: 'var(--v2-spacing-md)',
+          background: 'var(--v2-info-bg)',
+          borderRadius: 'var(--v2-radius-lg)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--v2-spacing-xs)', fontSize: '0.875rem', color: 'var(--v2-info-text)' }}>
+            <svg style={{ width: '20px', height: '20px' }} fill="currentColor" viewBox="0 0 20 20">
               <path
                 fillRule="evenodd"
                 d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
                 clipRule="evenodd"
               />
             </svg>
-            <span className="font-medium">
+            <span style={{ fontWeight: 500 }}>
               {sessionInfo.imagesCount} image(s) prête(s) pour la génération
             </span>
           </div>
@@ -46,26 +61,36 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
       )}
 
       {/* Contrôles de génération */}
-      <div className="space-y-4">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-md)' }}>
         {/* Résolution */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            color: 'var(--v2-text-secondary)',
+            marginBottom: 'var(--v2-spacing-xs)'
+          }}>
             Résolution du maillage
           </label>
-          <div className="grid grid-cols-3 gap-2">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
             {['low', 'medium', 'high'].map((res) => (
               <button
                 key={res}
                 onClick={() => setResolution(res)}
                 disabled={isProcessing}
-                className={`
-                  py-2 px-3 rounded-lg text-sm font-medium transition-colors
-                  ${resolution === res
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }
-                  ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
+                style={{
+                  padding: 'var(--v2-spacing-xs) var(--v2-spacing-sm)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  transition: 'all var(--v2-transition-base)',
+                  background: resolution === res ? 'var(--v2-accent-primary)' : 'var(--v2-bg-tertiary)',
+                  color: resolution === res ? '#ffffff' : 'var(--v2-text-secondary)',
+                  border: 'none',
+                  cursor: isProcessing ? 'not-allowed' : 'pointer',
+                  opacity: isProcessing ? 0.5 : 1
+                }}
               >
                 {res === 'low' && 'Basse'}
                 {res === 'medium' && 'Moyenne'}
@@ -73,30 +98,41 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
               </button>
             ))}
           </div>
-          <p className="text-xs text-gray-500 mt-2">
+          <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)', marginTop: 'var(--v2-spacing-xs)' }}>
             Temps estimé: {estimatedTime[resolution]}
           </p>
         </div>
 
         {/* Format de sortie */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            color: 'var(--v2-text-secondary)',
+            marginBottom: 'var(--v2-spacing-xs)'
+          }}>
             Format de sortie
           </label>
-          <div className="grid grid-cols-3 gap-2">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
             {['obj', 'stl', 'ply'].map((format) => (
               <button
                 key={format}
                 onClick={() => setOutputFormat(format)}
                 disabled={isProcessing}
-                className={`
-                  py-2 px-3 rounded-lg text-sm font-medium uppercase transition-colors
-                  ${outputFormat === format
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }
-                  ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
+                style={{
+                  padding: 'var(--v2-spacing-xs) var(--v2-spacing-sm)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  textTransform: 'uppercase',
+                  transition: 'all var(--v2-transition-base)',
+                  background: outputFormat === format ? 'var(--v2-accent-primary)' : 'var(--v2-bg-tertiary)',
+                  color: outputFormat === format ? '#ffffff' : 'var(--v2-text-secondary)',
+                  border: 'none',
+                  cursor: isProcessing ? 'not-allowed' : 'pointer',
+                  opacity: isProcessing ? 0.5 : 1
+                }}
               >
                 {format}
               </button>
@@ -105,18 +141,23 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
         </div>
 
         {/* Note importante */}
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-start space-x-2">
-            <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <div style={{
+          padding: 'var(--v2-spacing-sm)',
+          background: 'var(--v2-info-bg)',
+          border: '1px solid var(--v2-info-border)',
+          borderRadius: 'var(--v2-radius-lg)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--v2-spacing-xs)' }}>
+            <svg style={{ width: '20px', height: '20px', color: 'var(--v2-info-text)', marginTop: '2px', flexShrink: 0 }} fill="currentColor" viewBox="0 0 20 20">
               <path
                 fillRule="evenodd"
                 d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
                 clipRule="evenodd"
               />
             </svg>
-            <div className="text-xs text-blue-800">
-              <p className="font-medium">Note MVP:</p>
-              <p className="mt-1">
+            <div style={{ fontSize: '0.75rem', color: 'var(--v2-info-text)' }}>
+              <p style={{ fontWeight: 500 }}>Note MVP:</p>
+              <p style={{ marginTop: '4px' }}>
                 La génération actuelle utilise une approche basique (depth map).
                 Pour de meilleurs résultats, utilisez plusieurs images avec différents angles.
               </p>
@@ -128,14 +169,28 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
         <button
           onClick={handleGenerate}
           disabled={isProcessing || !sessionInfo}
-          className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+          className="v2-btn"
+          style={{
+            width: '100%',
+            background: 'var(--v2-accent-primary)',
+            color: '#ffffff',
+            padding: 'var(--v2-spacing-sm) var(--v2-spacing-md)',
+            borderRadius: 'var(--v2-radius-lg)',
+            fontWeight: 500,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 'var(--v2-spacing-xs)',
+            cursor: (isProcessing || !sessionInfo) ? 'not-allowed' : 'pointer',
+            opacity: (isProcessing || !sessionInfo) ? 0.5 : 1
+          }}
         >
           {isProcessing ? (
             <>
-              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <svg style={{ animation: 'spin 1s linear infinite', width: '20px', height: '20px' }} fill="none" viewBox="0 0 24 24">
+                <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path
-                  className="opacity-75"
+                  style={{ opacity: 0.75 }}
                   fill="currentColor"
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                 />
@@ -144,7 +199,7 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
             </>
           ) : (
             <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -157,6 +212,14 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
           )}
         </button>
       </div>
+
+      {/* Ajout du keyframes pour l'animation spin */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }

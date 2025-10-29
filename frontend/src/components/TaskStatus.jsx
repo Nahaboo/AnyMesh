@@ -12,18 +12,38 @@ function TaskStatus({ task, onComplete }) {
     return null
   }
 
-  const getStatusColor = (status) => {
+  const getStatusStyles = (status) => {
     switch (status) {
       case 'pending':
-        return 'bg-yellow-50 border-yellow-200 text-yellow-700'
+        return {
+          background: 'var(--v2-warning-bg)',
+          borderColor: 'var(--v2-warning-border)',
+          color: 'var(--v2-warning-text)'
+        }
       case 'processing':
-        return 'bg-blue-50 border-blue-200 text-blue-700'
+        return {
+          background: 'var(--v2-info-bg)',
+          borderColor: 'var(--v2-info-border)',
+          color: 'var(--v2-info-text)'
+        }
       case 'completed':
-        return 'bg-green-50 border-green-200 text-green-700'
+        return {
+          background: 'var(--v2-success-bg)',
+          borderColor: 'var(--v2-success-border)',
+          color: 'var(--v2-success-text)'
+        }
       case 'failed':
-        return 'bg-red-50 border-red-200 text-red-700'
+        return {
+          background: 'var(--v2-error-bg)',
+          borderColor: 'var(--v2-error-border)',
+          color: 'var(--v2-error-text)'
+        }
       default:
-        return 'bg-gray-50 border-gray-200 text-gray-700'
+        return {
+          background: 'var(--v2-bg-tertiary)',
+          borderColor: 'var(--v2-border-secondary)',
+          color: 'var(--v2-text-secondary)'
+        }
     }
   }
 
@@ -31,26 +51,26 @@ function TaskStatus({ task, onComplete }) {
     switch (status) {
       case 'pending':
         return (
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <svg style={{ width: '20px', height: '20px' }} fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
           </svg>
         )
       case 'processing':
         return (
-          <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <svg style={{ width: '20px', height: '20px', animation: 'spin 1s linear infinite' }} fill="none" viewBox="0 0 24 24">
+            <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
         )
       case 'completed':
         return (
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <svg style={{ width: '20px', height: '20px' }} fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
           </svg>
         )
       case 'failed':
         return (
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <svg style={{ width: '20px', height: '20px' }} fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
           </svg>
         )
@@ -74,82 +94,130 @@ function TaskStatus({ task, onComplete }) {
     }
   }
 
+  const statusStyles = getStatusStyles(task.status)
+
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-semibold text-gray-800 mb-4">
+    <div style={{
+      background: 'var(--v2-bg-secondary)',
+      borderRadius: 'var(--v2-radius-lg)',
+      boxShadow: 'var(--v2-shadow-md)',
+      padding: 'var(--v2-spacing-lg)'
+    }}>
+      <h2 style={{
+        fontSize: '1.25rem',
+        fontWeight: 600,
+        color: 'var(--v2-text-primary)',
+        marginBottom: 'var(--v2-spacing-md)'
+      }}>
         Statut de la tâche
       </h2>
 
       {/* Statut */}
-      <div className={`flex items-center space-x-3 p-4 rounded-lg border mb-4 ${getStatusColor(task.status)}`}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--v2-spacing-sm)',
+        padding: 'var(--v2-spacing-md)',
+        borderRadius: 'var(--v2-radius-lg)',
+        border: `1px solid ${statusStyles.borderColor}`,
+        background: statusStyles.background,
+        color: statusStyles.color,
+        marginBottom: 'var(--v2-spacing-md)'
+      }}>
         {getStatusIcon(task.status)}
-        <div className="flex-1">
-          <p className="font-medium">{getStatusText(task.status)}</p>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontWeight: 500 }}>{getStatusText(task.status)}</p>
           {task.status === 'processing' && (
-            <p className="text-sm mt-1">Progression: {task.progress}%</p>
+            <p style={{ fontSize: '0.875rem', marginTop: '4px' }}>Progression: {task.progress}%</p>
           )}
         </div>
       </div>
 
       {/* Barre de progression */}
       {task.status === 'processing' && (
-        <div className="mb-4">
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${task.progress}%` }}
-            />
+        <div style={{ marginBottom: 'var(--v2-spacing-md)' }}>
+          <div style={{
+            width: '100%',
+            background: 'var(--v2-bg-tertiary)',
+            borderRadius: 'var(--v2-radius-full)',
+            height: '8px'
+          }}>
+            <div style={{
+              background: 'var(--v2-info)',
+              height: '8px',
+              borderRadius: 'var(--v2-radius-full)',
+              transition: 'width 300ms ease',
+              width: `${task.progress}%`
+            }} />
           </div>
         </div>
       )}
 
       {/* Erreur */}
       {task.status === 'failed' && task.error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-600">{task.error}</p>
+        <div style={{
+          marginBottom: 'var(--v2-spacing-md)',
+          padding: 'var(--v2-spacing-md)',
+          background: 'var(--v2-error-bg)',
+          border: '1px solid var(--v2-error-border)',
+          borderRadius: 'var(--v2-radius-lg)'
+        }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--v2-error-text)' }}>{task.error}</p>
         </div>
       )}
 
       {/* Resultats */}
       {task.status === 'completed' && task.result && (
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-md)' }}>
           {/* Statistiques */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Original</p>
-              <p className="text-sm font-semibold text-gray-900">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--v2-spacing-md)' }}>
+            <div style={{
+              background: 'var(--v2-bg-tertiary)',
+              borderRadius: 'var(--v2-radius-lg)',
+              padding: 'var(--v2-spacing-md)'
+            }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)', marginBottom: '4px' }}>Original</p>
+              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-text-primary)' }}>
                 {task.result.original?.vertices?.toLocaleString()} vertices
               </p>
-              <p className="text-sm font-semibold text-gray-900">
+              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-text-primary)' }}>
                 {task.result.original?.triangles?.toLocaleString()} triangles
               </p>
             </div>
 
-            <div className="bg-green-50 rounded-lg p-4">
-              <p className="text-xs text-green-600 mb-1">Simplifié</p>
-              <p className="text-sm font-semibold text-green-700">
+            <div style={{
+              background: 'var(--v2-success-bg)',
+              borderRadius: 'var(--v2-radius-lg)',
+              padding: 'var(--v2-spacing-md)'
+            }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)', marginBottom: '4px' }}>Simplifié</p>
+              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-success-text)' }}>
                 {task.result.simplified?.vertices?.toLocaleString()} vertices
               </p>
-              <p className="text-sm font-semibold text-green-700">
+              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-success-text)' }}>
                 {task.result.simplified?.triangles?.toLocaleString()} triangles
               </p>
             </div>
           </div>
 
           {/* Reduction */}
-          <div className="bg-blue-50 rounded-lg p-4">
-            <p className="text-sm font-medium text-gray-700 mb-2">Réduction</p>
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Vertices supprimés:</span>
-                <span className="font-semibold text-blue-700">
+          <div style={{
+            background: 'var(--v2-info-bg)',
+            borderRadius: 'var(--v2-radius-lg)',
+            padding: 'var(--v2-spacing-md)'
+          }}>
+            <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-text-secondary)', marginBottom: 'var(--v2-spacing-xs)' }}>Réduction</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--v2-text-tertiary)' }}>Vertices supprimés:</span>
+                <span style={{ fontWeight: 600, color: 'var(--v2-info-text)' }}>
                   {(task.result.original?.vertices - task.result.simplified?.vertices)?.toLocaleString()}
                   {task.result.reduction?.vertices_ratio && ` (${(task.result.reduction.vertices_ratio * 100).toFixed(1)}%)`}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Triangles supprimés:</span>
-                <span className="font-semibold text-blue-700">
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--v2-text-tertiary)' }}>Triangles supprimés:</span>
+                <span style={{ fontWeight: 600, color: 'var(--v2-info-text)' }}>
                   {(task.result.original?.triangles - task.result.simplified?.triangles)?.toLocaleString()}
                   {task.result.reduction?.triangles_ratio && ` (${(task.result.reduction.triangles_ratio * 100).toFixed(1)}%)`}
                 </span>
@@ -160,11 +228,23 @@ function TaskStatus({ task, onComplete }) {
       )}
 
       {/* Info task ID */}
-      <div className="mt-4 pt-4 border-t border-gray-200">
-        <p className="text-xs text-gray-500">
-          Task ID: <span className="font-mono">{task.id}</span>
+      <div style={{
+        marginTop: 'var(--v2-spacing-md)',
+        paddingTop: 'var(--v2-spacing-md)',
+        borderTop: '1px solid var(--v2-border-secondary)'
+      }}>
+        <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)' }}>
+          Task ID: <span style={{ fontFamily: 'var(--v2-font-mono)' }}>{task.id}</span>
         </p>
       </div>
+
+      {/* Ajout du keyframes pour l'animation spin */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }

@@ -117,35 +117,45 @@ function ImageUpload({ onUploadSuccess }) {
   }
 
   return (
-    <div className="w-full space-y-4">
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-md)' }}>
       {/* Zone de drop */}
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`
-          relative border-2 border-dashed rounded-lg p-8 text-center transition-all
-          ${isDragging
-            ? 'border-purple-500 bg-purple-50'
-            : 'border-gray-300 hover:border-gray-400 bg-white'
-          }
-          ${isUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        `}
+        style={{
+          position: 'relative',
+          border: `2px dashed ${isDragging ? 'var(--v2-accent-primary)' : 'var(--v2-border-primary)'}`,
+          borderRadius: 'var(--v2-radius-lg)',
+          padding: 'var(--v2-spacing-xl)',
+          textAlign: 'center',
+          transition: 'all var(--v2-transition-base)',
+          background: isDragging ? 'var(--v2-info-bg)' : 'var(--v2-bg-secondary)',
+          cursor: isUploading ? 'not-allowed' : 'pointer',
+          opacity: isUploading ? 0.5 : 1
+        }}
       >
         <input
           type="file"
           onChange={handleFileInput}
           accept={SUPPORTED_FORMATS.join(',')}
           multiple
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           disabled={isUploading}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            opacity: 0,
+            cursor: isUploading ? 'not-allowed' : 'pointer'
+          }}
         />
 
-        <div className="space-y-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-sm)' }}>
           {/* Icône */}
-          <div className="flex justify-center">
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
             <svg
-              className="w-12 h-12 text-gray-400"
+              style={{ width: '48px', height: '48px', color: 'var(--v2-text-muted)' }}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -161,17 +171,17 @@ function ImageUpload({ onUploadSuccess }) {
 
           {/* Texte */}
           <div>
-            <p className="text-lg font-medium text-gray-700">
+            <p style={{ fontSize: '1.125rem', fontWeight: 500, color: 'var(--v2-text-secondary)' }}>
               Glissez des images ici
             </p>
-            <p className="text-sm text-gray-500 mt-1">
+            <p style={{ fontSize: '0.875rem', color: 'var(--v2-text-muted)', marginTop: '4px' }}>
               ou cliquez pour parcourir (sélection multiple possible)
             </p>
           </div>
 
           {/* Formats supportés */}
           {!isUploading && (
-            <div className="text-xs text-gray-400">
+            <div style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)' }}>
               Formats: {SUPPORTED_FORMATS.join(', ')} • Max 5 MB par image
             </div>
           )}
@@ -181,8 +191,8 @@ function ImageUpload({ onUploadSuccess }) {
       {/* Preview des images sélectionnées */}
       {selectedImages.length > 0 && (
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-gray-700">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--v2-spacing-xs)' }}>
+            <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-text-secondary)' }}>
               Images sélectionnées ({selectedImages.length})
             </h3>
             <button
@@ -191,27 +201,72 @@ function ImageUpload({ onUploadSuccess }) {
                 setSelectedImages([])
                 setPreviewUrls([])
               }}
-              className="text-xs text-red-600 hover:text-red-800"
               disabled={isUploading}
+              style={{
+                fontSize: '0.75rem',
+                color: 'var(--v2-error-text)',
+                background: 'transparent',
+                border: 'none',
+                cursor: isUploading ? 'not-allowed' : 'pointer',
+                padding: '4px 8px',
+                borderRadius: 'var(--v2-radius-sm)'
+              }}
             >
               Tout supprimer
             </button>
           </div>
 
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+            gap: 'var(--v2-spacing-xs)'
+          }}>
             {previewUrls.map((url, index) => (
-              <div key={index} className="relative group">
+              <div
+                key={index}
+                style={{
+                  position: 'relative',
+                  borderRadius: 'var(--v2-radius-md)',
+                  overflow: 'hidden'
+                }}
+                onMouseEnter={(e) => {
+                  const btn = e.currentTarget.querySelector('button')
+                  if (btn) btn.style.opacity = '1'
+                }}
+                onMouseLeave={(e) => {
+                  const btn = e.currentTarget.querySelector('button')
+                  if (btn) btn.style.opacity = '0'
+                }}
+              >
                 <img
                   src={url}
                   alt={`Preview ${index + 1}`}
-                  className="w-full h-24 object-cover rounded border border-gray-200"
+                  style={{
+                    width: '100%',
+                    height: '96px',
+                    objectFit: 'cover',
+                    border: '1px solid var(--v2-border-secondary)',
+                    borderRadius: 'var(--v2-radius-md)'
+                  }}
                 />
                 <button
                   onClick={() => removeImage(index)}
-                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                   disabled={isUploading}
+                  style={{
+                    position: 'absolute',
+                    top: '4px',
+                    right: '4px',
+                    background: 'var(--v2-error)',
+                    color: '#ffffff',
+                    borderRadius: 'var(--v2-radius-full)',
+                    padding: '4px',
+                    border: 'none',
+                    cursor: isUploading ? 'not-allowed' : 'pointer',
+                    opacity: 0,
+                    transition: 'opacity var(--v2-transition-base)'
+                  }}
                 >
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <svg style={{ width: '12px', height: '12px' }} fill="currentColor" viewBox="0 0 20 20">
                     <path
                       fillRule="evenodd"
                       d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
@@ -219,7 +274,19 @@ function ImageUpload({ onUploadSuccess }) {
                     />
                   </svg>
                 </button>
-                <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  background: 'rgba(0, 0, 0, 0.5)',
+                  color: '#ffffff',
+                  fontSize: '0.75rem',
+                  padding: '4px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
                   {selectedImages[index].name}
                 </div>
               </div>
@@ -227,11 +294,21 @@ function ImageUpload({ onUploadSuccess }) {
           </div>
 
           {/* Bouton upload */}
-          <div className="mt-4">
+          <div style={{ marginTop: 'var(--v2-spacing-md)' }}>
             <button
               onClick={handleUpload}
               disabled={isUploading || selectedImages.length === 0}
-              className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="v2-btn"
+              style={{
+                width: '100%',
+                background: 'var(--v2-accent-primary)',
+                color: '#ffffff',
+                padding: 'var(--v2-spacing-sm) var(--v2-spacing-md)',
+                borderRadius: 'var(--v2-radius-lg)',
+                fontWeight: 500,
+                cursor: (isUploading || selectedImages.length === 0) ? 'not-allowed' : 'pointer',
+                opacity: (isUploading || selectedImages.length === 0) ? 0.5 : 1
+              }}
             >
               {isUploading ? 'Upload en cours...' : `Uploader ${selectedImages.length} image(s)`}
             </button>
@@ -241,8 +318,13 @@ function ImageUpload({ onUploadSuccess }) {
 
       {/* Message d'erreur */}
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-600">{error}</p>
+        <div style={{
+          padding: 'var(--v2-spacing-md)',
+          background: 'var(--v2-error-bg)',
+          border: '1px solid var(--v2-error-border)',
+          borderRadius: 'var(--v2-radius-lg)'
+        }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--v2-error-text)' }}>{error}</p>
         </div>
       )}
     </div>

@@ -45,23 +45,39 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
     : 0
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-semibold text-gray-800 mb-4">
+    <div style={{
+      background: 'var(--v2-bg-secondary)',
+      borderRadius: 'var(--v2-radius-lg)',
+      boxShadow: 'var(--v2-shadow-md)',
+      padding: 'var(--v2-spacing-lg)'
+    }}>
+      <h2 style={{
+        fontSize: '1.25rem',
+        fontWeight: 600,
+        color: 'var(--v2-text-primary)',
+        marginBottom: 'var(--v2-spacing-md)'
+      }}>
         Parametres de simplification
       </h2>
 
       {/* Avertissement pour GLTF/GLB */}
       {isGltfFormat && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-          <div className="flex items-start space-x-3">
-            <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+        <div style={{
+          background: 'var(--v2-warning-bg)',
+          border: '1px solid var(--v2-warning-border)',
+          borderRadius: 'var(--v2-radius-lg)',
+          padding: 'var(--v2-spacing-md)',
+          marginBottom: 'var(--v2-spacing-md)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--v2-spacing-sm)' }}>
+            <svg style={{ width: '20px', height: '20px', color: 'var(--v2-warning-text)', marginTop: '2px', flexShrink: 0 }} fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
-            <div className="flex-1">
-              <h3 className="text-sm font-medium text-yellow-800 mb-1">
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-warning-text)', marginBottom: '4px' }}>
                 Format non supporte pour la simplification
               </h3>
-              <p className="text-sm text-yellow-700">
+              <p style={{ fontSize: '0.875rem', color: 'var(--v2-warning-text)' }}>
                 Les fichiers GLTF/GLB peuvent etre visualises mais ne peuvent pas etre simplifies.
                 Open3D supporte uniquement les formats OBJ, STL, PLY et OFF pour la simplification.
               </p>
@@ -72,16 +88,22 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
 
       {/* Avertissement pour mesh déjà simplifié */}
       {isSimplifiedMesh && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <div className="flex items-start space-x-3">
-            <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+        <div style={{
+          background: 'var(--v2-info-bg)',
+          border: '1px solid var(--v2-info-border)',
+          borderRadius: 'var(--v2-radius-lg)',
+          padding: 'var(--v2-spacing-md)',
+          marginBottom: 'var(--v2-spacing-md)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--v2-spacing-sm)' }}>
+            <svg style={{ width: '20px', height: '20px', color: 'var(--v2-info-text)', marginTop: '2px', flexShrink: 0 }} fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
-            <div className="flex-1">
-              <h3 className="text-sm font-medium text-blue-800 mb-1">
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-info-text)', marginBottom: '4px' }}>
                 Modèle simplifié affiché
               </h3>
-              <p className="text-sm text-blue-700">
+              <p style={{ fontSize: '0.875rem', color: 'var(--v2-info-text)' }}>
                 Vous visualisez actuellement le modèle simplifié. Pour effectuer une nouvelle simplification, retournez d'abord au modèle original en cliquant sur le bouton ci-dessous.
               </p>
             </div>
@@ -89,11 +111,17 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-lg)' }}>
         {/* Slider de simplification */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            Simplification: <span className="text-blue-600 font-semibold">{levelLabels[simplificationLevel]}</span>
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            color: 'var(--v2-text-secondary)',
+            marginBottom: 'var(--v2-spacing-sm)'
+          }}>
+            Simplification: <span style={{ color: 'var(--v2-accent-primary)', fontWeight: 600 }}>{levelLabels[simplificationLevel]}</span>
           </label>
           <input
             type="range"
@@ -103,14 +131,35 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
             value={simplificationLevel}
             onChange={(e) => setSimplificationLevel(parseInt(e.target.value))}
             disabled={isProcessing || isGltfFormat || isSimplifiedMesh}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
+            style={{
+              width: '100%',
+              height: '8px',
+              background: 'var(--v2-bg-tertiary)',
+              borderRadius: 'var(--v2-radius-lg)',
+              appearance: 'none',
+              cursor: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 'not-allowed' : 'pointer',
+              opacity: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 0.5 : 1,
+              accentColor: 'var(--v2-accent-primary)'
+            }}
           />
-          <div className="flex justify-between text-xs text-gray-600 mt-2 font-medium">
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: '0.75rem',
+            color: 'var(--v2-text-tertiary)',
+            marginTop: 'var(--v2-spacing-xs)',
+            fontWeight: 500
+          }}>
             <span>Basse</span>
             <span>Moyenne</span>
             <span>Forte</span>
           </div>
-          <div className="text-xs text-gray-500 mt-2 text-center">
+          <div style={{
+            fontSize: '0.75rem',
+            color: 'var(--v2-text-muted)',
+            marginTop: 'var(--v2-spacing-xs)',
+            textAlign: 'center'
+          }}>
             {simplificationLevel === 0 && "Garde 70% des triangles (qualité élevée)"}
             {simplificationLevel === 1 && "Garde 50% des triangles (équilibre)"}
             {simplificationLevel === 2 && "Garde 20% des triangles (fichier léger)"}
@@ -119,22 +168,30 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
 
         {/* Estimation - Affichée uniquement sur le mesh original */}
         {currentTriangles > 0 && !isSimplifiedMesh && (
-          <div className="bg-blue-50 rounded-lg p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Triangles actuels:</span>
-              <span className="font-semibold text-gray-900">
+          <div style={{
+            background: 'var(--v2-info-bg)',
+            borderRadius: 'var(--v2-radius-lg)',
+            padding: 'var(--v2-spacing-md)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--v2-spacing-xs)',
+            fontSize: '0.875rem'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--v2-text-tertiary)' }}>Triangles actuels:</span>
+              <span style={{ fontWeight: 600, color: 'var(--v2-text-primary)' }}>
                 {currentTriangles.toLocaleString()}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Triangles après simplification:</span>
-              <span className="font-semibold text-blue-600">
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--v2-text-tertiary)' }}>Triangles après simplification:</span>
+              <span style={{ fontWeight: 600, color: 'var(--v2-info-text)' }}>
                 ~{estimatedTriangles.toLocaleString()}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Triangles supprimés:</span>
-              <span className="font-semibold text-red-600">
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--v2-text-tertiary)' }}>Triangles supprimés:</span>
+              <span style={{ fontWeight: 600, color: 'var(--v2-error-text)' }}>
                 ~{(currentTriangles - estimatedTriangles).toLocaleString()}
               </span>
             </div>
@@ -142,18 +199,24 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
         )}
 
         {/* Options avancees */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium text-gray-700">Options avancees</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-sm)' }}>
+          <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-text-secondary)' }}>Options avancees</h3>
 
-          <label className="flex items-center space-x-2 cursor-pointer">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--v2-spacing-xs)', cursor: 'pointer' }}>
             <input
               type="checkbox"
               checked={preserveBoundary}
               onChange={(e) => setPreserveBoundary(e.target.checked)}
               disabled={isProcessing || isGltfFormat || isSimplifiedMesh}
-              className="w-4 h-4 text-blue-500 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+              style={{
+                width: '16px',
+                height: '16px',
+                accentColor: 'var(--v2-accent-primary)',
+                cursor: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 'not-allowed' : 'pointer',
+                opacity: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 0.5 : 1
+              }}
             />
-            <span className="text-sm text-gray-700">
+            <span style={{ fontSize: '0.875rem', color: 'var(--v2-text-secondary)' }}>
               Preserver les bords du maillage
             </span>
           </label>
@@ -163,19 +226,30 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
         <button
           type="submit"
           disabled={isProcessing || !meshInfo || isGltfFormat || isSimplifiedMesh}
-          className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+          className="v2-btn v2-btn-primary"
+          style={{
+            width: '100%',
+            padding: 'var(--v2-spacing-sm) var(--v2-spacing-md)',
+            borderRadius: 'var(--v2-radius-lg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 'var(--v2-spacing-xs)',
+            opacity: (isProcessing || !meshInfo || isGltfFormat || isSimplifiedMesh) ? 0.5 : 1,
+            cursor: (isProcessing || !meshInfo || isGltfFormat || isSimplifiedMesh) ? 'not-allowed' : 'pointer'
+          }}
         >
           {isProcessing ? (
             <>
-              <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              <svg style={{ animation: 'spin 1s linear infinite', width: '20px', height: '20px' }} fill="none" viewBox="0 0 24 24">
+                <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
               <span>Simplification en cours...</span>
             </>
           ) : (
             <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
               <span>Lancer la simplification</span>
@@ -184,15 +258,27 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
         </button>
 
         {/* Boutons de navigation entre modèles */}
-        <div className="space-y-2">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-xs)' }}>
           {/* Bouton pour charger le résultat simplifié */}
           {currentTask && currentTask.status === 'completed' && currentTask.result && !meshInfo?.isSimplified && (
             <button
               type="button"
               onClick={onLoadSimplified}
-              className="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
+              className="v2-btn"
+              style={{
+                width: '100%',
+                background: 'var(--v2-success)',
+                color: '#ffffff',
+                padding: 'var(--v2-spacing-sm) var(--v2-spacing-md)',
+                borderRadius: 'var(--v2-radius-lg)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--v2-spacing-xs)',
+                fontWeight: 500
+              }}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
@@ -205,9 +291,19 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
             <button
               type="button"
               onClick={onLoadOriginal}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
+              className="v2-btn v2-btn-primary"
+              style={{
+                width: '100%',
+                padding: 'var(--v2-spacing-sm) var(--v2-spacing-md)',
+                borderRadius: 'var(--v2-radius-lg)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--v2-spacing-xs)',
+                fontWeight: 500
+              }}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               <span>Charger le modèle original</span>
@@ -215,6 +311,14 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
           )}
         </div>
       </form>
+
+      {/* Ajout du keyframes pour l'animation spin */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }

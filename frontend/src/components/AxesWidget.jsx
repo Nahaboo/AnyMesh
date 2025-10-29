@@ -1,11 +1,46 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef } from 'react'
+import { useRef, useState, useEffect } from 'react'
 
 /**
  * AxesDisplay - 3D axes that follow the main camera rotation
  */
 function AxesDisplay({ mainCameraQuaternion, size, thickness }) {
   const groupRef = useRef()
+
+  // Get CSS variable colors from the document (adapts to theme)
+  const [axisColors, setAxisColors] = useState({
+    x: '#ff0000',
+    y: '#00ff00',
+    z: '#0000ff'
+  })
+
+  // Update colors when theme changes
+  useEffect(() => {
+    const updateColors = () => {
+      const computedStyle = getComputedStyle(document.documentElement)
+      setAxisColors({
+        x: computedStyle.getPropertyValue('--v2-axis-x').trim() || '#ff0000',
+        y: computedStyle.getPropertyValue('--v2-axis-y').trim() || '#00ff00',
+        z: computedStyle.getPropertyValue('--v2-axis-z').trim() || '#0000ff'
+      })
+    }
+
+    // Initial load
+    updateColors()
+
+    // Listen for theme changes via data-theme attribute
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+          updateColors()
+        }
+      })
+    })
+
+    observer.observe(document.documentElement, { attributes: true })
+
+    return () => observer.disconnect()
+  }, [])
 
   useFrame(() => {
     if (groupRef.current && mainCameraQuaternion) {
@@ -21,19 +56,19 @@ function AxesDisplay({ mainCameraQuaternion, size, thickness }) {
       {/* X axis - Red */}
       <mesh position={[halfSize, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[thickness, thickness, size, 8]} />
-        <meshStandardMaterial color="#ff0000" />
+        <meshStandardMaterial color={axisColors.x} />
       </mesh>
 
       {/* Y axis - Green */}
       <mesh position={[0, halfSize, 0]}>
         <cylinderGeometry args={[thickness, thickness, size, 8]} />
-        <meshStandardMaterial color="#00ff00" />
+        <meshStandardMaterial color={axisColors.y} />
       </mesh>
 
       {/* Z axis - Blue */}
       <mesh position={[0, 0, halfSize]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[thickness, thickness, size, 8]} />
-        <meshStandardMaterial color="#0000ff" />
+        <meshStandardMaterial color={axisColors.z} />
       </mesh>
     </group>
   )

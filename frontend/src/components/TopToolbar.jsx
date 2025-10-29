@@ -1,7 +1,9 @@
+import ThemeToggle from './ThemeToggle'
+
 /**
  * Top Toolbar - Render mode selection and navigation
  * Includes: Solid, Wireframe, Normal Map, Flat modes + Custom Shaders
- * Plus Home button, app title, and debug toggle
+ * Plus Home button, theme toggle, app title, and debug toggle
  */
 function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, onDebugModeChange, isShaderMode }) {
   const modes = [
@@ -56,8 +58,11 @@ function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, on
         ))}
       </div>
 
-      {/* Right: Debug Button + Home Button */}
+      {/* Right: Theme Toggle + Debug Button + Home Button */}
       <div style={{ display: 'flex', gap: 'var(--v2-spacing-sm)', alignItems: 'center' }}>
+        {/* Theme toggle */}
+        <ThemeToggle />
+
         {/* Debug button - only visible when a shader is active */}
         {isShaderMode && (
           <button

@@ -100,34 +100,44 @@ function FileUpload({ onUploadSuccess }) {
   }
 
   return (
-    <div className="w-full">
+    <div style={{ width: '100%' }}>
       {/* Zone de drop */}
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`
-          relative border-2 border-dashed rounded-lg p-12 text-center transition-all
-          ${isDragging
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400 bg-white'
-          }
-          ${isUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        `}
+        style={{
+          position: 'relative',
+          border: `2px dashed ${isDragging ? 'var(--v2-accent-primary)' : 'var(--v2-border-primary)'}`,
+          background: isDragging ? 'var(--v2-info-bg)' : 'var(--v2-bg-secondary)',
+          borderRadius: 'var(--v2-radius-lg)',
+          padding: 'var(--v2-spacing-xl)',
+          textAlign: 'center',
+          transition: 'all 200ms ease-in-out',
+          opacity: isUploading ? 0.5 : 1,
+          cursor: isUploading ? 'not-allowed' : 'pointer'
+        }}
       >
         <input
           type="file"
           onChange={handleFileInput}
           accept={SUPPORTED_FORMATS.join(',')}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          style={{
+            position: 'absolute',
+            inset: '0',
+            width: '100%',
+            height: '100%',
+            opacity: 0,
+            cursor: isUploading ? 'not-allowed' : 'pointer'
+          }}
           disabled={isUploading}
         />
 
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-md)' }}>
           {/* Icone */}
-          <div className="flex justify-center">
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
             <svg
-              className="w-16 h-16 text-gray-400"
+              style={{ width: '64px', height: '64px', color: 'var(--v2-text-tertiary)' }}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -143,30 +153,59 @@ function FileUpload({ onUploadSuccess }) {
 
           {/* Texte */}
           <div>
-            <p className="text-lg font-medium text-gray-700">
+            <p style={{
+              fontSize: '18px',
+              fontWeight: '500',
+              color: 'var(--v2-text-primary)',
+              margin: 0
+            }}>
               {isUploading ? 'Upload en cours...' : 'Glissez un fichier 3D ici'}
             </p>
-            <p className="text-sm text-gray-500 mt-1">
+            <p style={{
+              fontSize: '14px',
+              color: 'var(--v2-text-secondary)',
+              marginTop: 'var(--v2-spacing-xs)',
+              marginBottom: 0
+            }}>
               ou cliquez pour parcourir
             </p>
           </div>
 
           {/* Barre de progression */}
           {isUploading && (
-            <div className="max-w-xs mx-auto">
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                />
+            <div style={{ maxWidth: '300px', margin: '0 auto' }}>
+              <div style={{
+                width: '100%',
+                background: 'var(--v2-bg-tertiary)',
+                borderRadius: 'var(--v2-radius-full)',
+                height: '8px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  background: 'var(--v2-accent-primary)',
+                  height: '8px',
+                  borderRadius: 'var(--v2-radius-full)',
+                  width: `${uploadProgress}%`,
+                  transition: 'width 300ms ease-in-out'
+                }} />
               </div>
-              <p className="text-xs text-gray-500 mt-2">{uploadProgress}%</p>
+              <p style={{
+                fontSize: '12px',
+                color: 'var(--v2-text-muted)',
+                marginTop: 'var(--v2-spacing-xs)',
+                marginBottom: 0
+              }}>
+                {uploadProgress}%
+              </p>
             </div>
           )}
 
           {/* Formats supportes */}
           {!isUploading && (
-            <div className="text-xs text-gray-400">
+            <div style={{
+              fontSize: '12px',
+              color: 'var(--v2-text-muted)'
+            }}>
               Formats supportes: {SUPPORTED_FORMATS.join(', ')}
             </div>
           )}
@@ -175,8 +214,20 @@ function FileUpload({ onUploadSuccess }) {
 
       {/* Message d'erreur */}
       {error && (
-        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-600">{error}</p>
+        <div style={{
+          marginTop: 'var(--v2-spacing-md)',
+          padding: 'var(--v2-spacing-md)',
+          background: 'var(--v2-error-bg)',
+          border: '1px solid var(--v2-error-border)',
+          borderRadius: 'var(--v2-radius-lg)'
+        }}>
+          <p style={{
+            fontSize: '14px',
+            color: 'var(--v2-error-text)',
+            margin: 0
+          }}>
+            {error}
+          </p>
         </div>
       )}
     </div>
