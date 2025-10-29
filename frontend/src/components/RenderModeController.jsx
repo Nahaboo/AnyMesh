@@ -6,6 +6,7 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader'
 import { Center } from '@react-three/drei'
 import * as THREE from 'three'
+import { TextureLoader } from 'three'
 import ShaderMaterialController from './ShaderMaterialController'
 import { getMaterialShader } from '../shaders/materials'
 
@@ -37,6 +38,10 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
 
   // Light blue color for default rendering
   const DEFAULT_COLOR = 0xb3d9ff // Light blue
+
+  // Load matcap texture for solid and flat modes from frontend public folder
+  //const matcapTexture = useLoader(TextureLoader, '/matcap/161B1F.png')
+  const matcapTexture = useLoader(TextureLoader, '/matcap/A9A2A0.png')
 
   // Load model based on format
   let loadedModel
@@ -109,15 +114,13 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
 
         switch (renderMode) {
           case 'solid':
-            child.material = new THREE.MeshStandardMaterial({
-              color: DEFAULT_COLOR,
+            // Use matcap for performance and uniform lighting
+            child.material = new THREE.MeshMatcapMaterial({
+              matcap: matcapTexture,
               side: THREE.DoubleSide,
-              wireframe: false,
-              flatShading: false,
-              metalness: 0.1,
-              roughness: 0.8
+              flatShading: false
             })
-            console.log('[RenderModeController] Applied SOLID mode')
+            console.log('[RenderModeController] Applied SOLID mode with matcap')
             break
 
           case 'wireframe':
@@ -141,16 +144,30 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
             break
 
           case 'flat':
-            // Flat shading mode - shows faceted appearance
-            child.material = new THREE.MeshStandardMaterial({
-              color: DEFAULT_COLOR,
-              side: THREE.DoubleSide,
-              wireframe: false,
-              flatShading: true, // This creates the faceted look
-              metalness: 0.1,
-              roughness: 0.8
+            // Flat shading mode with matcap - shows faceted appearance
+            // MeshMatcapMaterial doesn't support flatShading, so we need to modify geometry
+            if (child.geometry && child.geometry.attributes.position) {
+              // Clone geometry and compute flat normals (one normal per face)
+              const flatGeometry = child.geometry.clone()
+              flatGeometry.deleteAttribute('normal')
+
+              // computeVertexNormals with non-indexed geometry creates flat shading
+              // First, convert to non-indexed if needed
+              if (flatGeometry.index !== null) {
+                const nonIndexedGeometry = flatGeometry.toNonIndexed()
+                child.geometry = nonIndexedGeometry
+                child.geometry.computeVertexNormals()
+              } else {
+                child.geometry = flatGeometry
+                child.geometry.computeVertexNormals()
+              }
+            }
+
+            child.material = new THREE.MeshMatcapMaterial({
+              matcap: matcapTexture,
+              side: THREE.DoubleSide
             })
-            console.log('[RenderModeController] Applied FLAT mode')
+            console.log('[RenderModeController] Applied FLAT mode with matcap (faceted normals)')
             break
 
           case 'smooth':

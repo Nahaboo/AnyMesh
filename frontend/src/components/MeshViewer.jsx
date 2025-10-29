@@ -69,11 +69,9 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
         {/* Camera auto-adjustment */}
         {meshInfo.bounding_box && <CameraController boundingBox={meshInfo.bounding_box} />}
 
-        {/* Lighting */}
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[10, 10, 5]} intensity={1} />
-        <pointLight position={[-10, -10, -5]} intensity={0.5} />
-        <pointLight position={[0, 10, 0]} intensity={0.3} />
+        {/* Lighting - Uniform ambient light for better performance */}
+        {/* Matcap materials (solid/flat) don't need directional lights */}
+        <ambientLight intensity={1.0} />
 
         {/* 3D Model with render mode */}
         <Suspense fallback={
