@@ -1,5 +1,9 @@
-import vertexShader from './vertex.glsl'
+import vertexShaderRaw from './vertex.glsl'
 import fragmentShader from './fragment.glsl'
+import simplexNoise3D from '../common/noise.glsl'
+
+// Inject noise function at the beginning of vertex shader
+const vertexShader = simplexNoise3D + '\n' + vertexShaderRaw
 
 export const PointCloudShader = {
   id: 'point-cloud',
@@ -16,22 +20,40 @@ export const PointCloudShader = {
       hidden: true
     },
 
-    // Point appearance
-    uPointSize: {
-      value: 3.0,
+    // Static layer
+    uSizeStatic: {
+      value: 2.1,
       type: 'float',
-      min: 1.0,
-      max: 20.0,
-      step: 0.5,
-      label: 'Point Size',
-      description: 'Size of each point in pixels'
+      min: 0.0,
+      max: 15.0,
+      step: 0.1,
+      label: 'Static Size',
+      description: 'Size of static points'
     },
 
-    uColor: {
+    uColorStatic: {
       value: [0.3, 0.6, 0.9],
       type: 'color',
-      label: 'Point Color',
-      description: 'Base color of points'
+      label: 'Static Color',
+      description: 'Color of static layer'
+    },
+
+    // Dynamic layer
+    uSizeDynamic: {
+      value: 5.0,
+      type: 'float',
+      min: 1.0,
+      max: 15.0,
+      step: 0.1,
+      label: 'Dynamic Size',
+      description: 'Size of animated points'
+    },
+
+    uColorDynamic: {
+      value: [0.3, 0.6, 0.9],
+      type: 'color',
+      label: 'Dynamic Color',
+      description: 'Color of dynamic layer'
     },
 
     // Animation parameters
@@ -40,29 +62,60 @@ export const PointCloudShader = {
       type: 'float',
       min: 0.0,
       max: 0.1,
-      step: 0.001,
-      label: 'Amplitude',
-      description: 'Movement intensity'
-    },
-
-    uSpeed: {
-      value: 0.5,
-      type: 'float',
-      min: 0.0,
-      max: 2.0,
-      step: 0.1,
-      label: 'Speed',
-      description: 'Animation speed'
+      step: 0.0001,
+      label: 'Wave Amplitude',
+      description: 'Height of waves'
     },
 
     uFrequency: {
-      value: 2.0,
+      value: 21.0,
+      type: 'float',
+      min: 1.0,
+      max: 40.0,
+      step: 0.5,
+      label: 'Wave Frequency',
+      description: 'Frequency of waves'
+    },
+
+    uSpeed: {
+      value: 1.30,
+      type: 'float',
+      min: 0.0,
+      max: 4.0,
+      step: 0.05,
+      label: 'Animation Speed',
+      description: 'Speed of animation'
+    },
+
+    uMotionMode: {
+      value: 3,
+      type: 'int',
+      min: 0,
+      max: 4,
+      step: 1,
+      label: 'Motion Mode',
+      description: '0=Waves, 1=Pulse, 2=Turbulence, 3=Flow, 4=Breathe'
+    },
+
+    uDepthOffset: {
+      value: 0.0025,
+      type: 'float',
+      min: 0.0,
+      max: 0.02,
+      step: 0.0001,
+      label: 'Depth Offset',
+      description: 'Offset along normals for depth effect'
+    },
+
+    // Performance options
+    uPointDensity: {
+      value: 1.0,
       type: 'float',
       min: 0.1,
-      max: 10.0,
-      step: 0.1,
-      label: 'Frequency',
-      description: 'Noise frequency'
+      max: 1.0,
+      step: 0.05,
+      label: 'Point Density',
+      description: '1.0=100%, Auto: 50% for >150k vertices (better performance)'
     },
 
     // Visual options
@@ -76,6 +129,18 @@ export const PointCloudShader = {
     // Auto-calculated (hidden)
     uMeshScale: {
       value: 1.0,
+      type: 'float',
+      hidden: true
+    },
+
+    uTotalVertices: {
+      value: 1.0,
+      type: 'float',
+      hidden: true
+    },
+
+    uIsStatic: {
+      value: 0.0,
       type: 'float',
       hidden: true
     }

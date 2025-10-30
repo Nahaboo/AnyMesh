@@ -1,5 +1,9 @@
-import vertexShader from './vertex.glsl'
+import vertexShaderRaw from './vertex.glsl'
 import fragmentShader from './fragment.glsl'
+import simplexNoise3D from '../common/noise.glsl'
+
+// Inject noise function at the beginning of vertex shader
+const vertexShader = simplexNoise3D + '\n' + vertexShaderRaw
 
 export const OrganicSolidShader = {
   id: 'organic-solid',

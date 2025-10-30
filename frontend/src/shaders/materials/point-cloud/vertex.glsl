@@ -1,133 +1,132 @@
-// Simplex Noise 3D function
-vec3 mod289(vec3 x) {
-  return x - floor(x * (1.0 / 289.0)) * 289.0;
-}
+// Simplex Noise 3D function is injected from common/simplexNoise3D.glsl
 
-vec4 mod289(vec4 x) {
-  return x - floor(x * (1.0 / 289.0)) * 289.0;
-}
-
-vec4 permute(vec4 x) {
-  return mod289(((x*34.0)+1.0)*x);
-}
-
-vec4 taylorInvSqrt(vec4 r) {
-  return 1.79284291400159 - 0.85373472095314 * r;
-}
-
-float snoise(vec3 v) {
-  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
-  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-
-  vec3 i  = floor(v + dot(v, C.yyy));
-  vec3 x0 = v - i + dot(i, C.xxx);
-
-  vec3 g = step(x0.yzx, x0.xyz);
-  vec3 l = 1.0 - g;
-  vec3 i1 = min(g.xyz, l.zxy);
-  vec3 i2 = max(g.xyz, l.zxy);
-
-  vec3 x1 = x0 - i1 + C.xxx;
-  vec3 x2 = x0 - i2 + C.yyy;
-  vec3 x3 = x0 - D.yyy;
-
-  i = mod289(i);
-  vec4 p = permute(permute(permute(
-    i.z + vec4(0.0, i1.z, i2.z, 1.0))
-    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
-    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
-
-  float n_ = 0.142857142857;
-  vec3 ns = n_ * D.wyz - D.xzx;
-
-  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-
-  vec4 x_ = floor(j * ns.z);
-  vec4 y_ = floor(j - 7.0 * x_);
-
-  vec4 x = x_ * ns.x + ns.yyyy;
-  vec4 y = y_ * ns.x + ns.yyyy;
-  vec4 h = 1.0 - abs(x) - abs(y);
-
-  vec4 b0 = vec4(x.xy, y.xy);
-  vec4 b1 = vec4(x.zw, y.zw);
-
-  vec4 s0 = floor(b0) * 2.0 + 1.0;
-  vec4 s1 = floor(b1) * 2.0 + 1.0;
-  vec4 sh = -step(h, vec4(0.0));
-
-  vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
-  vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
-
-  vec3 p0 = vec3(a0.xy, h.x);
-  vec3 p1 = vec3(a0.zw, h.y);
-  vec3 p2 = vec3(a1.xy, h.z);
-  vec3 p3 = vec3(a1.zw, h.w);
-
-  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
-  p0 *= norm.x;
-  p1 *= norm.y;
-  p2 *= norm.z;
-  p3 *= norm.w;
-
-  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
-  m = m * m;
-  return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
-}
-
-// Uniforms
 uniform float uTime;
+uniform float uSizeStatic;
+uniform float uSizeDynamic;
+uniform vec3 uColorStatic;
+uniform vec3 uColorDynamic;
 uniform float uAmplitude;
-uniform float uSpeed;
 uniform float uFrequency;
-uniform float uPointSize;
+uniform float uSpeed;
+uniform float uDepthOffset;
 uniform float uMeshScale;
+uniform float uIsStatic;
+uniform int uMotionMode; // 0=Waves, 1=Pulse, 2=Turbulence, 3=Flow, 4=Breathe
 
-// Varyings
-varying float vDepth;
 varying vec3 vColor;
+varying float vDepth;
+
+// Helper function: calculate displacement based on motion mode
+float calculateDisplacement(vec3 pos, vec3 normal) {
+  float t = uTime * uSpeed;
+  vec3 scaledPos = pos / uMeshScale;
+  float displacement = 0.0;
+
+  // Scale amplitude relative to mesh size for consistent visual effect
+  float scaledAmplitude = uAmplitude * uMeshScale;
+
+  if (uMotionMode == 0) {
+    // MODE 0: WAVES - Multi-directional sine waves
+    float wave1 = sin(scaledPos.y * uFrequency + t) * scaledAmplitude;
+    float wave2 = sin(scaledPos.x * uFrequency * 0.7 + t * 0.8) * scaledAmplitude * 0.6;
+    float wave3 = cos(scaledPos.z * uFrequency * 0.5 + t * 1.2) * scaledAmplitude * 0.4;
+
+    // Add some noise variation
+    vec3 noiseCoord = scaledPos * uFrequency * 0.3 + vec3(t * 0.2, 0.0, 0.0);
+    float noiseVal = snoise(noiseCoord) * 0.3 + 0.7; // [0.4, 1.0]
+
+    displacement = (wave1 + wave2 + wave3) * noiseVal;
+
+  } else if (uMotionMode == 1) {
+    // MODE 1: PULSE - Radial pulsation from center
+    float distFromCenter = length(scaledPos);
+    float pulse = sin(distFromCenter * uFrequency - t * 2.0) * scaledAmplitude;
+
+    // Add breathing effect
+    float breathe = sin(t * 0.5) * 0.3 + 0.7; // [0.4, 1.0]
+
+    displacement = pulse * breathe;
+
+  } else if (uMotionMode == 2) {
+    // MODE 2: TURBULENCE - Chaotic multi-octave noise
+    vec3 noiseCoord1 = scaledPos * uFrequency * 0.5 + vec3(t * 0.3, t * 0.2, 0.0);
+    vec3 noiseCoord2 = scaledPos * uFrequency * 1.5 + vec3(0.0, t * 0.5, t * 0.4);
+    vec3 noiseCoord3 = scaledPos * uFrequency * 3.0 + vec3(t * 0.7, 0.0, t * 0.6);
+
+    float noise1 = snoise(noiseCoord1) * 0.5;
+    float noise2 = snoise(noiseCoord2) * 0.3;
+    float noise3 = snoise(noiseCoord3) * 0.2;
+
+    displacement = (noise1 + noise2 + noise3) * scaledAmplitude;
+
+  } else if (uMotionMode == 3) {
+    // MODE 3: FLOW - Flowing fluid motion
+    vec3 flowCoord = scaledPos * uFrequency * 0.4;
+
+    // Create flowing pattern with offset noise samples
+    float flow1 = snoise(flowCoord + vec3(t * 0.5, 0.0, 0.0));
+    float flow2 = snoise(flowCoord + vec3(0.0, t * 0.3, t * 0.4));
+
+    // Swirl effect
+    float angle = atan(scaledPos.z, scaledPos.x);
+    float swirl = sin(angle * 3.0 + t) * 0.3;
+
+    displacement = (flow1 * 0.6 + flow2 * 0.4 + swirl) * scaledAmplitude;
+
+  } else if (uMotionMode == 4) {
+    // MODE 4: BREATHE - Organic breathing with local variations
+    // Global breathing
+    float globalBreathe = sin(t * 0.7) * 0.5 + 0.5; // [0, 1]
+
+    // Local noise variations
+    vec3 noiseCoord = scaledPos * uFrequency * 0.6 + vec3(t * 0.15, 0.0, 0.0);
+    float localNoise = snoise(noiseCoord) * 0.5 + 0.5; // [0, 1]
+
+    // Distance-based modulation
+    float distFromCenter = length(scaledPos);
+    float distModulation = sin(distFromCenter * uFrequency * 0.5 - t * 0.5) * 0.5 + 0.5;
+
+    displacement = scaledAmplitude * globalBreathe * localNoise * distModulation;
+  }
+
+  return displacement;
+}
 
 void main() {
-  // Base position
   vec3 pos = position;
+  vec3 norm = normalize(normal);
 
-  // Calculate noise input (scaled by mesh size and frequency)
-  vec3 noiseInput = pos * uFrequency / uMeshScale;
+  bool isStatic = uIsStatic > 0.5;
 
-  // Multi-octave organic animation (3 octaves like organic shader)
-  // Main wave
-  float noise1 = snoise(noiseInput + vec3(uTime * uSpeed, 0.0, 0.0)) * 0.5;
+  // Scale depth offset relative to mesh size for consistent visual effect
+  float scaledDepthOffset = uDepthOffset * uMeshScale;
 
-  // Secondary wave (offset phase)
-  float noise2 = snoise(noiseInput * 2.0 + vec3(0.0, uTime * uSpeed * 1.3, 0.0)) * 0.3;
+  if (isStatic) {
+    // === STATIC LAYER ===
+    gl_PointSize = uSizeStatic;
+    vColor = uColorStatic;
 
-  // Fine detail
-  float noise3 = snoise(noiseInput * 4.0 + vec3(0.0, 0.0, uTime * uSpeed * 0.7)) * 0.2;
+  } else {
+    // === DYNAMIC LAYER ===
 
-  // Combine noise octaves
-  float combinedNoise = noise1 + noise2 + noise3;
+    // Calculate displacement based on selected motion mode
+    float displacement = calculateDisplacement(pos, norm);
 
-  // Apply displacement along normal
-  float displacement = uAmplitude * combinedNoise;
+    // Apply displacement along normal + scaled depth offset
+    pos += norm * (displacement + scaledDepthOffset);
 
-  // Apply clamping to prevent mesh collapse (tanh smoothing)
-  displacement *= tanh(abs(displacement) * 10.0);
+    // Dynamic point appearance with color variation based on displacement
+    gl_PointSize = uSizeDynamic;
 
-  // Displace vertex along its normal
-  pos += normal * displacement;
+    // Color variation: interpolate based on displacement intensity
+    float intensity = abs(displacement) / (uAmplitude * uMeshScale);
+    intensity = clamp(intensity, 0.0, 1.0);
+    vColor = mix(uColorDynamic * 0.7, uColorDynamic * 1.3, intensity);
+  }
 
-  // Transform to view space
+  // Calculate depth for fade effect
   vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+  vDepth = -mvPosition.z;
 
-  // Calculate depth for fading (0 = near, 1 = far)
-  vDepth = -mvPosition.z / 100.0; // Normalize to reasonable range
-
-  // Set point size (constant for now, could be animated)
-  gl_PointSize = uPointSize;
-
-  // Pass color (will be modified in fragment shader)
-  vColor = vec3(1.0);
-
-  // Final position
   gl_Position = projectionMatrix * mvPosition;
 }

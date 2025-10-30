@@ -53,6 +53,9 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
   // Check if this is an organic shader that needs mouse interaction
   const isOrganicShader = shaderId?.startsWith('organic-')
 
+  // Check if this shader needs mesh scale calculation
+  const needsMeshScale = isOrganicShader || shaderId === 'point-cloud'
+
   // Perform raycasting for mouse interaction (throttled to 50ms)
   const mouseWorldPosition = useMouseRaycast(processedModelRef.current, isOrganicShader, 50)
 
@@ -91,9 +94,9 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
     // Verbose logging for debug (comment out in production)
     // console.log('[ShaderMaterialController] Uniforms:', uniforms)
 
-    // Calculate bounding box to determine mesh scale for organic shaders
+    // Calculate bounding box to determine mesh scale for shaders that need it
     let meshScale = 1.0
-    if (isOrganicShader) {
+    if (needsMeshScale) {
       const box = new THREE.Box3().setFromObject(cloned)
       const size = new THREE.Vector3()
       box.getSize(size)
@@ -101,7 +104,7 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
       meshScale = Math.sqrt(size.x * size.x + size.y * size.y + size.z * size.z)
       console.log(`[ShaderMaterialController] Mesh scale: ${meshScale.toFixed(2)}`)
 
-      // Add mesh scale uniform for organic shaders
+      // Add mesh scale uniform
       uniforms.uMeshScale = { value: meshScale }
     }
 
@@ -136,19 +139,108 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
         if (shaderId === 'point-cloud') {
           materialConfig.transparent = true
           materialConfig.depthWrite = true
-          materialConfig.vertexColors = false
 
-          // Convert Mesh to Points for point cloud rendering
-          const pointsMaterial = new THREE.ShaderMaterial(materialConfig)
-          const points = new THREE.Points(child.geometry, pointsMaterial)
+          console.log(`[ShaderMaterialController] Creating point cloud with two separate layers`)
+
+          // Get original vertex count
+          const originalCount = child.geometry.attributes.position.count
+
+          // Auto LOD: progressive density reduction based on vertex count
+          let autoDensity = 1.0
+          if (originalCount < 50000) {
+            autoDensity = 1.0 // Small models: 100%
+          } else if (originalCount < 100000) {
+            autoDensity = 0.8 // Medium models: 80%
+          } else if (originalCount < 150000) {
+            autoDensity = 0.6 // Large models: 60%
+          } else if (originalCount < 300000) {
+            autoDensity = 0.4 // Very large models: 40%
+          } else if (originalCount < 500000) {
+            autoDensity = 0.25 // Huge models: 25%
+          } else if (originalCount < 1000000) {
+            autoDensity = 0.15 // Massive models: 15%
+          } else {
+            autoDensity = 0.1 // Ultra massive models: 10%
+          }
+
+          if (autoDensity < 1.0) {
+            console.log(`[ShaderMaterialController] Auto LOD: ${originalCount} vertices → ${(autoDensity * 100).toFixed(0)}% density`)
+          }
+
+          // Get point density from params (default to auto-calculated density)
+          const pointDensity = params.uPointDensity !== undefined ? params.uPointDensity : autoDensity
+
+          // Update the uniform to reflect the actual density being used (for debug panel sync)
+          if (uniforms.uPointDensity) {
+            uniforms.uPointDensity.value = pointDensity
+          }
+
+          // Subsample geometry if density < 1.0
+          let geometryToUse = child.geometry
+          if (pointDensity < 1.0) {
+            const originalGeometry = child.geometry
+            const originalCount = originalGeometry.attributes.position.count
+            const targetCount = Math.max(1, Math.floor(originalCount * pointDensity))
+
+            // Create subsampled geometry
+            const subsampledGeometry = new THREE.BufferGeometry()
+            const step = Math.max(1, Math.floor(originalCount / targetCount))
+
+            const positions = []
+            const normals = []
+
+            for (let i = 0; i < originalCount; i += step) {
+              const pos = originalGeometry.attributes.position
+              positions.push(pos.getX(i), pos.getY(i), pos.getZ(i))
+
+              if (originalGeometry.attributes.normal) {
+                const norm = originalGeometry.attributes.normal
+                normals.push(norm.getX(i), norm.getY(i), norm.getZ(i))
+              }
+            }
+
+            subsampledGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+            if (normals.length > 0) {
+              subsampledGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+            }
+
+            geometryToUse = subsampledGeometry
+            console.log(`[ShaderMaterialController] Subsampled from ${originalCount} to ${positions.length / 3} vertices (${(pointDensity * 100).toFixed(0)}%)`)
+          }
+
+          // Create static layer material
+          const staticMaterialConfig = { ...materialConfig }
+          staticMaterialConfig.uniforms = {
+            ...staticMaterialConfig.uniforms,
+            uIsStatic: { value: 1.0 }
+          }
+          const staticMaterial = new THREE.ShaderMaterial(staticMaterialConfig)
+          const staticPoints = new THREE.Points(geometryToUse.clone(), staticMaterial)
+
+          // Create dynamic layer material
+          const dynamicMaterialConfig = { ...materialConfig }
+          dynamicMaterialConfig.uniforms = {
+            ...dynamicMaterialConfig.uniforms,
+            uIsStatic: { value: 0.0 }
+          }
+          const dynamicMaterial = new THREE.ShaderMaterial(dynamicMaterialConfig)
+          const dynamicPoints = new THREE.Points(geometryToUse.clone(), dynamicMaterial)
+
+          // Create a group to hold both layers
+          const pointCloudGroup = new THREE.Group()
+          pointCloudGroup.add(staticPoints)
+          pointCloudGroup.add(dynamicPoints)
 
           // Copy transform from original mesh
-          points.position.copy(child.position)
-          points.rotation.copy(child.rotation)
-          points.scale.copy(child.scale)
+          pointCloudGroup.position.copy(child.position)
+          pointCloudGroup.rotation.copy(child.rotation)
+          pointCloudGroup.scale.copy(child.scale)
+
+          const vertexCount = geometryToUse.attributes.position.count
+          console.log(`[ShaderMaterialController] Created point cloud group with ${vertexCount} vertices × 2 layers (total ${vertexCount * 2} points)`)
 
           // Mark for replacement
-          nodesToReplace.push({ oldNode: child, newNode: points })
+          nodesToReplace.push({ oldNode: child, newNode: pointCloudGroup })
         } else {
           child.material = new THREE.ShaderMaterial(materialConfig)
           child.material.needsUpdate = true
@@ -184,6 +276,10 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
         // Update time uniform for animation
         if (uniforms.uTime) {
           uniforms.uTime.value = state.clock.elapsedTime
+          // Debug log once per second
+          if (shaderId === 'point-cloud' && Math.floor(state.clock.elapsedTime) % 5 === 0 && state.clock.elapsedTime % 1 < 0.1) {
+            console.log(`[ShaderMaterialController] uTime updated: ${state.clock.elapsedTime.toFixed(2)}`)
+          }
         }
 
         // Update mouse position uniform for interaction
