@@ -80,14 +80,38 @@ export const analyzeMesh = async (filename) => {
 /**
  * Lance une tache de simplification
  * @param {Object} params - Parametres de simplification
+ * @param {string} params.mode - Mode: 'standard' ou 'adaptive'
  * @param {string} params.filename - Nom du fichier a simplifier
+ * MODE STANDARD:
  * @param {number} params.reduction_ratio - Ratio de reduction (0.0 - 1.0)
  * @param {number} params.target_triangles - Nombre cible de triangles (optionnel)
  * @param {boolean} params.preserve_boundary - Preserver les bords (default: true)
+ * MODE ADAPTATIF:
+ * @param {number} params.target_ratio - Ratio de reduction de base (0.0 - 1.0)
+ * @param {number} params.flat_multiplier - Multiplicateur pour zones plates (1.0 - 3.0)
  * @returns {Promise} task_id et infos
  */
 export const simplifyMesh = async (params) => {
-  const response = await api.post('/simplify', params)
+  // Choisir l'endpoint en fonction du mode
+  const endpoint = params.mode === 'adaptive' ? '/simplify-adaptive' : '/simplify'
+
+  // Préparer les paramètres selon le mode
+  let requestParams
+  if (params.mode === 'adaptive') {
+    requestParams = {
+      filename: params.filename,
+      target_ratio: params.target_ratio,
+      flat_multiplier: params.flat_multiplier
+    }
+  } else {
+    requestParams = {
+      filename: params.filename,
+      reduction_ratio: params.reduction_ratio,
+      preserve_boundary: params.preserve_boundary
+    }
+  }
+
+  const response = await api.post(endpoint, requestParams)
   return response.data
 }
 

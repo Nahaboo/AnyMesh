@@ -1,9 +1,15 @@
 import { useState } from 'react'
 
 function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoadOriginal, currentTask, isProcessing }) {
+  // Mode: 'standard' ou 'adaptive'
+  const [mode, setMode] = useState('standard')
+
   // Niveaux de simplification: 0 = Basse, 1 = Moyenne, 2 = Forte
   const [simplificationLevel, setSimplificationLevel] = useState(1)
   const [preserveBoundary, setPreserveBoundary] = useState(true)
+
+  // Paramètres mode adaptatif
+  const [flatMultiplier, setFlatMultiplier] = useState(2.0)
 
   // Mapper les niveaux vers des ratios de réduction
   const levelToRatio = {
@@ -27,13 +33,25 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
     if (onSimplify && !isGltfFormat) {
       // Utiliser originalFilename pour la simplification (fichier source, pas GLB)
       const filenameForSimplification = meshInfo.originalFilename || meshInfo.filename
-      console.log('[DEBUG] Simplification du fichier:', filenameForSimplification)
+      console.log(`[DEBUG] Simplification ${mode} du fichier:`, filenameForSimplification)
 
-      onSimplify({
-        filename: filenameForSimplification,
-        reduction_ratio: reductionRatio,
-        preserve_boundary: preserveBoundary
-      })
+      if (mode === 'adaptive') {
+        // Mode adaptatif
+        onSimplify({
+          mode: 'adaptive',
+          filename: filenameForSimplification,
+          target_ratio: reductionRatio,
+          flat_multiplier: flatMultiplier
+        })
+      } else {
+        // Mode standard
+        onSimplify({
+          mode: 'standard',
+          filename: filenameForSimplification,
+          reduction_ratio: reductionRatio,
+          preserve_boundary: preserveBoundary
+        })
+      }
     }
   }
 
@@ -59,6 +77,73 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
       }}>
         Parametres de simplification
       </h2>
+
+      {/* Toggle Mode Standard / Adaptatif */}
+      <div style={{
+        display: 'flex',
+        gap: 'var(--v2-spacing-xs)',
+        marginBottom: 'var(--v2-spacing-md)',
+        background: 'var(--v2-bg-tertiary)',
+        borderRadius: 'var(--v2-radius-lg)',
+        padding: '4px'
+      }}>
+        <button
+          type="button"
+          onClick={() => setMode('standard')}
+          disabled={isProcessing || isGltfFormat || isSimplifiedMesh}
+          style={{
+            flex: 1,
+            padding: 'var(--v2-spacing-sm)',
+            borderRadius: 'var(--v2-radius-md)',
+            border: 'none',
+            background: mode === 'standard' ? 'var(--v2-accent-primary)' : 'transparent',
+            color: mode === 'standard' ? '#ffffff' : 'var(--v2-text-secondary)',
+            fontWeight: mode === 'standard' ? 600 : 500,
+            fontSize: '0.875rem',
+            cursor: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s',
+            opacity: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 0.5 : 1
+          }}
+        >
+          Standard
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('adaptive')}
+          disabled={isProcessing || isGltfFormat || isSimplifiedMesh}
+          style={{
+            flex: 1,
+            padding: 'var(--v2-spacing-sm)',
+            borderRadius: 'var(--v2-radius-md)',
+            border: 'none',
+            background: mode === 'adaptive' ? 'var(--v2-accent-primary)' : 'transparent',
+            color: mode === 'adaptive' ? '#ffffff' : 'var(--v2-text-secondary)',
+            fontWeight: mode === 'adaptive' ? 600 : 500,
+            fontSize: '0.875rem',
+            cursor: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s',
+            opacity: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 0.5 : 1
+          }}
+        >
+          Adaptatif
+        </button>
+      </div>
+
+      {/* Description du mode adaptatif */}
+      {mode === 'adaptive' && (
+        <div style={{
+          background: 'var(--v2-info-bg)',
+          border: '1px solid var(--v2-info-border)',
+          borderRadius: 'var(--v2-radius-lg)',
+          padding: 'var(--v2-spacing-md)',
+          marginBottom: 'var(--v2-spacing-md)',
+          fontSize: '0.875rem',
+          color: 'var(--v2-info-text)'
+        }}>
+          <strong style={{ display: 'block', marginBottom: '4px' }}>Mode adaptatif activé</strong>
+          Détecte automatiquement les zones plates (murs, sols) et les simplifie plus agressivement que les zones courbes (détails, reliefs). Idéal pour les modèles architecturaux.
+        </div>
+      )}
 
       {/* Avertissement pour GLTF/GLB */}
       {isGltfFormat && (
@@ -202,24 +287,68 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-sm)' }}>
           <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-text-secondary)' }}>Options avancees</h3>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--v2-spacing-xs)', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={preserveBoundary}
-              onChange={(e) => setPreserveBoundary(e.target.checked)}
-              disabled={isProcessing || isGltfFormat || isSimplifiedMesh}
-              style={{
-                width: '16px',
-                height: '16px',
-                accentColor: 'var(--v2-accent-primary)',
-                cursor: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 'not-allowed' : 'pointer',
-                opacity: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 0.5 : 1
-              }}
-            />
-            <span style={{ fontSize: '0.875rem', color: 'var(--v2-text-secondary)' }}>
-              Preserver les bords du maillage
-            </span>
-          </label>
+          {/* Option preserve_boundary (mode standard uniquement) */}
+          {mode === 'standard' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--v2-spacing-xs)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={preserveBoundary}
+                onChange={(e) => setPreserveBoundary(e.target.checked)}
+                disabled={isProcessing || isGltfFormat || isSimplifiedMesh}
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  accentColor: 'var(--v2-accent-primary)',
+                  cursor: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 'not-allowed' : 'pointer',
+                  opacity: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 0.5 : 1
+                }}
+              />
+              <span style={{ fontSize: '0.875rem', color: 'var(--v2-text-secondary)' }}>
+                Preserver les bords du maillage
+              </span>
+            </label>
+          )}
+
+          {/* Slider flat_multiplier (mode adaptatif uniquement) */}
+          {mode === 'adaptive' && (
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                color: 'var(--v2-text-secondary)',
+                marginBottom: 'var(--v2-spacing-xs)'
+              }}>
+                Agressivité zones plates: <span style={{ color: 'var(--v2-accent-primary)', fontWeight: 600 }}>{flatMultiplier.toFixed(1)}x</span>
+              </label>
+              <input
+                type="range"
+                min="1.0"
+                max="3.0"
+                step="0.1"
+                value={flatMultiplier}
+                onChange={(e) => setFlatMultiplier(parseFloat(e.target.value))}
+                disabled={isProcessing || isGltfFormat || isSimplifiedMesh}
+                style={{
+                  width: '100%',
+                  height: '6px',
+                  background: 'var(--v2-bg-tertiary)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  appearance: 'none',
+                  cursor: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 'not-allowed' : 'pointer',
+                  opacity: (isProcessing || isGltfFormat || isSimplifiedMesh) ? 0.5 : 1,
+                  accentColor: 'var(--v2-accent-primary)'
+                }}
+              />
+              <div style={{
+                fontSize: '0.75rem',
+                color: 'var(--v2-text-muted)',
+                marginTop: '4px'
+              }}>
+                Les zones plates seront simplifiées {flatMultiplier.toFixed(1)}x plus agressivement que les zones courbes
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Bouton de simplification */}

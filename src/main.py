@@ -16,7 +16,7 @@ from pydantic import BaseModel
 import trimesh
 
 from .task_manager import task_manager, Task
-from .simplify import simplify_mesh
+from .simplify import simplify_mesh, adaptive_simplify_mesh
 from .converter import convert_and_compress, convert_mesh_format
 from .glb_cache import (
     invalidate_glb_cache,
@@ -63,6 +63,13 @@ class SimplifyRequest(BaseModel):
     target_triangles: Optional[int] = None
     reduction_ratio: Optional[float] = None
     preserve_boundary: bool = True
+
+class AdaptiveSimplifyRequest(BaseModel):
+    """Paramètres de simplification adaptative"""
+    filename: str
+    target_ratio: float = 0.5  # Ratio de reduction de base (0.0 - 1.0)
+    flat_multiplier: float = 2.0  # Multiplicateur pour zones plates (1.0 - 3.0)
+    curvature_threshold: Optional[float] = None  # Seuil auto si None
 
 class GenerateMeshRequest(BaseModel):
     """Paramètres de génération de maillage à partir d'images"""
@@ -583,6 +590,65 @@ def simplify_task_handler(task: Task):
 
     return result
 
+def adaptive_simplify_task_handler(task: Task):
+    """Handler qui exécute la simplification adaptative d'un maillage"""
+    params = task.params
+    input_file = params["input_file"]
+    output_file = params["output_file"]
+    target_ratio = params.get("target_ratio", 0.5)
+    flat_multiplier = params.get("flat_multiplier", 2.0)
+    curvature_threshold = params.get("curvature_threshold")
+
+    print(f"\n🟢 [ADAPTIVE SIMPLIFY] Starting adaptive simplification")
+    print(f"  Input: {Path(input_file).name}")
+    print(f"  Output: {Path(output_file).name}")
+    print(f"  Target ratio: {target_ratio}")
+    print(f"  Flat multiplier: {flat_multiplier}x")
+
+    # Exécute la simplification adaptative
+    result = adaptive_simplify_mesh(
+        input_path=Path(input_file),
+        output_path=Path(output_file),
+        target_ratio=target_ratio,
+        flat_multiplier=flat_multiplier,
+        curvature_threshold=curvature_threshold
+    )
+
+    if result.get('success'):
+        print(f"  ✓ Adaptive simplification completed successfully")
+
+        # Afficher les stats adaptatives
+        adaptive_stats = result.get('adaptive_stats', {})
+        print(f"  Flat regions: {adaptive_stats.get('flat_percentage', 0):.1f}% of mesh")
+        print(f"  Flat triangles: {adaptive_stats.get('flat_triangles_original', 0)} → {adaptive_stats.get('flat_triangles_final', 0)}")
+        print(f"  Curved triangles: {adaptive_stats.get('curved_triangles_original', 0)} → {adaptive_stats.get('curved_triangles_final', 0)}")
+
+        # Transformer le résultat pour le frontend
+        output_path = Path(output_file)
+        return {
+            'success': True,
+            'output_filename': output_path.name,
+            'output_file': str(output_path),
+            'output_size': result.get('output_size', 0),
+            'vertices_count': result.get('simplified_vertices', 0),
+            'faces_count': result.get('simplified_triangles', 0),
+            'original': {
+                'vertices': result.get('original_vertices', 0),
+                'triangles': result.get('original_triangles', 0)
+            },
+            'simplified': {
+                'vertices': result.get('simplified_vertices', 0),
+                'triangles': result.get('simplified_triangles', 0)
+            },
+            'reduction': {
+                'vertices_ratio': result.get('vertices_ratio', 0),
+                'triangles_ratio': result.get('triangles_ratio', 0)
+            },
+            'adaptive_stats': adaptive_stats
+        }
+
+    return result
+
 @app.post("/simplify")
 async def simplify_mesh_async(request: SimplifyRequest):
     """
@@ -622,6 +688,49 @@ async def simplify_mesh_async(request: SimplifyRequest):
     return {
         "task_id": task_id,
         "message": "Tâche de simplification créée",
+        "output_filename": output_filename
+    }
+
+@app.post("/simplify-adaptive")
+async def simplify_mesh_adaptive_async(request: AdaptiveSimplifyRequest):
+    """
+    Lance une tâche de simplification adaptative en arrière-plan
+    Détecte les zones plates et les simplifie plus agressivement
+    Retourne un task_id pour suivre la progression
+    """
+    input_path = DATA_INPUT / request.filename
+
+    # Vérification que le fichier existe
+    if not input_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+
+    # Vérification du format
+    file_ext = input_path.suffix.lower()
+    if file_ext in {".gltf", ".glb"}:
+        raise HTTPException(
+            status_code=400,
+            detail="La simplification des fichiers GLTF/GLB n'est pas supportée."
+        )
+
+    # Génération du nom de fichier de sortie
+    output_filename = f"{input_path.stem}_adaptive{input_path.suffix}"
+    output_path = DATA_OUTPUT / output_filename
+
+    # Création de la tâche
+    task_id = task_manager.create_task(
+        task_type="simplify_adaptive",
+        params={
+            "input_file": str(input_path),
+            "output_file": str(output_path),
+            "target_ratio": request.target_ratio,
+            "flat_multiplier": request.flat_multiplier,
+            "curvature_threshold": request.curvature_threshold
+        }
+    )
+
+    return {
+        "task_id": task_id,
+        "message": "Tâche de simplification adaptative créée",
         "output_filename": output_filename
     }
 
@@ -1162,6 +1271,7 @@ async def get_generated_mesh(filename: str):
 async def startup_event():
     """Démarre le gestionnaire de tâches"""
     task_manager.register_handler("simplify", simplify_task_handler)
+    task_manager.register_handler("simplify_adaptive", adaptive_simplify_task_handler)
     task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
     task_manager.start()
 
