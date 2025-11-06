@@ -11,6 +11,7 @@ function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, on
     { id: 'wireframe', label: 'Wireframe' },
     { id: 'normal', label: 'Normal Map' },
     { id: 'flat', label: 'Flat' },
+    { id: 'vertex_colors', label: 'Vertex Colors' },
     { id: 'shader:toon', label: 'Toon', isShader: true },
     { id: 'shader:organic-solid', label: 'Organic', isShader: true },
     { id: 'shader:point-cloud', label: 'Point Cloud', isShader: true }

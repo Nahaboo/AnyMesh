@@ -22,9 +22,19 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
     e.preventDefault()
 
     if (onRetopologize && !isGltfFormat) {
+      // Validation: s'assurer que currentFaces est valide
+      if (!currentFaces || currentFaces <= 0) {
+        console.error('[RetopologyControls] Invalid currentFaces:', currentFaces)
+        console.error('[RetopologyControls] meshInfo:', meshInfo)
+        alert('Erreur: Le nombre de faces du mesh est invalide. Veuillez recharger le mesh.')
+        return
+      }
+
       // Utiliser originalFilename pour la retopologie (fichier source, pas GLB)
       const filenameForRetopology = meshInfo.originalFilename || meshInfo.filename
       console.log('[DEBUG] Retopologie du fichier:', filenameForRetopology)
+      console.log('[DEBUG] Current faces:', currentFaces)
+      console.log('[DEBUG] Target faces:', targetFaceCount)
 
       onRetopologize({
         filename: filenameForRetopology,

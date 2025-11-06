@@ -115,9 +115,9 @@ function App() {
       displayFilename: originalName,  // Nom original pour l'affichage
       file_size: result.output_size || 0,
       format: originalMeshInfo.format,  // Format du mesh ORIGINAL (avant simplification)
-      vertices_count: result.vertices_count,
-      faces_count: result.faces_count,
-      triangles_count: result.faces_count,  // Pour compatibilité avec SimplificationControls
+      vertices_count: result.vertices_count || result.simplified?.vertices || 0,
+      faces_count: result.faces_count || result.simplified?.triangles || 0,
+      triangles_count: result.faces_count || result.simplified?.triangles || 0,  // Pour compatibilité avec SimplificationControls
       bounding_box: meshInfo.bounding_box,
       uploadId: Date.now(),
       isSimplified: true,  // Flag to indicate this is from /mesh/output
@@ -125,6 +125,10 @@ function App() {
     }
 
     console.log('[App] Loading simplified mesh (GLB):', simplifiedMeshInfo)
+
+    // IMPORTANT: Update originalMeshInfo to the simplified mesh
+    // This allows chaining operations (simplify → retopologize)
+    setOriginalMeshInfo(simplifiedMeshInfo)
     setMeshInfo(simplifiedMeshInfo)
   }
 

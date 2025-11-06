@@ -147,6 +147,7 @@ function ViewerLayout({
         <LeftToolbar
           activeTool={activeTool}
           onToolChange={handleToolChange}
+          meshInfo={meshInfo}
         />
 
         {/* Central Viewer */}

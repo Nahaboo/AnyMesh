@@ -2,7 +2,10 @@
  * Left Toolbar - Vertical tools menu
  * Includes: Simplification (active), Refine, Segmentation, Retopology, Texturing, Rigging (placeholders)
  */
-function LeftToolbar({ activeTool, onToolChange }) {
+function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
+  // Vérifier si on visualise un mesh retopologisé
+  const isRetopologizedMesh = meshInfo?.isRetopologized === true
+
   const tools = [
     {
       id: 'simplification',
@@ -12,7 +15,8 @@ function LeftToolbar({ activeTool, onToolChange }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       ),
-      enabled: true
+      enabled: !isRetopologizedMesh,
+      disabledReason: isRetopologizedMesh ? 'Mesh retopologisé (quads). La simplification produirait des résultats dégradés. Workflow recommandé: Simplification → Retopologie.' : null
     },
     {
       id: 'refine',
@@ -32,7 +36,7 @@ function LeftToolbar({ activeTool, onToolChange }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
         </svg>
       ),
-      enabled: false
+      enabled: true
     },
     {
       id: 'retopoly',
@@ -42,7 +46,7 @@ function LeftToolbar({ activeTool, onToolChange }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
         </svg>
       ),
-      enabled: false
+      enabled: true
     },
     {
       id: 'texturing',
@@ -83,11 +87,11 @@ function LeftToolbar({ activeTool, onToolChange }) {
           onClick={() => tool.enabled && onToolChange(tool.id)}
           disabled={!tool.enabled}
           className={`v2-tool-button ${activeTool === tool.id ? 'active' : ''}`}
-          title={tool.enabled ? tool.label : `${tool.label} (Coming soon)`}
+          title={tool.enabled ? tool.label : (tool.disabledReason || `${tool.label} (Coming soon)`)}
         >
           {tool.icon}
           <span>{tool.label}</span>
-          {!tool.enabled && (
+          {!tool.enabled && !tool.disabledReason && (
             <span style={{
               fontSize: '0.625rem',
               color: 'var(--v2-text-muted)',

@@ -130,8 +130,11 @@ function MeshViewer({ meshInfo }) {
               }>
                 <MeshModel
                   key={meshInfo.uploadId || meshInfo.filename}
-                  filename={meshInfo.displayFilename || meshInfo.filename}
+                  filename={meshInfo.filename}
                   isGenerated={meshInfo.isGenerated || false}
+                  isSegmented={meshInfo.isSegmented || false}
+                  isSimplified={meshInfo.isSimplified || false}
+                  isRetopologized={meshInfo.isRetopologized || false}
                 />
               </Suspense>
 
