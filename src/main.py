@@ -3,7 +3,6 @@ Backend FastAPI pour MeshSimplifier
 Fournit les endpoints pour l'upload et le traitement de maillages 3D
 """
 
-import os
 import shutil
 import time
 from pathlib import Path
@@ -26,6 +25,7 @@ from .glb_cache import (
     is_glb_file
 )
 from .mesh_generator import generate_mesh_from_images
+from .retopology import retopologize_mesh
 
 app = FastAPI(
     title="MeshSimplifier API",
@@ -47,10 +47,12 @@ DATA_INPUT = Path("data/input")
 DATA_OUTPUT = Path("data/output")
 DATA_INPUT_IMAGES = Path("data/input_images")
 DATA_GENERATED_MESHES = Path("data/generated_meshes")
+DATA_RETOPO = Path("data/retopo")
 DATA_INPUT.mkdir(parents=True, exist_ok=True)
 DATA_OUTPUT.mkdir(parents=True, exist_ok=True)
 DATA_INPUT_IMAGES.mkdir(parents=True, exist_ok=True)
 DATA_GENERATED_MESHES.mkdir(parents=True, exist_ok=True)
+DATA_RETOPO.mkdir(parents=True, exist_ok=True)
 
 # Formats de fichiers supportés
 SUPPORTED_FORMATS = {".obj", ".stl", ".ply", ".off", ".gltf", ".glb"}
@@ -76,6 +78,14 @@ class GenerateMeshRequest(BaseModel):
     session_id: str
     resolution: str = "medium"  # 'low', 'medium', 'high'
     output_format: str = "obj"  # 'obj', 'stl', 'ply'
+
+class RetopologyRequest(BaseModel):
+    """Paramètres de retopologie avec Instant Meshes"""
+    filename: str
+    target_face_count: int = 10000
+    original_face_count: int  # Nombre de faces du mesh original (envoyé par le frontend)
+    deterministic: bool = True
+    preserve_boundaries: bool = True
 
 @app.get("/")
 async def root():
@@ -822,7 +832,12 @@ async def get_output_mesh(filename: str):
             if source_path.exists():
                 print(f"  🔄 Converting {source_path.name} to GLB for visualization...")
                 try:
-                    result = convert_and_compress(source_path, file_path)
+                    result = convert_and_compress(
+                        input_path=source_path,
+                        output_path=file_path,
+                        enable_draco=False,
+                        compression_level=7
+                    )
                     if result and result.get('success'):
                         print(f"  ✓ GLB created: {file_path.name}")
                         break
@@ -878,7 +893,7 @@ async def download_mesh(filename: str):
     )
 
 @app.get("/export/{filename}")
-async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False, is_simplified: bool = False):
+async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False, is_simplified: bool = False, is_retopologized: bool = False):
     """
     Exporte un fichier de maillage dans le format demandé
 
@@ -887,12 +902,15 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
         format: Format de sortie ('obj', 'stl', 'ply', 'glb')
         is_generated: Si True, cherche dans data/generated_meshes
         is_simplified: Si True, cherche dans data/output (meshes simplifiés)
+        is_retopologized: Si True, cherche dans data/retopo (meshes retopologisés)
 
     Returns:
         Le fichier converti au format demandé
     """
     # Déterminer le dossier source
-    if is_simplified:
+    if is_retopologized:
+        source_dir = DATA_RETOPO
+    elif is_simplified:
         source_dir = DATA_OUTPUT
     elif is_generated:
         source_dir = DATA_GENERATED_MESHES
@@ -1172,6 +1190,59 @@ def generate_mesh_task_handler(task: Task):
 
     return result
 
+def retopologize_task_handler(task: Task):
+    """Handler qui exécute la retopologie avec Instant Meshes"""
+    params = task.params
+    filename = params["filename"]
+    target_face_count = params.get("target_face_count", 10000)
+    deterministic = params.get("deterministic", True)
+    preserve_boundaries = params.get("preserve_boundaries", True)
+
+    input_file = DATA_INPUT / filename
+
+    # Générer le nom du fichier de sortie
+    output_filename = f"{Path(filename).stem}_retopo{Path(filename).suffix}"
+    output_file = DATA_RETOPO / output_filename
+
+    # Supprimer les anciens fichiers de résultat s'ils existent (OBJ/STL/PLY et GLB)
+    if output_file.exists():
+        print(f"  Removing old result: {output_filename}")
+        output_file.unlink()
+
+    # Supprimer aussi le GLB correspondant s'il existe
+    glb_filename = f"{Path(filename).stem}_retopo.glb"
+    glb_file = DATA_RETOPO / glb_filename
+    if glb_file.exists():
+        print(f"  Removing old GLB: {glb_filename}")
+        glb_file.unlink()
+
+    print(f"\n[RETOPOLOGIZE] Starting retopology")
+    print(f"  Input: {filename}")
+    print(f"  Output: {output_filename}")
+    print(f"  Target faces: {target_face_count}")
+
+    # Exécuter la retopologie
+    result = retopologize_mesh(
+        input_path=input_file,
+        output_path=output_file,
+        target_face_count=target_face_count,
+        deterministic=deterministic,
+        preserve_boundaries=preserve_boundaries
+    )
+
+    if result.get('success'):
+        print(f"  [OK] Retopology completed")
+        result['output_filename'] = output_filename
+        result['output_file'] = str(output_file)
+        # Ajouter les stats pour le frontend (avec les noms attendus)
+        result['vertices_count'] = result.get('retopo_vertices', 0)
+        result['faces_count'] = result.get('retopo_faces', 0)
+        result['output_size'] = output_file.stat().st_size if output_file.exists() else 0
+    else:
+        print(f"  [ERROR] Retopology failed: {result.get('error', 'Unknown error')}")
+
+    return result
+
 @app.post("/generate-mesh")
 async def generate_mesh_async(request: GenerateMeshRequest):
     """
@@ -1266,6 +1337,115 @@ async def get_generated_mesh(filename: str):
         }
     )
 
+@app.post("/retopologize")
+async def retopologize(request: RetopologyRequest):
+    """
+    Lance une tâche de retopologie avec Instant Meshes
+    """
+    input_file = DATA_INPUT / request.filename
+
+    if not input_file.exists():
+        raise HTTPException(status_code=404, detail=f"Fichier non trouvé: {request.filename}")
+
+    # Valider que target_face_count est dans le range acceptable
+    # Range: [original * 2 : original * 5]
+    # Note: original_face_count est fourni par le frontend (déjà calculé lors de l'upload)
+    original_face_count = request.original_face_count
+    min_faces = original_face_count * 2
+    max_faces = original_face_count * 5
+
+    if request.target_face_count < min_faces:
+        raise HTTPException(
+            status_code=400,
+            detail=f"target_face_count trop bas: minimum {min_faces} faces (mesh original: {original_face_count} faces)"
+        )
+
+    if request.target_face_count > max_faces:
+        raise HTTPException(
+            status_code=400,
+            detail=f"target_face_count trop élevé: maximum {max_faces} faces (mesh original: {original_face_count} faces)"
+        )
+
+    # Créer une tâche asynchrone
+    task_id = task_manager.create_task(
+        task_type="retopologize",
+        params={
+            "filename": request.filename,
+            "target_face_count": request.target_face_count,
+            "deterministic": request.deterministic,
+            "preserve_boundaries": request.preserve_boundaries
+        }
+    )
+
+    return {
+        "task_id": task_id,
+        "status": "pending",
+        "message": "Tâche de retopologie créée"
+    }
+
+@app.get("/mesh/retopo/{filename}")
+async def get_retopo_mesh(filename: str):
+    """
+    Sert un fichier de maillage retopologisé depuis data/retopo pour la visualisation
+    Convertit automatiquement en GLB pour de meilleures performances
+    """
+    file_path = DATA_RETOPO / filename
+
+    # Si on demande un fichier GLB qui n'existe pas, essayer de le convertir depuis le fichier source
+    if not file_path.exists() and filename.endswith('.glb'):
+        # Chercher le fichier source (OBJ, STL, PLY, etc.)
+        stem = file_path.stem
+        for ext in ['.obj', '.stl', '.ply', '.off']:
+            source_path = DATA_RETOPO / f"{stem}{ext}"
+            if source_path.exists():
+                print(f"  Converting {source_path.name} to GLB for visualization...")
+                try:
+                    result = convert_and_compress(
+                        input_path=source_path,
+                        output_path=file_path,
+                        enable_draco=False,
+                        compression_level=7
+                    )
+                    if result and result.get('success'):
+                        print(f"  [OK] GLB created: {file_path.name}")
+                        break
+                    else:
+                        print(f"  [WARNING] GLB conversion failed: {result.get('error', 'Unknown error')}")
+                except Exception as e:
+                    print(f"  [WARNING] GLB conversion failed: {e}")
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+
+    file_ext = file_path.suffix.lower()
+
+    # Déterminer le media_type
+    media_type_mapping = {
+        ".obj": "model/obj",
+        ".stl": "model/stl",
+        ".ply": "application/ply",
+        ".gltf": "model/gltf+json",
+        ".glb": "model/gltf-binary",
+    }
+    media_type = media_type_mapping.get(file_ext, "application/octet-stream")
+
+    # Streamer le fichier
+    CHUNK_SIZE = 1024 * 1024  # 1 MB chunks
+
+    def iterfile():
+        with open(file_path, mode="rb") as file_like:
+            while chunk := file_like.read(CHUNK_SIZE):
+                yield chunk
+
+    return StreamingResponse(
+        iterfile(),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{file_path.name}"',
+            "Content-Length": str(file_path.stat().st_size)
+        }
+    )
+
 # Initialisation du gestionnaire de tâches
 @app.on_event("startup")
 async def startup_event():
@@ -1273,6 +1453,7 @@ async def startup_event():
     task_manager.register_handler("simplify", simplify_task_handler)
     task_manager.register_handler("simplify_adaptive", adaptive_simplify_task_handler)
     task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
+    task_manager.register_handler("retopologize", retopologize_task_handler)
     task_manager.start()
 
     # Afficher les statistiques du cache GLB au démarrage

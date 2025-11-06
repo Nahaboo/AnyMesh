@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ConfigSidebar from './components/ConfigSidebar'
 import ViewerLayout from './components/ViewerLayout'
-import { simplifyMesh, generateMesh, pollTaskStatus } from './utils/api'
+import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, pollTaskStatus } from './utils/api'
 import './styles/v2-theme.css'
 
 /**
@@ -143,6 +143,163 @@ function App() {
     })
   }
 
+  // Handler for mesh segmentation
+  const handleSegment = async (params) => {
+    console.log('[App] Starting segmentation:', params)
+    setIsProcessing(true)
+
+    try {
+      const response = await segmentMesh(params)
+      console.log('[App] Task created:', response)
+
+      const taskId = response.task_id
+
+      // Poll task status
+      await pollTaskStatus(
+        taskId,
+        (task) => {
+          console.log('[App] Task update:', task)
+          setCurrentTask(task)
+
+          // Task completed
+          if (task.status === 'completed' && task.result) {
+            console.log('[App] Segmentation completed:', task.result)
+          }
+        },
+        1000
+      )
+
+      setIsProcessing(false)
+    } catch (error) {
+      console.error('[App] Segmentation error:', error)
+      setIsProcessing(false)
+      setCurrentTask({
+        id: 'error',
+        status: 'failed',
+        error: error.message || 'An error occurred'
+      })
+    }
+  }
+
+  // Handler to load the segmented mesh result
+  const handleLoadSegmented = () => {
+    if (!currentTask || currentTask.status !== 'completed' || !currentTask.result) {
+      console.error('[App] No completed task to load')
+      return
+    }
+
+    const result = currentTask.result
+    console.log('[App] Task result:', result)
+
+    // Ensure we have originalMeshInfo
+    if (!originalMeshInfo) {
+      console.error('[App] No original mesh info available')
+      return
+    }
+
+    // Check if output_filename exists
+    if (!result.output_filename) {
+      console.error('[App] No output_filename in task result')
+      return
+    }
+
+    const segmentedMeshInfo = {
+      filename: result.output_filename,
+      file_size: result.output_size || 0,
+      format: originalMeshInfo.format || '.obj',
+      vertices_count: originalMeshInfo.vertices_count || 0,
+      faces_count: originalMeshInfo.faces_count || originalMeshInfo.triangles_count || 0,
+      triangles_count: originalMeshInfo.triangles_count || originalMeshInfo.faces_count || 0,
+      bounding_box: originalMeshInfo.bounding_box,
+      uploadId: Date.now(),
+      isSegmented: true,
+      num_segments: result.num_segments,
+      method: result.method
+    }
+
+    console.log('[App] Loading segmented mesh:', segmentedMeshInfo)
+    setMeshInfo(segmentedMeshInfo)
+  }
+
+  // Handler for mesh retopology
+  const handleRetopologize = async (params) => {
+    console.log('[App] Starting retopology:', params)
+    setIsProcessing(true)
+
+    try {
+      const response = await retopologizeMesh(params)
+      console.log('[App] Task created:', response)
+
+      const taskId = response.task_id
+
+      // Store output filename for later loading
+      if (response.output_filename) {
+        setMeshInfo(prev => ({
+          ...prev,
+          retopologizedFilename: response.output_filename
+        }))
+      }
+
+      // Poll task status
+      await pollTaskStatus(
+        taskId,
+        (task) => {
+          console.log('[App] Task update:', task)
+          setCurrentTask(task)
+
+          // Task completed - don't auto-load the retopologized mesh
+          // User will click a button to load it if they want
+          if (task.status === 'completed' && task.result) {
+            console.log('[App] Retopology completed:', task.result)
+          }
+        },
+        1000
+      )
+
+      setIsProcessing(false)
+    } catch (error) {
+      console.error('[App] Retopology error:', error)
+      setIsProcessing(false)
+      setCurrentTask({
+        id: 'error',
+        status: 'failed',
+        error: error.message || 'An error occurred'
+      })
+    }
+  }
+
+  // Handler to load the retopologized mesh result
+  const handleLoadRetopologized = () => {
+    if (!currentTask || currentTask.status !== 'completed' || !currentTask.result) {
+      console.error('[App] No completed task to load')
+      return
+    }
+
+    const result = currentTask.result
+
+    // Le backend convertit automatiquement en GLB
+    // Remplacer l'extension par .glb pour charger le fichier converti
+    const originalName = result.output_filename  // Ex: bunny_retopo.obj
+    const glbName = originalName.replace(/\.[^.]+$/, '.glb')  // Ex: bunny_retopo.glb
+
+    const retopologizedMeshInfo = {
+      filename: originalName,  // Nom du fichier original (bunny_retopo.obj) - pour référence
+      displayFilename: glbName,  // Fichier GLB converti - c'est ce qui sera chargé par RenderModeController
+      file_size: result.output_size || 0,
+      format: originalMeshInfo.format,  // Format du mesh ORIGINAL (avant retopologie)
+      vertices_count: result.vertices_count,
+      faces_count: result.faces_count,
+      triangles_count: result.faces_count,  // Pour compatibilité
+      bounding_box: meshInfo.bounding_box,
+      uploadId: Date.now(),
+      isRetopologized: true,  // Flag to indicate this is from /mesh/output (retopologized)
+      originalFilename: originalName  // Fichier source retopologisé (bunny_retopo.obj)
+    }
+
+    console.log('[App] Loading retopologized mesh (GLB):', retopologizedMeshInfo)
+    setMeshInfo(retopologizedMeshInfo)
+  }
+
   // Handler for mesh generation
   const handleGenerate = async (params) => {
     console.log('[App] Starting generation:', params)
@@ -204,7 +361,11 @@ function App() {
           onHomeClick={handleHomeClick}
           onSimplify={handleSimplify}
           onGenerate={handleGenerate}
+          onSegment={handleSegment}
+          onRetopologize={handleRetopologize}
           onLoadSimplified={handleLoadSimplified}
+          onLoadSegmented={handleLoadSegmented}
+          onLoadRetopologized={handleLoadRetopologized}
           onLoadOriginal={handleLoadOriginal}
           currentTask={currentTask}
           isProcessing={isProcessing}

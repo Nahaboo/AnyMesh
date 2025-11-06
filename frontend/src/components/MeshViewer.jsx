@@ -90,6 +90,7 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
             filename={meshInfo.displayFilename || meshInfo.filename}
             isGenerated={meshInfo.isGenerated || false}
             isSimplified={meshInfo.isSimplified || false}
+            isRetopologized={meshInfo.isRetopologized || false}
             renderMode={renderMode}
             shaderParams={shaderParams}
             uploadId={meshInfo.uploadId}

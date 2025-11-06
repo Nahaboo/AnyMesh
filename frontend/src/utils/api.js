@@ -240,4 +240,51 @@ export const getGeneratedMeshUrl = (filename) => {
   return `${API_BASE_URL}/mesh/generated/${filename}`
 }
 
+/**
+ * Lance une tâche de segmentation de maillage
+ * @param {Object} params - Paramètres de segmentation
+ * @param {string} params.filename - Nom du fichier à segmenter
+ * @param {string} params.method - Méthode: 'connectivity', 'sharp_edges', 'curvature', 'planes'
+ * @param {number} [params.angle_threshold] - Pour sharp_edges (10-90°)
+ * @param {number} [params.num_clusters] - Pour curvature (2-10)
+ * @param {number} [params.num_planes] - Pour planes (1-6)
+ * @returns {Promise} task_id et infos
+ */
+export const segmentMesh = async (params) => {
+  const response = await api.post('/segment', params)
+  return response.data
+}
+
+/**
+ * Génère l'URL pour accéder à un maillage segmenté
+ * @param {string} filename - Nom du fichier segmenté
+ * @returns {string} URL du maillage segmenté
+ */
+export const getSegmentedMeshUrl = (filename) => {
+  return `${API_BASE_URL}/mesh/segmented/${filename}`
+}
+
+/**
+ * Lance une tâche de retopologie de maillage
+ * @param {Object} params - Paramètres de retopologie
+ * @param {string} params.filename - Nom du fichier à retopologiser
+ * @param {number} params.target_face_count - Nombre de faces cibles (1000-50000)
+ * @param {boolean} params.deterministic - Mode déterministe (default: true)
+ * @param {boolean} params.preserve_boundaries - Préserver les bordures (default: true)
+ * @returns {Promise} task_id et infos
+ */
+export const retopologizeMesh = async (params) => {
+  const response = await api.post('/retopologize', params)
+  return response.data
+}
+
+/**
+ * Obtient l'URL d'un maillage retopologisé
+ * @param {string} filename - Nom du fichier retopologisé
+ * @returns {string} URL du maillage retopologisé
+ */
+export const getRetopologyMeshUrl = (filename) => {
+  return `${API_BASE_URL}/mesh/retopo/${filename}`
+}
+
 export default api

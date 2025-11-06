@@ -14,7 +14,7 @@ import { getMaterialShader } from '../shaders/materials'
  * RenderModeController - Handles different rendering modes for 3D models
  * Modes: solid, wireframe, normal (normal map visualization), smooth, shader:*
  */
-function RenderModeController({ filename, isGenerated = false, isSimplified = false, renderMode = 'solid', shaderParams = {}, uploadId }) {
+function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, renderMode = 'solid', shaderParams = {}, uploadId }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
 
   // Check if renderMode is a custom shader (format: "shader:toon")
@@ -22,10 +22,12 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
   const shaderId = isShaderMode ? renderMode.split(':')[1] : null
   const shaderConfig = shaderId ? getMaterialShader(shaderId) : null
 
-  // Build URL - handle simplified meshes from /mesh/output
+  // Build URL - handle different mesh sources
   // Add uploadId as cache-busting parameter to force browser to reload file
   let meshUrl
-  if (isSimplified) {
+  if (isRetopologized) {
+    meshUrl = `http://localhost:8000/mesh/retopo/${filename}?v=${uploadId || Date.now()}`
+  } else if (isSimplified) {
     meshUrl = `http://localhost:8000/mesh/output/${filename}?v=${uploadId || Date.now()}`
   } else if (isGenerated) {
     meshUrl = `http://localhost:8000/mesh/generated/${filename}?v=${uploadId || Date.now()}`

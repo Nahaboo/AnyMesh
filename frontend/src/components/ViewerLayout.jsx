@@ -5,7 +5,9 @@ import BottomToolbar from './BottomToolbar'
 import MeshViewer from './MeshViewer'
 import AxesWidget from './AxesWidget'
 import SimplificationControls from './SimplificationControls'
+import SegmentationControls from './SegmentationControls'
 import MeshGenerationControls from './MeshGenerationControls'
+import RetopologyControls from './RetopologyControls'
 import TaskStatus from './TaskStatus'
 import * as THREE from 'three'
 import { useShaderDebugGUI } from '../hooks/useShaderDebugGUI'
@@ -22,7 +24,11 @@ function ViewerLayout({
   onHomeClick,
   onSimplify,
   onGenerate,
+  onSegment,
+  onRetopologize,
   onLoadSimplified,
+  onLoadSegmented,
+  onLoadRetopologized,
   onLoadOriginal,
   currentTask,
   isProcessing
@@ -45,8 +51,8 @@ function ViewerLayout({
 
   const handleToolChange = (tool) => {
     setActiveTool(tool)
-    // Show refine panel when Simplification is selected
-    setShowRefinePanel(tool === 'simplification')
+    // Show refine panel when Simplification, Segmentation, or Retopoly is selected
+    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly')
   }
 
   // Handler for shader parameter changes from debug GUI
@@ -98,7 +104,8 @@ function ViewerLayout({
     // Build export URL with format conversion
     const isGenerated = meshInfo.isGenerated || false
     const isSimplified = meshInfo.isSimplified || false
-    const exportUrl = `http://localhost:8000/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}&is_simplified=${isSimplified}`
+    const isRetopologized = meshInfo.isRetopologized || false
+    const exportUrl = `http://localhost:8000/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}&is_simplified=${isSimplified}&is_retopologized=${isRetopologized}`
 
     console.log(`[ViewerLayout] Exporting ${meshInfo.filename} as ${format.label}`)
 
@@ -190,7 +197,9 @@ function ViewerLayout({
                 fontWeight: 600,
                 color: 'var(--v2-text-primary)'
               }}>
-                Simplification
+                {activeTool === 'simplification' ? 'Simplification' :
+                 activeTool === 'segmentation' ? 'Segmentation' :
+                 activeTool === 'retopoly' ? 'Retopology' : 'Tool'}
               </h3>
               <button
                 onClick={() => setShowRefinePanel(false)}
@@ -203,16 +212,35 @@ function ViewerLayout({
               </button>
             </div>
 
-            {/* Content based on config type */}
+            {/* Content based on config type and active tool */}
             {configData?.type === 'file' && meshInfo ? (
-              <SimplificationControls
-                meshInfo={meshInfo}
-                onSimplify={onSimplify}
-                onLoadSimplified={onLoadSimplified}
-                onLoadOriginal={onLoadOriginal}
-                currentTask={currentTask}
-                isProcessing={isProcessing}
-              />
+              activeTool === 'simplification' ? (
+                <SimplificationControls
+                  meshInfo={meshInfo}
+                  onSimplify={onSimplify}
+                  onLoadSimplified={onLoadSimplified}
+                  onLoadOriginal={onLoadOriginal}
+                  currentTask={currentTask}
+                  isProcessing={isProcessing}
+                />
+              ) : activeTool === 'segmentation' ? (
+                <SegmentationControls
+                  meshInfo={meshInfo}
+                  onSegment={onSegment}
+                  onLoadSegmented={onLoadSegmented}
+                  currentTask={currentTask}
+                  isProcessing={isProcessing}
+                />
+              ) : activeTool === 'retopoly' ? (
+                <RetopologyControls
+                  meshInfo={meshInfo}
+                  onRetopologize={onRetopologize}
+                  onLoadRetopologized={onLoadRetopologized}
+                  onLoadOriginal={onLoadOriginal}
+                  currentTask={currentTask}
+                  isProcessing={isProcessing}
+                />
+              ) : null
             ) : configData?.type === 'images' && sessionInfo ? (
               <MeshGenerationControls
                 sessionInfo={sessionInfo}
