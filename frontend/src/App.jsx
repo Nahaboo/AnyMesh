@@ -73,7 +73,8 @@ function App() {
         taskId,
         (task) => {
           console.log('[App] Task update:', task)
-          setCurrentTask(task)
+          // Add task type to identify which operation this is
+          setCurrentTask({ ...task, taskType: 'simplify' })
 
           // Task completed - don't auto-load the simplified mesh
           // User will click a button to load it if they want
@@ -91,7 +92,8 @@ function App() {
       setCurrentTask({
         id: 'error',
         status: 'failed',
-        error: error.message || 'An error occurred'
+        error: error.message || 'An error occurred',
+        taskType: 'simplify'
       })
     }
   }
@@ -163,7 +165,7 @@ function App() {
         taskId,
         (task) => {
           console.log('[App] Task update:', task)
-          setCurrentTask(task)
+          setCurrentTask({ ...task, taskType: 'segment' })
 
           // Task completed
           if (task.status === 'completed' && task.result) {
@@ -180,7 +182,8 @@ function App() {
       setCurrentTask({
         id: 'error',
         status: 'failed',
-        error: error.message || 'An error occurred'
+        error: error.message || 'An error occurred',
+        taskType: 'segment'
       })
     }
   }
@@ -249,7 +252,7 @@ function App() {
         taskId,
         (task) => {
           console.log('[App] Task update:', task)
-          setCurrentTask(task)
+          setCurrentTask({ ...task, taskType: 'retopology' })
 
           // Task completed - don't auto-load the retopologized mesh
           // User will click a button to load it if they want
@@ -267,7 +270,8 @@ function App() {
       setCurrentTask({
         id: 'error',
         status: 'failed',
-        error: error.message || 'An error occurred'
+        error: error.message || 'An error occurred',
+        taskType: 'retopology'
       })
     }
   }
@@ -320,7 +324,7 @@ function App() {
         taskId,
         (task) => {
           console.log('[App] Task update:', task)
-          setCurrentTask(task)
+          setCurrentTask({ ...task, taskType: 'generate' })
 
           // If task is completed, prepare mesh for display
           if (task.status === 'completed' && task.result) {
@@ -348,7 +352,8 @@ function App() {
       setCurrentTask({
         id: 'error',
         status: 'failed',
-        error: error.message || 'An error occurred'
+        error: error.message || 'An error occurred',
+        taskType: 'generate'
       })
     }
   }

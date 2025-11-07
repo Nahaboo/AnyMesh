@@ -272,6 +272,7 @@ function ViewerLayout({
                 <TaskStatus
                   task={currentTask}
                   onComplete={() => {}}
+                  activeTool={activeTool}
                 />
               </div>
             )}

@@ -389,7 +389,7 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
         {/* Boutons de navigation entre modèles */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-xs)' }}>
           {/* Bouton pour charger le résultat simplifié */}
-          {currentTask && currentTask.status === 'completed' && currentTask.result && !meshInfo?.isSimplified && (
+          {currentTask && currentTask.taskType === 'simplify' && currentTask.status === 'completed' && currentTask.result && !meshInfo?.isSimplified && (
             <button
               type="button"
               onClick={onLoadSimplified}

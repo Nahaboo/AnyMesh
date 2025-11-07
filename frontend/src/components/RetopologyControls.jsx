@@ -291,7 +291,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
         </button>
 
         {/* Task status */}
-        {currentTask && currentTask.status === 'processing' && (
+        {currentTask && currentTask.taskType === 'retopology' && currentTask.status === 'processing' && (
           <div style={{
             background: 'var(--v2-info-bg)',
             border: '1px solid var(--v2-info-border)',
@@ -314,7 +314,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
         )}
 
         {/* Task completed */}
-        {currentTask && currentTask.status === 'completed' && (
+        {currentTask && currentTask.taskType === 'retopology' && currentTask.status === 'completed' && (
           <div style={{
             background: 'var(--v2-success-bg)',
             border: '1px solid var(--v2-success-border)',
@@ -341,7 +341,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
         )}
 
         {/* Task failed */}
-        {currentTask && currentTask.status === 'failed' && (
+        {currentTask && currentTask.taskType === 'retopology' && currentTask.status === 'failed' && (
           <div style={{
             background: 'var(--v2-error-bg)',
             border: '1px solid var(--v2-error-border)',
@@ -361,7 +361,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
         {/* Boutons de navigation entre modèles */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-xs)' }}>
           {/* Bouton pour charger le résultat retopologisé */}
-          {currentTask && currentTask.status === 'completed' && currentTask.result && !meshInfo?.isRetopologized && (
+          {currentTask && currentTask.taskType === 'retopology' && currentTask.status === 'completed' && currentTask.result && !meshInfo?.isRetopologized && (
             <button
               type="button"
               onClick={onLoadRetopologized}

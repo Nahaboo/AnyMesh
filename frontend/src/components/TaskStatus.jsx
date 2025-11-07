@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-function TaskStatus({ task, onComplete }) {
+function TaskStatus({ task, onComplete, activeTool }) {
   useEffect(() => {
     // Notifier le parent quand la tache est completee
     if (task && task.status === 'completed' && onComplete) {
@@ -9,6 +9,20 @@ function TaskStatus({ task, onComplete }) {
   }, [task, onComplete])
 
   if (!task) {
+    return null
+  }
+
+  // Mapper les taskType vers les tools correspondants
+  const taskTypeToTool = {
+    'simplify': 'simplification',
+    'segment': 'segmentation',
+    'retopology': 'retopoly',
+    'generate': null  // Pas d'outil dédié pour generate
+  }
+
+  // N'afficher que si le taskType correspond à l'outil actif
+  const taskTool = taskTypeToTool[task.taskType]
+  if (taskTool && activeTool && taskTool !== activeTool) {
     return null
   }
 

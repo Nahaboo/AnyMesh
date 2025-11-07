@@ -195,7 +195,7 @@ function SegmentationControls({ meshInfo, onSegment, onLoadSegmented, currentTas
         </button>
 
         {/* Bouton pour charger résultat */}
-        {currentTask && currentTask.status === 'completed' && (
+        {currentTask && currentTask.taskType === 'segment' && currentTask.status === 'completed' && (
           <button
             type="button"
             onClick={onLoadSegmented}
