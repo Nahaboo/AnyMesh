@@ -17,9 +17,6 @@ pytest>=7.0.0
 pytest-cov>=4.0.0
 httpx>=0.24.0
 
-# Génération de maillages
-torch>=2.0.0 
-torchvision>=0.15.0
-pytorch3d 
-pillow>=10.0.0 
-matplotlib>=3.5.0 
+# Génération de maillages via Stability AI API
+python-dotenv>=1.0.0  # Gestion fichier .env
+pillow>=10.0.0  # Validation images 

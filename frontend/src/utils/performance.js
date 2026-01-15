@@ -56,7 +56,7 @@ class PerformanceTracker {
       this.end(label)
       return result
     } catch (error) {
-      console.error(`❌ [PERF] ${label} - ERROR:`, error)
+      console.error(` [PERF] ${label} - ERROR:`, error)
       throw error
     }
   }
@@ -65,7 +65,7 @@ class PerformanceTracker {
    * Affiche un résumé de toutes les mesures frontend uniquement
    */
   summary() {
-    console.log('\n📊 [FRONTEND PERF] Performance Summary:')
+    console.log('\n [FRONTEND PERF] Performance Summary:')
     console.log('=' .repeat(60))
 
     let total = 0

@@ -17,7 +17,7 @@ function TaskStatus({ task, onComplete, activeTool }) {
     'simplify': 'simplification',
     'segment': 'segmentation',
     'retopology': 'retopoly',
-    'generate': null  // Pas d'outil dédié pour generate
+    'generate': 'generation'
   }
 
   // N'afficher que si le taskType correspond à l'outil actif
@@ -183,61 +183,114 @@ function TaskStatus({ task, onComplete, activeTool }) {
       {/* Resultats */}
       {task.status === 'completed' && task.result && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-md)' }}>
-          {/* Statistiques */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--v2-spacing-md)' }}>
-            <div style={{
-              background: 'var(--v2-bg-tertiary)',
-              borderRadius: 'var(--v2-radius-lg)',
-              padding: 'var(--v2-spacing-md)'
-            }}>
-              <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)', marginBottom: '4px' }}>Original</p>
-              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-text-primary)' }}>
-                {task.result.original?.vertices?.toLocaleString()} vertices
-              </p>
-              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-text-primary)' }}>
-                {task.result.original?.triangles?.toLocaleString()} triangles
-              </p>
-            </div>
-
-            <div style={{
-              background: 'var(--v2-success-bg)',
-              borderRadius: 'var(--v2-radius-lg)',
-              padding: 'var(--v2-spacing-md)'
-            }}>
-              <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)', marginBottom: '4px' }}>Simplifié</p>
-              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-success-text)' }}>
-                {task.result.simplified?.vertices?.toLocaleString()} vertices
-              </p>
-              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-success-text)' }}>
-                {task.result.simplified?.triangles?.toLocaleString()} triangles
-              </p>
-            </div>
-          </div>
-
-          {/* Reduction */}
-          <div style={{
-            background: 'var(--v2-info-bg)',
-            borderRadius: 'var(--v2-radius-lg)',
-            padding: 'var(--v2-spacing-md)'
-          }}>
-            <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-text-secondary)', marginBottom: 'var(--v2-spacing-xs)' }}>Réduction</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--v2-text-tertiary)' }}>Vertices supprimés:</span>
-                <span style={{ fontWeight: 600, color: 'var(--v2-info-text)' }}>
-                  {(task.result.original?.vertices - task.result.simplified?.vertices)?.toLocaleString()}
-                  {task.result.reduction?.vertices_ratio && ` (${(task.result.reduction.vertices_ratio * 100).toFixed(1)}%)`}
-                </span>
+          {task.taskType === 'generate' ? (
+            // Affichage pour la génération
+            <>
+              <div style={{
+                background: 'var(--v2-success-bg)',
+                borderRadius: 'var(--v2-radius-lg)',
+                padding: 'var(--v2-spacing-md)'
+              }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)', marginBottom: '8px' }}>Modèle 3D généré</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                    <span style={{ color: 'var(--v2-success-text)' }}>Vertices:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                      {task.result.vertices_count?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                    <span style={{ color: 'var(--v2-success-text)' }}>Triangles:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                      {task.result.faces_count?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                    <span style={{ color: 'var(--v2-success-text)' }}>Fichier:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--v2-success-text)', fontFamily: 'var(--v2-font-mono)', fontSize: '0.75rem' }}>
+                      {task.result.output_filename}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--v2-text-tertiary)' }}>Triangles supprimés:</span>
-                <span style={{ fontWeight: 600, color: 'var(--v2-info-text)' }}>
-                  {(task.result.original?.triangles - task.result.simplified?.triangles)?.toLocaleString()}
-                  {task.result.reduction?.triangles_ratio && ` (${(task.result.reduction.triangles_ratio * 100).toFixed(1)}%)`}
-                </span>
+
+              {task.result.generation_time && (
+                <div style={{
+                  background: 'var(--v2-info-bg)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  padding: 'var(--v2-spacing-md)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                    <span style={{ color: 'var(--v2-info-text)' }}>Temps de génération:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--v2-info-text)' }}>
+                      {task.result.generation_time}s
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            // Affichage pour la simplification/segmentation/retopologie
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--v2-spacing-md)' }}>
+                <div style={{
+                  background: 'var(--v2-bg-tertiary)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  padding: 'var(--v2-spacing-md)'
+                }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)', marginBottom: '4px' }}>Original</p>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-text-primary)' }}>
+                    {task.result.original?.vertices?.toLocaleString()} vertices
+                  </p>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-text-primary)' }}>
+                    {task.result.original?.triangles?.toLocaleString()} triangles
+                  </p>
+                </div>
+
+                <div style={{
+                  background: 'var(--v2-success-bg)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  padding: 'var(--v2-spacing-md)'
+                }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)', marginBottom: '4px' }}>
+                    {task.taskType === 'simplify' ? 'Simplifié' :
+                     task.taskType === 'retopology' ? 'Retopologisé' : 'Traité'}
+                  </p>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                    {task.result.simplified?.vertices?.toLocaleString()} vertices
+                  </p>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                    {task.result.simplified?.triangles?.toLocaleString()} triangles
+                  </p>
+                </div>
               </div>
-            </div>
-          </div>
+
+              {/* Reduction */}
+              <div style={{
+                background: 'var(--v2-info-bg)',
+                borderRadius: 'var(--v2-radius-lg)',
+                padding: 'var(--v2-spacing-md)'
+              }}>
+                <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-text-secondary)', marginBottom: 'var(--v2-spacing-xs)' }}>Réduction</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--v2-text-tertiary)' }}>Vertices supprimés:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--v2-info-text)' }}>
+                      {(task.result.original?.vertices - task.result.simplified?.vertices)?.toLocaleString()}
+                      {task.result.reduction?.vertices_ratio && ` (${(task.result.reduction.vertices_ratio * 100).toFixed(1)}%)`}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--v2-text-tertiary)' }}>Triangles supprimés:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--v2-info-text)' }}>
+                      {(task.result.original?.triangles - task.result.simplified?.triangles)?.toLocaleString()}
+                      {task.result.reduction?.triangles_ratio && ` (${(task.result.reduction.triangles_ratio * 100).toFixed(1)}%)`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

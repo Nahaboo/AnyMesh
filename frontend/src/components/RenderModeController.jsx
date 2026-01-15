@@ -12,7 +12,7 @@ import { getMaterialShader } from '../shaders/materials'
 
 /**
  * RenderModeController - Handles different rendering modes for 3D models
- * Modes: solid, wireframe, normal (normal map visualization), smooth, shader:*
+ * Modes: solid, wireframe, normal (normal map visualization), smooth, textured, shader:*
  */
 function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, renderMode = 'solid', shaderParams = {}, uploadId }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
@@ -189,6 +189,26 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
               roughness: 0.8
             })
             console.log('[RenderModeController] Applied SMOOTH mode (normals recomputed)')
+            break
+
+          case 'textured':
+            // Textured mode - preserve original materials and textures from GLB/GLTF
+            // Don't replace the material, just ensure it renders properly
+            if (!child.material.map && !child.material.normalMap) {
+              // If no texture, apply a default material
+              child.material = new THREE.MeshStandardMaterial({
+                color: DEFAULT_COLOR,
+                side: THREE.DoubleSide,
+                flatShading: false,
+                metalness: 0.1,
+                roughness: 0.8
+              })
+              console.log('[RenderModeController] Applied TEXTURED mode (no texture found, using default material)')
+            } else {
+              // Material has textures, keep it as is but ensure DoubleSide
+              child.material.side = THREE.DoubleSide
+              console.log('[RenderModeController] Applied TEXTURED mode (preserving original material with textures)')
+            }
             break
 
           default:

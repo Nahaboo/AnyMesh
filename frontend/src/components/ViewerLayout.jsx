@@ -33,6 +33,7 @@ function ViewerLayout({
   currentTask,
   isProcessing
 }) {
+
   const [renderMode, setRenderMode] = useState('solid')
   const [activeTool, setActiveTool] = useState('simplification')
   const [showRefinePanel, setShowRefinePanel] = useState(false)
@@ -54,6 +55,14 @@ function ViewerLayout({
     // Show refine panel when Simplification, Segmentation, or Retopoly is selected
     setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly')
   }
+
+  // Auto-show refine panel when in images mode
+  React.useEffect(() => {
+    if (configData?.type === 'images' && sessionInfo) {
+      setShowRefinePanel(true)
+      setActiveTool('generation')  // Set tool to 'generation' for images mode
+    }
+  }, [configData, sessionInfo])
 
   // Handler for shader parameter changes from debug GUI
   const handleShaderParamChange = (key, value) => {
@@ -200,7 +209,8 @@ function ViewerLayout({
               }}>
                 {activeTool === 'simplification' ? 'Simplification' :
                  activeTool === 'segmentation' ? 'Segmentation' :
-                 activeTool === 'retopoly' ? 'Retopology' : 'Tool'}
+                 activeTool === 'retopoly' ? 'Retopology' :
+                 activeTool === 'generation' ? 'Generate 3D Mesh' : 'Tool'}
               </h3>
               <button
                 onClick={() => setShowRefinePanel(false)}

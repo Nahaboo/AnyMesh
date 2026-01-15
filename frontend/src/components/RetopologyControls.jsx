@@ -13,7 +13,9 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
   const [preserveBoundaries, setPreserveBoundaries] = useState(true)
 
   // Vérifier si le format est GLTF/GLB (non supporté pour la retopologie)
-  const isGltfFormat = meshInfo?.format === '.gltf' || meshInfo?.format === '.glb'
+  // Exception: Les meshes générés (GLB) peuvent être retopologisés car ils seront convertis automatiquement
+  const isGenerated = meshInfo?.isGenerated === true
+  const isGltfFormat = (meshInfo?.format === '.gltf' || meshInfo?.format === '.glb') && !isGenerated
 
   // Vérifier si on visualise un mesh déjà retopologisé
   const isRetopologizedMesh = meshInfo?.isRetopologized === true
@@ -35,13 +37,15 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
       console.log('[DEBUG] Retopologie du fichier:', filenameForRetopology)
       console.log('[DEBUG] Current faces:', currentFaces)
       console.log('[DEBUG] Target faces:', targetFaceCount)
+      console.log('[DEBUG] Is generated mesh:', isGenerated)
 
       onRetopologize({
         filename: filenameForRetopology,
         target_face_count: targetFaceCount,
         original_face_count: currentFaces,  // Envoyer le nombre de faces original
         deterministic: deterministic,
-        preserve_boundaries: preserveBoundaries
+        preserve_boundaries: preserveBoundaries,
+        is_generated: isGenerated  // Indiquer si c'est un mesh généré
       })
     }
   }

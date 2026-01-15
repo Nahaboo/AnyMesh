@@ -3,11 +3,13 @@ Backend FastAPI pour MeshSimplifier
 Fournit les endpoints pour l'upload et le traitement de maillages 3D
 """
 
+import os
 import shutil
 import time
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
@@ -24,8 +26,11 @@ from .glb_cache import (
     get_cache_stats,
     is_glb_file
 )
-from .mesh_generator import generate_mesh_from_images
+from .stability_client import generate_mesh_from_image_sf3d
 from .retopology import retopologize_mesh
+
+# Charger les variables d'environnement depuis .env
+load_dotenv()
 
 app = FastAPI(
     title="MeshSimplifier API",
@@ -65,6 +70,7 @@ class SimplifyRequest(BaseModel):
     target_triangles: Optional[int] = None
     reduction_ratio: Optional[float] = None
     preserve_boundary: bool = True
+    is_generated: bool = False  # Si True, cherche dans data/generated_meshes
 
 class AdaptiveSimplifyRequest(BaseModel):
     """Paramètres de simplification adaptative"""
@@ -72,12 +78,14 @@ class AdaptiveSimplifyRequest(BaseModel):
     target_ratio: float = 0.5  # Ratio de reduction de base (0.0 - 1.0)
     flat_multiplier: float = 2.0  # Multiplicateur pour zones plates (1.0 - 3.0)
     curvature_threshold: Optional[float] = None  # Seuil auto si None
+    is_generated: bool = False  # Si True, cherche dans data/generated_meshes
 
 class GenerateMeshRequest(BaseModel):
     """Paramètres de génération de maillage à partir d'images"""
     session_id: str
     resolution: str = "medium"  # 'low', 'medium', 'high'
     output_format: str = "obj"  # 'obj', 'stl', 'ply'
+    remesh_option: str = "quad"  # 'none', 'triangle', 'quad' - Topologie du mesh généré
 
 class RetopologyRequest(BaseModel):
     """Paramètres de retopologie avec Instant Meshes"""
@@ -86,6 +94,7 @@ class RetopologyRequest(BaseModel):
     original_face_count: int  # Nombre de faces du mesh original (envoyé par le frontend)
     deterministic: bool = True
     preserve_boundaries: bool = True
+    is_generated: bool = False  # Si True, cherche dans data/generated_meshes
 
 @app.get("/")
 async def root():
@@ -109,7 +118,7 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
     Formats supportés: OBJ, STL, PLY, OFF, GLTF, GLB
     """
     start_total = time.time()
-    print(f"\n🔵 [UPLOAD-FAST] Upload started: {file.filename}")
+    print(f"\n [UPLOAD-FAST] Upload started: {file.filename}")
 
     # Vérification de l'extension
     file_ext = Path(file.filename).suffix.lower()
@@ -133,7 +142,7 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
 
     save_duration = (time.time() - start_save) * 1000
     file_size = file_path.stat().st_size
-    print(f"  📁 File save: {save_duration:.2f}ms ({file_size / 1024 / 1024:.2f} MB)")
+    print(f"   File save: {save_duration:.2f}ms ({file_size / 1024 / 1024:.2f} MB)")
 
     # Bounding box basique (rapide, juste pour la caméra)
     # On charge le mesh uniquement pour avoir la bounding box
@@ -148,7 +157,7 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
         else:
             mesh = loaded
 
-        # 🎯 NORMALISATION DU MESH: Centrer à l'origine
+        #  NORMALISATION DU MESH: Centrer à l'origine
         # Cela garantit que tous les modèles sont centrés pour une visualisation cohérente
         original_centroid = mesh.centroid.copy()
         original_scale = mesh.scale
@@ -159,7 +168,7 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
         # Sauvegarder le mesh normalisé (écrase le fichier original)
         mesh.export(str(file_path))
 
-        print(f"  🎯 Mesh normalized:")
+        print(f"   Mesh normalized:")
         print(f"     Original centroid: [{original_centroid[0]:.2f}, {original_centroid[1]:.2f}, {original_centroid[2]:.2f}]")
         print(f"     Original scale: {original_scale:.2f}")
         print(f"     New centroid: [0.00, 0.00, 0.00]")
@@ -175,10 +184,10 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
         # Calculer les statistiques du mesh
         vertices_count = int(len(mesh.vertices))
         faces_count = int(len(mesh.faces))
-        print(f"  📊 Mesh stats: {vertices_count:,} vertices, {faces_count:,} faces")
+        print(f"   Mesh stats: {vertices_count:,} vertices, {faces_count:,} faces")
 
     except Exception as e:
-        print(f"  ⚠️ Could not compute bounding box: {e}")
+        print(f"   Could not compute bounding box: {e}")
         # Bounding box par défaut si le calcul échoue
         bounding_box = {
             "min": [-1.0, -1.0, -1.0],
@@ -225,7 +234,7 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
             print(f"  ⚠️ Skipping GLB conversion: {reason}")
 
     total_duration = (time.time() - start_total) * 1000
-    print(f"🟢 [UPLOAD-FAST] Completed: {total_duration:.2f}ms\n")
+    print(f" [UPLOAD-FAST] Completed: {total_duration:.2f}ms\n")
 
     return {
         "message": "Fichier uploadé avec succès",
@@ -247,7 +256,7 @@ async def upload_mesh(file: UploadFile = File(...)):
     Formats supportés: OBJ, STL, PLY, OFF, GLTF, GLB
     """
     start_total = time.time()
-    print(f"\n🔵 [PERF] Upload started: {file.filename}")
+    print(f"\n [PERF] Upload started: {file.filename}")
 
     # Vérification de l'extension
     file_ext = Path(file.filename).suffix.lower()
@@ -270,14 +279,14 @@ async def upload_mesh(file: UploadFile = File(...)):
         ) from e
 
     save_duration = (time.time() - start_save) * 1000
-    print(f"  📁 File save: {save_duration:.2f}ms ({file_path.stat().st_size / 1024 / 1024:.2f} MB)")
+    print(f"   File save: {save_duration:.2f}ms ({file_path.stat().st_size / 1024 / 1024:.2f} MB)")
 
     # Utilisation de trimesh pour toutes les analyses
     start_load = time.time()
     try:
         loaded = trimesh.load(str(file_path))
         load_duration = (time.time() - start_load) * 1000
-        print(f"  🔷 trimesh load: {load_duration:.2f}ms")
+        print(f"   trimesh load: {load_duration:.2f}ms")
 
         # Si c'est une Scene, extraire et fusionner les géométries
         if hasattr(loaded, 'geometry'):
@@ -356,7 +365,7 @@ async def upload_mesh(file: UploadFile = File(...)):
             "bounding_box": bounding_box  # Pour ajuster la caméra Three.js
         }
         analyze_duration = (time.time() - start_analyze) * 1000
-        print(f"  📊 Analysis: {analyze_duration:.2f}ms")
+        print(f"   Analysis: {analyze_duration:.2f}ms")
         print(f"     Vertices: {mesh_info['vertices_count']:,}")
         print(f"     Triangles: {mesh_info['triangles_count']:,}")
 
@@ -398,26 +407,26 @@ async def upload_mesh(file: UploadFile = File(...)):
                     mesh_info['original_size'] = file_path.stat().st_size
                     print(f"  ✓ GLB generated for visualization: {glb_filename}")
                 else:
-                    print(f"  ⚠️ GLB conversion failed: {conversion_result.get('error')}")
+                    print(f"   GLB conversion failed: {conversion_result.get('error')}")
                     # Continuer avec le fichier original
                     glb_filename = file.filename
             else:
                 # Conversion non recommandée (fichier trop gros)
-                print(f"  ⚠️ Skipping GLB conversion: {reason}")
+                print(f"   Skipping GLB conversion: {reason}")
                 conversion_result = {
                     'skipped': True,
                     'reason': reason
                 }
         else:
             # Fichier déjà GLB/GLTF, pas de conversion nécessaire
-            print("  ⚡ File is already GLB/GLTF, no conversion needed")
+            print("   File is already GLB/GLTF, no conversion needed")
             conversion_result = {
                 'skipped': True,
                 'reason': 'File is already GLB/GLTF'
             }
 
         total_duration = (time.time() - start_total) * 1000
-        print(f"🟢 [PERF] Upload completed: {total_duration:.2f}ms\n")
+        print(f" [PERF] Upload completed: {total_duration:.2f}ms\n")
 
         # Timings pour le frontend
         backend_timings = {
@@ -457,7 +466,7 @@ async def analyze_mesh(filename: str):
     Retourne les statistiques complètes (vertices, triangles, propriétés)
     """
     start_analyze = time.time()
-    print(f"\n🔵 [ANALYZE] Starting analysis: {filename}")
+    print(f"\n [ANALYZE] Starting analysis: {filename}")
 
     file_path = DATA_INPUT / filename
 
@@ -511,7 +520,7 @@ async def analyze_mesh(filename: str):
         }
 
         analyze_duration = (time.time() - start_analyze) * 1000
-        print(f"  📊 Analysis completed: {analyze_duration:.2f}ms")
+        print(f"   Analysis completed: {analyze_duration:.2f}ms")
         print(f"     Vertices: {mesh_stats['vertices_count']:,}")
         print(f"     Triangles: {mesh_stats['triangles_count']:,}")
 
@@ -522,7 +531,7 @@ async def analyze_mesh(filename: str):
         }
 
     except Exception as e:
-        print(f"  ❌ Analysis failed: {e}")
+        print(f"   Analysis failed: {e}")
         raise HTTPException(
             status_code=400,
             detail=f"Erreur lors de l'analyse: {str(e)}"
@@ -550,10 +559,35 @@ def simplify_task_handler(task: Task):
     target_triangles = params.get("target_triangles")
     reduction_ratio = params.get("reduction_ratio")
     preserve_boundary = params.get("preserve_boundary", True)
+    is_generated = params.get("is_generated", False)
 
-    print(f"\n🔵 [SIMPLIFY] Starting simplification")
+    print(f"\n [SIMPLIFY] Starting simplification")
     print(f"  Input: {Path(input_file).name}")
     print(f"  Output: {Path(output_file).name}")
+
+    # Si le fichier est un GLB, le convertir en OBJ pour la simplification
+    input_path = Path(input_file)
+    if input_path.suffix.lower() == '.glb':
+        print(f"  [INFO] Converting GLB to OBJ for simplification...")
+        temp_obj_filename = f"{input_path.stem}_temp.obj"
+        temp_obj_file = input_path.parent / temp_obj_filename
+
+        from .converter import convert_mesh_format
+        conversion_result = convert_mesh_format(
+            input_path=input_path,
+            output_path=temp_obj_file,
+            output_format='obj'
+        )
+
+        if not conversion_result['success']:
+            return {
+                'success': False,
+                'error': f"Conversion GLB→OBJ échouée: {conversion_result.get('error')}"
+            }
+
+        # Utiliser le fichier OBJ temporaire comme input
+        input_file = str(temp_obj_file)
+        print(f"  [INFO] Using temporary OBJ: {temp_obj_filename}")
 
     # Exécute la simplification
     result = simplify_mesh(
@@ -568,7 +602,7 @@ def simplify_task_handler(task: Task):
     # Le fichier source n'a pas changé, mais on veut régénérer le GLB si l'utilisateur
     # re-upload le fichier simplifié pour remplacement
     if result.get('success'):
-        print(f"  ✓ Simplification completed successfully")
+        print(f"   Simplification completed successfully")
 
         # Note: On n'invalide PAS le cache du fichier d'entrée car il n'a pas changé
         # Le GLB du fichier d'entrée reste valide
@@ -577,7 +611,7 @@ def simplify_task_handler(task: Task):
 
         # Transformer le résultat pour le frontend
         output_path = Path(output_file)
-        return {
+        result_data = {
             'success': True,
             'output_filename': output_path.name,
             'output_file': str(output_path),
@@ -598,6 +632,18 @@ def simplify_task_handler(task: Task):
             }
         }
 
+        # Nettoyer le fichier OBJ temporaire si on a converti depuis GLB
+        if '_temp.obj' in str(input_file) and Path(input_file).exists():
+            print(f"  [CLEANUP] Removing temporary OBJ file")
+            Path(input_file).unlink()
+
+        return result_data
+
+    # En cas d'échec, nettoyer quand même le fichier temporaire
+    if '_temp.obj' in str(input_file) and Path(input_file).exists():
+        print(f"  [CLEANUP] Removing temporary OBJ file")
+        Path(input_file).unlink()
+
     return result
 
 def adaptive_simplify_task_handler(task: Task):
@@ -608,12 +654,37 @@ def adaptive_simplify_task_handler(task: Task):
     target_ratio = params.get("target_ratio", 0.5)
     flat_multiplier = params.get("flat_multiplier", 2.0)
     curvature_threshold = params.get("curvature_threshold")
+    is_generated = params.get("is_generated", False)
 
-    print(f"\n🟢 [ADAPTIVE SIMPLIFY] Starting adaptive simplification")
+    print(f"\n [ADAPTIVE SIMPLIFY] Starting adaptive simplification")
     print(f"  Input: {Path(input_file).name}")
     print(f"  Output: {Path(output_file).name}")
     print(f"  Target ratio: {target_ratio}")
     print(f"  Flat multiplier: {flat_multiplier}x")
+
+    # Si le fichier est un GLB, le convertir en OBJ pour la simplification
+    input_path = Path(input_file)
+    if input_path.suffix.lower() == '.glb':
+        print(f"  [INFO] Converting GLB to OBJ for simplification...")
+        temp_obj_filename = f"{input_path.stem}_temp.obj"
+        temp_obj_file = input_path.parent / temp_obj_filename
+
+        from .converter import convert_mesh_format
+        conversion_result = convert_mesh_format(
+            input_path=input_path,
+            output_path=temp_obj_file,
+            output_format='obj'
+        )
+
+        if not conversion_result['success']:
+            return {
+                'success': False,
+                'error': f"Conversion GLB→OBJ échouée: {conversion_result.get('error')}"
+            }
+
+        # Utiliser le fichier OBJ temporaire comme input
+        input_file = str(temp_obj_file)
+        print(f"  [INFO] Using temporary OBJ: {temp_obj_filename}")
 
     # Exécute la simplification adaptative
     result = adaptive_simplify_mesh(
@@ -625,7 +696,7 @@ def adaptive_simplify_task_handler(task: Task):
     )
 
     if result.get('success'):
-        print(f"  ✓ Adaptive simplification completed successfully")
+        print(f"   Adaptive simplification completed successfully")
 
         # Afficher les stats adaptatives
         adaptive_stats = result.get('adaptive_stats', {})
@@ -635,7 +706,7 @@ def adaptive_simplify_task_handler(task: Task):
 
         # Transformer le résultat pour le frontend
         output_path = Path(output_file)
-        return {
+        result_data = {
             'success': True,
             'output_filename': output_path.name,
             'output_file': str(output_path),
@@ -657,6 +728,18 @@ def adaptive_simplify_task_handler(task: Task):
             'adaptive_stats': adaptive_stats
         }
 
+        # Nettoyer le fichier OBJ temporaire si on a converti depuis GLB
+        if '_temp.obj' in str(input_file) and Path(input_file).exists():
+            print(f"  [CLEANUP] Removing temporary OBJ file")
+            Path(input_file).unlink()
+
+        return result_data
+
+    # En cas d'échec, nettoyer quand même le fichier temporaire
+    if '_temp.obj' in str(input_file) and Path(input_file).exists():
+        print(f"  [CLEANUP] Removing temporary OBJ file")
+        Path(input_file).unlink()
+
     return result
 
 @app.post("/simplify")
@@ -665,19 +748,24 @@ async def simplify_mesh_async(request: SimplifyRequest):
     Lance une tâche de simplification de maillage en arrière-plan
     Retourne un task_id pour suivre la progression
     """
-    input_path = DATA_INPUT / request.filename
+    # Déterminer le dossier source selon is_generated
+    source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
+    input_path = source_dir / request.filename
 
     # Vérification que le fichier existe
     if not input_path.exists():
         raise HTTPException(status_code=404, detail="Fichier non trouvé")
 
-    # Vérification du format
+    # Vérification du format et conversion si nécessaire
     file_ext = input_path.suffix.lower()
     if file_ext in {".gltf", ".glb"}:
-        raise HTTPException(
-            status_code=400,
-            detail="La simplification des fichiers GLTF/GLB n'est pas supportée avec trimesh."
-        )
+        # Pour les meshes générés (GLB), on va les convertir en OBJ automatiquement dans le task handler
+        if not request.is_generated:
+            raise HTTPException(
+                status_code=400,
+                detail="La simplification des fichiers GLTF/GLB uploadés n'est pas supportée. Utilisez OBJ, STL ou PLY."
+            )
+        # Si c'est un mesh généré (GLB), on laisse le task handler gérer la conversion
 
     # Génération du nom de fichier de sortie
     output_filename = f"{input_path.stem}_simplified{input_path.suffix}"
@@ -691,7 +779,8 @@ async def simplify_mesh_async(request: SimplifyRequest):
             "output_file": str(output_path),
             "target_triangles": request.target_triangles,
             "reduction_ratio": request.reduction_ratio,
-            "preserve_boundary": request.preserve_boundary
+            "preserve_boundary": request.preserve_boundary,
+            "is_generated": request.is_generated
         }
     )
 
@@ -708,19 +797,24 @@ async def simplify_mesh_adaptive_async(request: AdaptiveSimplifyRequest):
     Détecte les zones plates et les simplifie plus agressivement
     Retourne un task_id pour suivre la progression
     """
-    input_path = DATA_INPUT / request.filename
+    # Déterminer le dossier source selon is_generated
+    source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
+    input_path = source_dir / request.filename
 
     # Vérification que le fichier existe
     if not input_path.exists():
         raise HTTPException(status_code=404, detail="Fichier non trouvé")
 
-    # Vérification du format
+    # Vérification du format et conversion si nécessaire
     file_ext = input_path.suffix.lower()
     if file_ext in {".gltf", ".glb"}:
-        raise HTTPException(
-            status_code=400,
-            detail="La simplification des fichiers GLTF/GLB n'est pas supportée."
-        )
+        # Pour les meshes générés (GLB), on va les convertir en OBJ automatiquement dans le task handler
+        if not request.is_generated:
+            raise HTTPException(
+                status_code=400,
+                detail="La simplification des fichiers GLTF/GLB uploadés n'est pas supportée. Utilisez OBJ, STL ou PLY."
+            )
+        # Si c'est un mesh généré (GLB), on laisse le task handler gérer la conversion
 
     # Génération du nom de fichier de sortie
     output_filename = f"{input_path.stem}_adaptive{input_path.suffix}"
@@ -734,7 +828,8 @@ async def simplify_mesh_adaptive_async(request: AdaptiveSimplifyRequest):
             "output_file": str(output_path),
             "target_ratio": request.target_ratio,
             "flat_multiplier": request.flat_multiplier,
-            "curvature_threshold": request.curvature_threshold
+            "curvature_threshold": request.curvature_threshold,
+            "is_generated": request.is_generated
         }
     )
 
@@ -830,7 +925,7 @@ async def get_output_mesh(filename: str):
         for ext in ['.obj', '.stl', '.ply', '.off']:
             source_path = DATA_OUTPUT / f"{stem}{ext}"
             if source_path.exists():
-                print(f"  🔄 Converting {source_path.name} to GLB for visualization...")
+                print(f"   Converting {source_path.name} to GLB for visualization...")
                 try:
                     result = convert_and_compress(
                         input_path=source_path,
@@ -839,12 +934,12 @@ async def get_output_mesh(filename: str):
                         compression_level=7
                     )
                     if result and result.get('success'):
-                        print(f"  ✓ GLB created: {file_path.name}")
+                        print(f"   GLB created: {file_path.name}")
                         break
                     else:
-                        print(f"  ⚠️ GLB conversion failed: {result.get('error', 'Unknown error')}")
+                        print(f"   GLB conversion failed: {result.get('error', 'Unknown error')}")
                 except Exception as e:
-                    print(f"  ⚠️ GLB conversion failed: {e}")
+                    print(f"   GLB conversion failed: {e}")
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Fichier non trouvé")
@@ -927,7 +1022,7 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
         for ext in ['.obj', '.stl', '.ply', '.off']:
             original_source = source_dir / f"{stem}{ext}"
             if original_source.exists():
-                print(f"  📄 Using original source {original_source.name} instead of GLB")
+                print(f"   Using original source {original_source.name} instead of GLB")
                 source_path = original_source
                 filename = original_source.name
                 break
@@ -951,7 +1046,7 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
     output_filename = f"{source_path.stem}.{target_format}"
     output_path = DATA_OUTPUT / output_filename
 
-    print(f"\n🔵 [EXPORT] Converting {filename} to {target_format.upper()}")
+    print(f"\n [EXPORT] Converting {filename} to {target_format.upper()}")
 
     # Convertir le fichier
     result = convert_mesh_format(source_path, output_path, target_format)
@@ -1068,7 +1163,7 @@ async def upload_images(files: list[UploadFile] = File(...)):
     session_path = DATA_INPUT_IMAGES / session_id
     session_path.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n🔵 [UPLOAD-IMAGES] Session: {session_id}")
+    print(f"\n [UPLOAD-IMAGES] Session: {session_id}")
     print(f"  Images count: {len(files)}")
 
     uploaded_images = []
@@ -1102,7 +1197,7 @@ async def upload_images(files: list[UploadFile] = File(...)):
 
         print(f"  ✓ Saved: {file.filename} → {file_path.name}")
 
-    print(f"🟢 [UPLOAD-IMAGES] Completed: {len(uploaded_images)} images")
+    print(f" [UPLOAD-IMAGES] Completed: {len(uploaded_images)} images")
 
     return {
         "message": "Images uploadées avec succès",
@@ -1138,11 +1233,17 @@ async def list_session_images(session_id: str):
 
 # Handler pour les tâches de génération de maillages
 def generate_mesh_task_handler(task: Task):
-    """Handler qui exécute la génération de maillage à partir d'images"""
+    """Handler qui exécute la génération de maillage avec Stability AI"""
     params = task.params
     session_id = params["session_id"]
     resolution = params.get("resolution", "medium")
     output_format = params.get("output_format", "obj")
+    remesh_option = params.get("remesh_option", "quad")
+
+    # [DEV/TEST] Si c'est une tâche fake, elle est déjà complétée, ne rien faire
+    if params.get("fake", False):
+        print(f"  [GENERATE-MESH] Fake task detected, skipping API call")
+        return task.result  # Le résultat a déjà été défini dans l'endpoint
 
     session_path = DATA_INPUT_IMAGES / session_id
 
@@ -1152,7 +1253,7 @@ def generate_mesh_task_handler(task: Task):
             'error': 'Session non trouvée'
         }
 
-    print(f"\n🔵 [GENERATE-MESH] Starting generation")
+    print(f"\n [GENERATE-MESH] Starting Stability AI generation")
     print(f"  Session: {session_id}")
     print(f"  Resolution: {resolution}")
 
@@ -1168,25 +1269,38 @@ def generate_mesh_task_handler(task: Task):
             'error': 'Aucune image trouvée dans la session'
         }
 
-    print(f"  Images found: {len(image_paths)}")
+    # Stability Fast 3D : utilise uniquement la première image
+    first_image = image_paths[0]
+    print(f"  Images in session: {len(image_paths)}")
+    if len(image_paths) > 1:
+        print(f"  [INFO] Using first image: {first_image.name} (SF3D single-view only)")
 
     # Générer le nom de fichier de sortie
     output_filename = f"{session_id}_generated.{output_format}"
     output_path = DATA_GENERATED_MESHES / output_filename
 
-    # Exécuter la génération
-    result = generate_mesh_from_images(
-        image_paths=image_paths,
+    # Charger l'API key depuis .env
+    api_key = os.getenv('STABILITY_API_KEY')
+    if not api_key:
+        return {
+            'success': False,
+            'error': 'STABILITY_API_KEY non configurée dans .env'
+        }
+
+    # Exécuter la génération avec Stability AI
+    result = generate_mesh_from_image_sf3d(
+        image_path=first_image,
         output_path=output_path,
         resolution=resolution,
-        device=None  # Auto-détection GPU/CPU
+        remesh_option=remesh_option,
+        api_key=api_key
     )
 
     if result.get('success'):
-        print(f"  ✓ Mesh generated: {output_filename}")
+        print(f"   [OK] Mesh generated: {output_filename}")
         result['output_filename'] = output_filename
         result['session_id'] = session_id
-        result['images_used'] = len(image_paths)
+        result['images_used'] = 1  # SF3D uses only first image
 
     return result
 
@@ -1197,8 +1311,49 @@ def retopologize_task_handler(task: Task):
     target_face_count = params.get("target_face_count", 10000)
     deterministic = params.get("deterministic", True)
     preserve_boundaries = params.get("preserve_boundaries", True)
+    is_generated = params.get("is_generated", False)
 
-    input_file = DATA_INPUT / filename
+    # Chercher le fichier dans plusieurs dossiers selon l'origine
+    # 1. data/generated_meshes (meshes générés par API)
+    # 2. data/output (fichiers simplifiés)
+    # 3. data/input (fichiers originaux)
+    if is_generated:
+        input_file = DATA_GENERATED_MESHES / filename
+    else:
+        input_file = DATA_OUTPUT / filename
+        if not input_file.exists():
+            input_file = DATA_INPUT / filename
+
+    # Si le fichier n'existe pas, erreur
+    if not input_file.exists():
+        return {
+            'success': False,
+            'error': f'Fichier source non trouvé: {filename}'
+        }
+
+    # Si le fichier est un GLB, le convertir en OBJ pour la retopologie
+    # (Instant Meshes ne supporte que OBJ/PLY)
+    if input_file.suffix.lower() == '.glb':
+        print(f"  [INFO] Converting GLB to OBJ for retopology...")
+        temp_obj_filename = f"{input_file.stem}_temp.obj"
+        temp_obj_file = input_file.parent / temp_obj_filename
+
+        from .converter import convert_mesh_format
+        conversion_result = convert_mesh_format(
+            input_path=input_file,
+            output_path=temp_obj_file,
+            output_format='obj'
+        )
+
+        if not conversion_result['success']:
+            return {
+                'success': False,
+                'error': f"Conversion GLB→OBJ échouée: {conversion_result.get('error')}"
+            }
+
+        # Utiliser le fichier OBJ temporaire comme input
+        input_file = temp_obj_file
+        filename = temp_obj_filename
 
     # Générer le nom du fichier de sortie
     output_filename = f"{Path(filename).stem}_retopo{Path(filename).suffix}"
@@ -1241,7 +1396,93 @@ def retopologize_task_handler(task: Task):
     else:
         print(f"  [ERROR] Retopology failed: {result.get('error', 'Unknown error')}")
 
+    # Nettoyer le fichier OBJ temporaire si on a converti depuis GLB
+    if '_temp.obj' in str(input_file) and input_file.exists():
+        print(f"  [CLEANUP] Removing temporary OBJ file")
+        input_file.unlink()
+
     return result
+
+@app.post("/generate-mesh-fake")
+async def generate_mesh_fake(request: GenerateMeshRequest):
+    """
+    [DEV/TEST] Génère un mesh fake en copiant un GLB existant
+    Utile pour tester sans consommer de crédits API
+    """
+    session_path = DATA_INPUT_IMAGES / request.session_id
+
+    # Vérification que la session existe
+    if not session_path.exists():
+        raise HTTPException(status_code=404, detail="Session non trouvée")
+
+    # Chercher un fichier GLB template dans data/input
+    template_files = list(DATA_INPUT.glob("*.glb"))
+    if not template_files:
+        raise HTTPException(
+            status_code=404,
+            detail="Aucun fichier GLB template trouvé dans data/input. Uploadez un fichier GLB d'abord."
+        )
+
+    # Utiliser le premier fichier GLB trouvé comme template
+    template_glb = template_files[0]
+    print(f"\n [FAKE-GENERATE] Using template: {template_glb.name}")
+
+    # Générer le nom de fichier de sortie
+    output_filename = f"{request.session_id}_generated.glb"
+    output_path = DATA_GENERATED_MESHES / output_filename
+
+    # Copier le fichier template
+    import shutil
+    shutil.copy2(template_glb, output_path)
+    print(f"  [FAKE-GENERATE] Copied to: {output_filename}")
+
+    # Charger le mesh pour obtenir les stats
+    import trimesh
+    mesh = trimesh.load(str(output_path))
+    if hasattr(mesh, 'geometry'):
+        # Scene avec plusieurs maillages
+        meshes = list(mesh.geometry.values())
+        if len(meshes) > 0:
+            mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
+
+    vertices_count = len(mesh.vertices)
+    faces_count = len(mesh.faces)
+
+    # Créer une tâche fake qui se termine immédiatement
+    task_id = task_manager.create_task(
+        task_type="generate_mesh",
+        params={
+            "session_id": request.session_id,
+            "resolution": request.resolution,
+            "output_format": request.output_format,
+            "remesh_option": request.remesh_option,
+            "fake": True
+        }
+    )
+
+    # Marquer la tâche comme complétée immédiatement
+    task = task_manager.get_task(task_id)
+    if task:
+        task.status = "completed"
+        task.result = {
+            'success': True,
+            'output_filename': output_filename,
+            'vertices_count': vertices_count,
+            'faces_count': faces_count,
+            'resolution': request.resolution,
+            'generation_time': 0.1,  # Fake time
+            'method': 'fake_copy',
+            'session_id': request.session_id,
+            'images_used': 1
+        }
+        print(f"  [FAKE-GENERATE] Task completed immediately")
+        print(f"  [FAKE-GENERATE] Vertices: {vertices_count}, Faces: {faces_count}")
+
+    return {
+        "task_id": task_id,
+        "message": "[FAKE] Mesh généré (copié depuis template)",
+        "output_filename": output_filename
+    }
 
 @app.post("/generate-mesh")
 async def generate_mesh_async(request: GenerateMeshRequest):
@@ -1275,10 +1516,10 @@ async def generate_mesh_async(request: GenerateMeshRequest):
         )
 
     # Validation du format de sortie
-    if request.output_format not in ['obj', 'stl', 'ply']:
+    if request.output_format not in ['obj', 'stl', 'ply', 'glb']:
         raise HTTPException(
             status_code=400,
-            detail="Format invalide. Valeurs acceptées: 'obj', 'stl', 'ply'"
+            detail="Format invalide. Valeurs acceptées: 'obj', 'stl', 'ply', 'glb'"
         )
 
     # Création de la tâche
@@ -1342,7 +1583,9 @@ async def retopologize(request: RetopologyRequest):
     """
     Lance une tâche de retopologie avec Instant Meshes
     """
-    input_file = DATA_INPUT / request.filename
+    # Déterminer le dossier source selon is_generated
+    source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
+    input_file = source_dir / request.filename
 
     if not input_file.exists():
         raise HTTPException(status_code=404, detail=f"Fichier non trouvé: {request.filename}")
@@ -1373,7 +1616,8 @@ async def retopologize(request: RetopologyRequest):
             "filename": request.filename,
             "target_face_count": request.target_face_count,
             "deterministic": request.deterministic,
-            "preserve_boundaries": request.preserve_boundaries
+            "preserve_boundaries": request.preserve_boundaries,
+            "is_generated": request.is_generated
         }
     )
 
@@ -1450,6 +1694,19 @@ async def get_retopo_mesh(filename: str):
 @app.on_event("startup")
 async def startup_event():
     """Démarre le gestionnaire de tâches"""
+    print("\n=== MeshSimplifier Backend Starting ===")
+
+    # Valider la clé API Stability
+    api_key = os.getenv('STABILITY_API_KEY')
+    if not api_key:
+        print("[!] WARNING: STABILITY_API_KEY not set - mesh generation will fail")
+        print("    Create .env file and add: STABILITY_API_KEY=sk-your-key-here")
+    elif not api_key.startswith('sk-'):
+        print("[!] WARNING: STABILITY_API_KEY may be invalid (should start with 'sk-')")
+    else:
+        print(f"[OK] Stability API key loaded: {api_key[:10]}...")
+
+    # Enregistrer les handlers de tâches
     task_manager.register_handler("simplify", simplify_task_handler)
     task_manager.register_handler("simplify_adaptive", adaptive_simplify_task_handler)
     task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
@@ -1457,13 +1714,15 @@ async def startup_event():
     task_manager.start()
 
     # Afficher les statistiques du cache GLB au démarrage
-    print("\n📊 [GLB CACHE] Statistics at startup:")
+    print("\n [GLB CACHE] Statistics at startup:")
     stats = get_cache_stats(DATA_INPUT)
     print(f"  Total GLB files: {stats['total_glb_files']}")
     print(f"  Total size: {stats['total_size_mb']:.2f} MB")
     if stats['orphaned_count'] > 0:
-        print(f"  ⚠️ Orphaned files: {stats['orphaned_count']}")
+        print(f"   Orphaned files: {stats['orphaned_count']}")
         print(f"     Use POST /cache/glb/cleanup to clean them up")
+
+    print("=====================================\n")
 
 @app.on_event("shutdown")
 async def shutdown_event():

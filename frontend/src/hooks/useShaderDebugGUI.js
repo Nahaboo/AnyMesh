@@ -201,7 +201,7 @@ export function useShaderDebugGUI(shaderConfig, shaderParams, onParamChange, ena
         onParamChange(null, 'RESET_ALL')
       }
     }
-    gui.add(actions, 'reset').name('🔄 Reset to Defaults')
+    gui.add(actions, 'reset').name(' Reset to Defaults')
 
     // Cleanup on unmount
     return () => {

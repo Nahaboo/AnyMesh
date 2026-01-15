@@ -2,7 +2,7 @@ import ThemeToggle from './ThemeToggle'
 
 /**
  * Top Toolbar - Render mode selection and navigation
- * Includes: Solid, Wireframe, Normal Map, Flat modes + Custom Shaders
+ * Includes: Solid, Wireframe, Normal Map, Flat, Textured modes + Custom Shaders
  * Plus Home button, theme toggle, app title, and debug toggle
  */
 function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, onDebugModeChange, isShaderMode }) {
@@ -11,7 +11,7 @@ function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, on
     { id: 'wireframe', label: 'Wireframe' },
     { id: 'normal', label: 'Normal Map' },
     { id: 'flat', label: 'Flat' },
-    { id: 'vertex_colors', label: 'Vertex Colors' },
+    { id: 'textured', label: 'Textured' },
     { id: 'shader:toon', label: 'Toon', isShader: true },
     { id: 'shader:organic-solid', label: 'Organic', isShader: true },
     { id: 'shader:point-cloud', label: 'Point Cloud', isShader: true }

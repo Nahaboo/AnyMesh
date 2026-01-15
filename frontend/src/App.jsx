@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ConfigSidebar from './components/ConfigSidebar'
 import ViewerLayout from './components/ViewerLayout'
-import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, pollTaskStatus } from './utils/api'
+import { simplifyMesh, generateMesh, generateMeshFake, segmentMesh, retopologizeMesh, pollTaskStatus } from './utils/api'
 import './styles/v2-theme.css'
 
 /**
@@ -17,7 +17,8 @@ function App() {
 
   // Mesh data
   const [meshInfo, setMeshInfo] = useState(null)
-  const [originalMeshInfo, setOriginalMeshInfo] = useState(null)  // Keep original mesh reference
+  const [originalMeshInfo, setOriginalMeshInfo] = useState(null)  // Current base mesh for operations
+  const [initialMeshInfo, setInitialMeshInfo] = useState(null)  // True original mesh (never changes after upload)
   const [sessionInfo, setSessionInfo] = useState(null)
 
   // Task management
@@ -33,12 +34,14 @@ function App() {
       // File uploaded, prepare for visualization
       setMeshInfo(config.data)
       setOriginalMeshInfo(config.data)  // Save original mesh info
+      setInitialMeshInfo(config.data)  // Save true original (never changes)
       setSessionInfo(null)
     } else if (config.type === 'images') {
       // Images uploaded, prepare for generation
       setSessionInfo(config.data)
       setMeshInfo(null)
       setOriginalMeshInfo(null)
+      setInitialMeshInfo(null)
     }
 
     // Switch to viewer
@@ -136,17 +139,19 @@ function App() {
 
   // Handler to reload the original mesh
   const handleLoadOriginal = () => {
-    if (!originalMeshInfo) {
+    if (!initialMeshInfo) {
       console.error('[App] No original mesh to load')
       return
     }
 
-    console.log('[App] Reloading original mesh:', originalMeshInfo)
+    console.log('[App] Reloading original mesh:', initialMeshInfo)
     // Reload original mesh with new uploadId to force refresh
     setMeshInfo({
-      ...originalMeshInfo,
+      ...initialMeshInfo,
       uploadId: Date.now()
     })
+    // Also reset originalMeshInfo to initial for future operations
+    setOriginalMeshInfo(initialMeshInfo)
   }
 
   // Handler for mesh segmentation
@@ -314,7 +319,16 @@ function App() {
     setIsProcessing(true)
 
     try {
-      const response = await generateMesh(params)
+      // Forcer le format GLB pour compatibilité avec le viewer
+      const generationParams = {
+        ...params,
+        outputFormat: 'glb'
+      }
+
+      // [DEV/TEST] Utiliser la fausse génération pour économiser des crédits API
+      // Pour activer la vraie génération, remplacer generateMeshFake par generateMesh
+      //const response = await generateMeshFake(generationParams)
+      const response = await generateMesh(generationParams)
       console.log('[App] Task created:', response)
 
       const taskId = response.task_id
@@ -326,20 +340,28 @@ function App() {
           console.log('[App] Task update:', task)
           setCurrentTask({ ...task, taskType: 'generate' })
 
-          // If task is completed, prepare mesh for display
+          // If task is completed, switch to file mode with generated GLB
           if (task.status === 'completed' && task.result) {
             const generatedMeshInfo = {
               filename: task.result.output_filename,
               displayFilename: task.result.output_filename,
               file_size: 0,
-              format: `.${params.outputFormat}`,
+              format: '.glb',
               vertices_count: task.result.vertices_count,
               faces_count: task.result.faces_count,
               bounding_box: null,
               uploadId: Date.now(),
               isGenerated: true
             }
+
+            // Basculer vers le mode fichier (comme si le GLB avait été uploadé)
+            setConfigData({ type: 'file', data: generatedMeshInfo })
             setMeshInfo(generatedMeshInfo)
+            setOriginalMeshInfo(generatedMeshInfo)
+            setInitialMeshInfo(generatedMeshInfo)
+            setSessionInfo(null)  // Effacer les infos de session images
+
+            console.log('[App] Switched to file mode with generated GLB:', generatedMeshInfo)
           }
         },
         1000

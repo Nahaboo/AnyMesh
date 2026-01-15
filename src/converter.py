@@ -33,16 +33,16 @@ def convert_to_glb(input_path: Path, output_path: Path) -> dict:
 
     try:
         # Charger le mesh avec Trimesh
-        print(f"  🔄 Converting {input_path.name} to GLB...")
+        print(f"   Converting {input_path.name} to GLB...")
         loaded = trimesh.load(str(input_path))
 
         # Vérifier le type chargé
-        print(f"  📦 Type chargé: {type(loaded).__name__}")
+        print(f"   Type chargé: {type(loaded).__name__}")
 
         # Si c'est une Scene, extraire le premier mesh
         if hasattr(loaded, 'geometry'):
             # C'est une Scene avec potentiellement plusieurs meshes
-            print(f"  🔍 Scene détectée avec {len(loaded.geometry)} géométrie(s)")
+            print(f"   Scene détectée avec {len(loaded.geometry)} géométrie(s)")
             # Fusionner toutes les géométries en un seul mesh
             meshes = list(loaded.geometry.values())
             if len(meshes) == 0:
@@ -78,7 +78,7 @@ def convert_to_glb(input_path: Path, output_path: Path) -> dict:
         triangles_count = len(mesh.faces)
         input_format = input_path.suffix.lower()
 
-        print(f"  📊 Mesh: {vertices_count} vertices, {triangles_count} faces")
+        print(f"   Mesh: {vertices_count} vertices, {triangles_count} faces")
 
         # Exporter en GLB
         # Trimesh supporte l'export GLB nativement
@@ -94,7 +94,7 @@ def convert_to_glb(input_path: Path, output_path: Path) -> dict:
         output_size = output_path.stat().st_size
         conversion_time = (time.time() - start_time) * 1000
 
-        print(f"  ✓ GLB conversion: {conversion_time:.2f}ms ({output_size / 1024:.1f} KB)")
+        print(f"   GLB conversion: {conversion_time:.2f}ms ({output_size / 1024:.1f} KB)")
 
         return {
             'success': True,
@@ -296,7 +296,7 @@ def convert_mesh_format(
 
     try:
         # Charger le mesh avec Trimesh
-        print(f"  🔄 Converting {input_path.name} to {output_format.upper()}...")
+        print(f"   Converting {input_path.name} to {output_format.upper()}...")
         loaded = trimesh.load(str(input_path))
 
         # Si c'est une Scene, extraire et fusionner les meshes
@@ -333,7 +333,7 @@ def convert_mesh_format(
         vertices_count = len(mesh.vertices)
         triangles_count = len(mesh.faces)
 
-        print(f"  📊 Mesh: {vertices_count} vertices, {triangles_count} faces")
+        print(f"   Mesh: {vertices_count} vertices, {triangles_count} faces")
 
         # Exporter dans le format demandé
         mesh.export(str(output_path), file_type=output_format)

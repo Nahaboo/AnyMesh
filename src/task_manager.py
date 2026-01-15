@@ -71,7 +71,7 @@ class TaskManager:
         Enregistre une fonction pour traiter un type de tache specifique
 
         Args:
-            task_type: Type de tache (ex: "simplify", "repair")
+            task_type: Type de tache (ex: "simplify")
             handler: Fonction qui prend une Task et retourne le resultat
         """
         self.task_handlers[task_type] = handler
@@ -106,8 +106,9 @@ class TaskManager:
         with self.lock:
             return dict(self.tasks)
 
-    def _worker(self):
+    def _worker(self, worker_id: int):
         """Thread worker qui traite les taches de la file d'attente"""
+        print(f"[WORKER-{worker_id}] Started and waiting for tasks...")
         while self.running:
             try:
                 # Recupere une tache avec timeout pour permettre l'arret propre
@@ -124,6 +125,8 @@ class TaskManager:
                 task.started_at = datetime.now()
                 task.progress = 0
 
+                print(f"[WORKER-{worker_id}] Processing task {task_id[:8]}... (type: {task.type})")
+
                 try:
                     # Execute le handler correspondant au type de tache
                     handler = self.task_handlers.get(task.type)
@@ -139,11 +142,15 @@ class TaskManager:
                     task.progress = 100
                     task.completed_at = datetime.now()
 
+                    duration = (task.completed_at - task.started_at).total_seconds()
+                    print(f"[WORKER-{worker_id}] Completed task {task_id[:8]} in {duration:.2f}s")
+
                 except Exception as e:
                     # Marque la tache comme echouee
                     task.status = TaskStatus.FAILED
                     task.error = str(e)
                     task.completed_at = datetime.now()
+                    print(f"[WORKER-{worker_id}] Failed task {task_id[:8]}: {str(e)}")
 
                 finally:
                     self.task_queue.task_done()
@@ -151,6 +158,7 @@ class TaskManager:
             except queue.Empty:
                 # Pas de tache disponible, continue d'attendre
                 continue
+        print(f"[WORKER-{worker_id}] Stopped")
 
     def start(self):
         """Demarre les threads workers"""
@@ -158,8 +166,9 @@ class TaskManager:
             return
 
         self.running = True
+        print(f"[TASK_MANAGER] Starting {self.num_workers} worker threads...")
         for i in range(self.num_workers):
-            worker = threading.Thread(target=self._worker, daemon=True)
+            worker = threading.Thread(target=self._worker, args=(i,), daemon=True)
             worker.start()
             self.workers.append(worker)
 

@@ -21,7 +21,8 @@ function SegmentationControls({ meshInfo, onSegment, onLoadSegmented, currentTas
     if (onSegment && meshInfo) {
       const params = {
         filename: meshInfo.originalFilename || meshInfo.filename,
-        method: method
+        method: method,
+        is_generated: meshInfo.isGenerated || false
       }
 
       // Ajouter paramètres spécifiques

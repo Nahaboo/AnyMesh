@@ -22,7 +22,9 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
   const reductionRatio = levelToRatio[simplificationLevel]
 
   // Vérifier si le format est GLTF/GLB (non supporté pour la simplification)
-  const isGltfFormat = meshInfo?.format === '.gltf' || meshInfo?.format === '.glb'
+  // Exception: Les meshes générés (GLB) peuvent être simplifiés car ils seront convertis automatiquement
+  const isGenerated = meshInfo?.isGenerated === true
+  const isGltfFormat = (meshInfo?.format === '.gltf' || meshInfo?.format === '.glb') && !isGenerated
 
   // Vérifier si on visualise un mesh déjà simplifié
   const isSimplifiedMesh = meshInfo?.isSimplified === true
@@ -34,6 +36,7 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
       // Utiliser originalFilename pour la simplification (fichier source, pas GLB)
       const filenameForSimplification = meshInfo.originalFilename || meshInfo.filename
       console.log(`[DEBUG] Simplification ${mode} du fichier:`, filenameForSimplification)
+      console.log('[DEBUG] Is generated mesh:', isGenerated)
 
       if (mode === 'adaptive') {
         // Mode adaptatif
@@ -41,7 +44,8 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
           mode: 'adaptive',
           filename: filenameForSimplification,
           target_ratio: reductionRatio,
-          flat_multiplier: flatMultiplier
+          flat_multiplier: flatMultiplier,
+          is_generated: isGenerated
         })
       } else {
         // Mode standard
@@ -49,7 +53,8 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
           mode: 'standard',
           filename: filenameForSimplification,
           reduction_ratio: reductionRatio,
-          preserve_boundary: preserveBoundary
+          preserve_boundary: preserveBoundary,
+          is_generated: isGenerated
         })
       }
     }

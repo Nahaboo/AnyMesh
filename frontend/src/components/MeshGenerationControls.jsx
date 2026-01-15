@@ -3,13 +3,15 @@ import { useState } from 'react'
 function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
   const [resolution, setResolution] = useState('medium')
   const [outputFormat, setOutputFormat] = useState('obj')
+  const [remeshOption, setRemeshOption] = useState('quad')
 
   const handleGenerate = () => {
     if (onGenerate) {
       onGenerate({
         sessionId: sessionInfo.sessionId,
         resolution,
-        outputFormat
+        outputFormat,
+        remeshOption
       })
     }
   }
@@ -140,29 +142,49 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
           </div>
         </div>
 
-        {/* Note importante */}
-        <div style={{
-          padding: 'var(--v2-spacing-sm)',
-          background: 'var(--v2-info-bg)',
-          border: '1px solid var(--v2-info-border)',
-          borderRadius: 'var(--v2-radius-lg)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--v2-spacing-xs)' }}>
-            <svg style={{ width: '20px', height: '20px', color: 'var(--v2-info-text)', marginTop: '2px', flexShrink: 0 }} fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <div style={{ fontSize: '0.75rem', color: 'var(--v2-info-text)' }}>
-              <p style={{ fontWeight: 500 }}>Note MVP:</p>
-              <p style={{ marginTop: '4px' }}>
-                La génération actuelle utilise une approche basique (depth map).
-                Pour de meilleurs résultats, utilisez plusieurs images avec différents angles.
-              </p>
-            </div>
+        {/* Topologie du mesh (Remesh Option) */}
+        <div>
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            color: 'var(--v2-text-secondary)',
+            marginBottom: 'var(--v2-spacing-xs)'
+          }}>
+            Topologie du mesh
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
+            {[
+              { value: 'none', label: 'Aucune' },
+              { value: 'triangle', label: 'Triangle' },
+              { value: 'quad', label: 'Quad' }
+            ].map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setRemeshOption(option.value)}
+                disabled={isProcessing}
+                style={{
+                  padding: 'var(--v2-spacing-xs) var(--v2-spacing-sm)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  transition: 'all var(--v2-transition-base)',
+                  background: remeshOption === option.value ? 'var(--v2-accent-primary)' : 'var(--v2-bg-tertiary)',
+                  color: remeshOption === option.value ? '#ffffff' : 'var(--v2-text-secondary)',
+                  border: 'none',
+                  cursor: isProcessing ? 'not-allowed' : 'pointer',
+                  opacity: isProcessing ? 0.5 : 1
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
+          <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)', marginTop: 'var(--v2-spacing-xs)' }}>
+            {remeshOption === 'none' && 'Pas de remaillage (plus rapide, topologie basique)'}
+            {remeshOption === 'triangle' && 'Triangles optimisés (bonne qualité)'}
+            {remeshOption === 'quad' && 'Quadrilatères (meilleure qualité, recommandé)'}
+          </p>
         </div>
 
         {/* Bouton de génération */}

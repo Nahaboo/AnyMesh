@@ -101,13 +101,15 @@ export const simplifyMesh = async (params) => {
     requestParams = {
       filename: params.filename,
       target_ratio: params.target_ratio,
-      flat_multiplier: params.flat_multiplier
+      flat_multiplier: params.flat_multiplier,
+      is_generated: params.is_generated || false
     }
   } else {
     requestParams = {
       filename: params.filename,
       reduction_ratio: params.reduction_ratio,
-      preserve_boundary: params.preserve_boundary
+      preserve_boundary: params.preserve_boundary,
+      is_generated: params.is_generated || false
     }
   }
 
@@ -210,13 +212,35 @@ export const uploadImages = async (files) => {
  * @param {string} params.sessionId - ID de session (images uploadées)
  * @param {string} params.resolution - Résolution: 'low', 'medium', 'high'
  * @param {string} params.outputFormat - Format de sortie: 'obj', 'stl', 'ply'
+ * @param {string} params.remeshOption - Topologie: 'none', 'triangle', 'quad' (optionnel, défaut: 'quad')
  * @returns {Promise} task_id et infos
  */
 export const generateMesh = async (params) => {
   const response = await api.post('/generate-mesh', {
     session_id: params.sessionId,
     resolution: params.resolution,
-    output_format: params.outputFormat
+    output_format: params.outputFormat,
+    remesh_option: params.remeshOption || 'quad'
+  })
+  return response.data
+}
+
+/**
+ * [DEV/TEST] Génère un mesh fake en copiant un GLB existant
+ * Utile pour tester sans consommer de crédits API
+ * @param {Object} params - Paramètres de génération
+ * @param {string} params.sessionId - ID de la session
+ * @param {string} params.resolution - Résolution ('low'|'medium'|'high')
+ * @param {string} params.outputFormat - Format de sortie
+ * @param {string} params.remeshOption - Topologie: 'none', 'triangle', 'quad' (optionnel, défaut: 'quad')
+ * @returns {Promise} Réponse avec task_id
+ */
+export const generateMeshFake = async (params) => {
+  const response = await api.post('/generate-mesh-fake', {
+    session_id: params.sessionId,
+    resolution: params.resolution,
+    output_format: params.outputFormat,
+    remesh_option: params.remeshOption || 'quad'
   })
   return response.data
 }
