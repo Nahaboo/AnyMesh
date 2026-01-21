@@ -365,6 +365,116 @@ def simplify_mesh_trimesh(
         }
 
 
+def simplify_mesh_glb(
+    input_path: Path,
+    output_path: Path,
+    target_triangles: int = None,
+    reduction_ratio: float = None
+) -> Dict[str, Any]:
+    """
+    GLB-First: Simplifie un GLB directement avec Trimesh.
+
+    Cette fonction est le coeur de la simplification GLB-First:
+    - Charge le GLB directement (pas de conversion intermédiaire)
+    - Simplifie avec Quadric Error Metric
+    - Exporte en GLB
+
+    ATTENTION: Les textures et matériaux sont perdus lors de la simplification
+    car les UVs deviennent invalides après modification de la géométrie.
+
+    Args:
+        input_path: Chemin vers le fichier GLB d'entrée
+        output_path: Chemin vers le fichier GLB de sortie
+        target_triangles: Nombre cible de triangles (prioritaire)
+        reduction_ratio: Ratio de réduction (0.0 - 1.0), ex: 0.5 = 50% de faces
+
+    Returns:
+        Dictionnaire contenant les statistiques de simplification
+    """
+    try:
+        if not input_path.exists():
+            return {
+                'success': False,
+                'error': f"Le fichier d'entree n'existe pas: {input_path}"
+            }
+
+        if target_triangles is None and reduction_ratio is None:
+            return {
+                'success': False,
+                'error': "Vous devez specifier target_triangles ou reduction_ratio"
+            }
+
+        # Charger le GLB avec Trimesh
+        loaded = trimesh.load(str(input_path))
+
+        # Gérer les Scenes (plusieurs meshes dans un GLB)
+        if hasattr(loaded, 'geometry'):
+            meshes = list(loaded.geometry.values())
+            if len(meshes) == 0:
+                return {'success': False, 'error': 'Scene vide, aucune geometrie'}
+            mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
+        else:
+            mesh = loaded
+
+        if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:
+            return {'success': False, 'error': 'Pas de vertices valides'}
+        if not hasattr(mesh, 'faces') or len(mesh.faces) == 0:
+            return {'success': False, 'error': 'Pas de faces valides'}
+
+        # Détecter si textures présentes (pour warning)
+        had_textures = (
+            hasattr(mesh, 'visual') and
+            hasattr(mesh.visual, 'material') and
+            mesh.visual.material is not None
+        )
+
+        original_vertices = len(mesh.vertices)
+        original_triangles = len(mesh.faces)
+
+        # Calcul du nombre cible
+        if target_triangles is None:
+            target_triangles = int(original_triangles * (1 - reduction_ratio))
+
+        target_triangles = int(target_triangles)
+        target_triangles = max(4, min(target_triangles, original_triangles))
+
+        # Copie profonde pour simplification
+        mesh_simplified = copy.deepcopy(mesh)
+
+        # Simplification Quadric Error Metric
+        mesh_simplified = mesh_simplified.simplify_quadric_decimation(
+            face_count=target_triangles
+        )
+
+        # Exporter en GLB
+        mesh_simplified.export(str(output_path), file_type='glb')
+
+        simplified_vertices = len(mesh_simplified.vertices)
+        simplified_triangles = len(mesh_simplified.faces)
+
+        return {
+            'success': True,
+            'original_vertices': original_vertices,
+            'original_triangles': original_triangles,
+            'simplified_vertices': simplified_vertices,
+            'simplified_triangles': simplified_triangles,
+            'vertices_ratio': 1 - (simplified_vertices / original_vertices) if original_vertices > 0 else 0,
+            'triangles_ratio': 1 - (simplified_triangles / original_triangles) if original_triangles > 0 else 0,
+            'vertices_removed': original_vertices - simplified_vertices,
+            'triangles_removed': original_triangles - simplified_triangles,
+            'output_file': str(output_path),
+            'output_size': output_path.stat().st_size,
+            'had_textures': had_textures,
+            'textures_lost': had_textures  # Toujours perdues après simplification
+        }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Erreur simplification GLB: {str(e)}"
+        }
+
+
 def simplify_mesh(
     input_path: Path,
     output_path: Path,

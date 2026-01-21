@@ -17,7 +17,7 @@ from pydantic import BaseModel
 import trimesh
 
 from .task_manager import task_manager, Task
-from .simplify import simplify_mesh, adaptive_simplify_mesh
+from .simplify import simplify_mesh, adaptive_simplify_mesh, simplify_mesh_glb
 from .converter import convert_and_compress, convert_mesh_format, convert_any_to_glb
 from .glb_cache import (
     invalidate_glb_cache,
@@ -659,68 +659,58 @@ async def get_saved_mesh(filename: str):
 
 # Handler pour les tâches de simplification
 def simplify_task_handler(task: Task):
-    """Handler qui exécute la simplification d'un maillage"""
+    """
+    Handler qui exécute la simplification d'un maillage.
+
+    GLB-First: Utilise simplify_mesh_glb pour les fichiers GLB (pas de conversion).
+    """
     params = task.params
     input_file = params["input_file"]
     output_file = params["output_file"]
     target_triangles = params.get("target_triangles")
     reduction_ratio = params.get("reduction_ratio")
     preserve_boundary = params.get("preserve_boundary", True)
-    is_generated = params.get("is_generated", False)
 
-    print(f"\n [SIMPLIFY] Starting simplification")
-    print(f"  Input: {Path(input_file).name}")
-    print(f"  Output: {Path(output_file).name}")
-
-    # Si le fichier est un GLB, le convertir en OBJ pour la simplification
     input_path = Path(input_file)
-    if input_path.suffix.lower() == '.glb':
-        print(f"  [INFO] Converting GLB to OBJ for simplification...")
-        temp_obj_filename = f"{input_path.stem}_temp.obj"
-        temp_obj_file = input_path.parent / temp_obj_filename
+    output_path = Path(output_file)
 
-        from .converter import convert_mesh_format
-        conversion_result = convert_mesh_format(
+    print(f"\n[SIMPLIFY] Starting simplification")
+    print(f"  Input: {input_path.name}")
+    print(f"  Output: {output_path.name}")
+
+    # GLB-First: Utiliser simplify_mesh_glb directement pour les GLB
+    if input_path.suffix.lower() == '.glb':
+        print(f"  [GLB-First] Direct GLB simplification (no conversion)")
+
+        # S'assurer que la sortie est aussi en GLB
+        if output_path.suffix.lower() != '.glb':
+            output_path = output_path.with_suffix('.glb')
+
+        result = simplify_mesh_glb(
             input_path=input_path,
-            output_path=temp_obj_file,
-            output_format='obj'
+            output_path=output_path,
+            target_triangles=target_triangles,
+            reduction_ratio=reduction_ratio
+        )
+    else:
+        # Fallback pour autres formats (OBJ, PLY, etc.)
+        result = simplify_mesh(
+            input_path=input_path,
+            output_path=output_path,
+            target_triangles=target_triangles,
+            reduction_ratio=reduction_ratio,
+            preserve_boundary=preserve_boundary,
+            use_trimesh=True
         )
 
-        if not conversion_result['success']:
-            return {
-                'success': False,
-                'error': f"Conversion GLB→OBJ échouée: {conversion_result.get('error')}"
-            }
-
-        # Utiliser le fichier OBJ temporaire comme input
-        input_file = str(temp_obj_file)
-        print(f"  [INFO] Using temporary OBJ: {temp_obj_filename}")
-
-    # Exécute la simplification
-    # TEMPORAIRE: Utiliser Trimesh au lieu d'Open3D pour tester
-    result = simplify_mesh(
-        input_path=Path(input_file),
-        output_path=Path(output_file),
-        target_triangles=target_triangles,
-        reduction_ratio=reduction_ratio,
-        preserve_boundary=preserve_boundary,
-        use_trimesh=True  # TEST: Utiliser Trimesh
-    )
-
-    # IMPORTANT: Après simplification, invalider le cache GLB du fichier SOURCE
-    # Le fichier source n'a pas changé, mais on veut régénérer le GLB si l'utilisateur
-    # re-upload le fichier simplifié pour remplacement
     if result.get('success'):
-        print(f"   Simplification completed successfully")
+        print(f"  [OK] Simplification completed")
 
-        # Note: On n'invalide PAS le cache du fichier d'entrée car il n'a pas changé
-        # Le GLB du fichier d'entrée reste valide
-        # Si l'utilisateur veut visualiser le résultat, il devra uploader le fichier de sortie
-        # qui générera automatiquement son propre GLB
+        # Warning si textures perdues
+        if result.get('textures_lost'):
+            print(f"  [WARN] Textures were lost during simplification")
 
-        # Transformer le résultat pour le frontend
-        output_path = Path(output_file)
-        result_data = {
+        return {
             'success': True,
             'output_filename': output_path.name,
             'output_file': str(output_path),
@@ -738,20 +728,10 @@ def simplify_task_handler(task: Task):
             'reduction': {
                 'vertices_ratio': result.get('vertices_ratio', 0),
                 'triangles_ratio': result.get('triangles_ratio', 0)
-            }
+            },
+            'had_textures': result.get('had_textures', False),
+            'textures_lost': result.get('textures_lost', False)
         }
-
-        # Nettoyer le fichier OBJ temporaire si on a converti depuis GLB
-        if '_temp.obj' in str(input_file) and Path(input_file).exists():
-            print(f"  [CLEANUP] Removing temporary OBJ file")
-            Path(input_file).unlink()
-
-        return result_data
-
-    # En cas d'échec, nettoyer quand même le fichier temporaire
-    if '_temp.obj' in str(input_file) and Path(input_file).exists():
-        print(f"  [CLEANUP] Removing temporary OBJ file")
-        Path(input_file).unlink()
 
     return result
 
