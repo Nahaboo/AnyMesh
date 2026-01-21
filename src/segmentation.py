@@ -6,8 +6,11 @@ Combine Open3D et PyMeshLab pour différentes stratégies
 import open3d as o3d
 import pymeshlab as ml
 import numpy as np
+import trimesh
 from pathlib import Path
 from typing import Dict, Any
+
+from .temp_utils import get_temp_path, safe_delete
 
 
 def segment_by_connectivity(
@@ -579,3 +582,132 @@ def segment_mesh(
         }
 
     return methods[method](input_path, output_path, **kwargs)
+
+
+def segment_mesh_glb(
+    input_glb: Path,
+    output_glb: Path,
+    method: str = "connectivity",
+    temp_dir: Path = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    GLB-First: Segmente un GLB via conversion temporaire OBJ.
+
+    Pipeline: GLB → OBJ (temp) → Segmentation (Open3D) → OBJ (temp) → GLB
+
+    Args:
+        input_glb: Chemin du fichier GLB d'entrée
+        output_glb: Chemin du fichier GLB de sortie
+        method: Méthode de segmentation
+        temp_dir: Répertoire pour fichiers temporaires
+        **kwargs: Paramètres spécifiques à la méthode
+
+    Returns:
+        Dict avec résultat et statistiques
+    """
+    if temp_dir is None:
+        temp_dir = Path("data/temp")
+
+    temp_in = None
+    temp_out = None
+
+    try:
+        if not input_glb.exists():
+            return {"success": False, "error": f"Input file not found: {input_glb}"}
+
+        # 1. Charger le GLB et détecter textures
+        print(f"[SEGMENTATION-GLB] Loading GLB: {input_glb.name}")
+
+        loaded = trimesh.load(str(input_glb))
+
+        # Gérer les Scenes
+        if hasattr(loaded, 'geometry'):
+            meshes = list(loaded.geometry.values())
+            if len(meshes) == 0:
+                return {"success": False, "error": "Scene vide, aucune geometrie"}
+            mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
+        else:
+            mesh = loaded
+
+        had_textures = (
+            hasattr(mesh, 'visual') and
+            hasattr(mesh.visual, 'material') and
+            mesh.visual.material is not None
+        )
+
+        original_vertices = len(mesh.vertices)
+        original_faces = len(mesh.faces)
+
+        # 2. Exporter en OBJ temporaire pour Open3D
+        temp_in = get_temp_path("segment_in", ".obj", temp_dir)
+        mesh.export(str(temp_in), file_type='obj')
+        print(f"[SEGMENTATION-GLB] Temp OBJ created: {temp_in.name}")
+
+        # 3. Appeler la segmentation
+        temp_out = get_temp_path("segment_out", ".obj", temp_dir)
+
+        result = segment_mesh(
+            input_path=temp_in,
+            output_path=temp_out,
+            method=method,
+            **kwargs
+        )
+
+        if not result['success']:
+            return result
+
+        # 4. Charger le OBJ résultat (avec vertex colors) et exporter en GLB
+        print(f"[SEGMENTATION-GLB] Converting result to GLB")
+
+        # Open3D charge mieux les vertex colors
+        o3d_mesh = o3d.io.read_triangle_mesh(str(temp_out))
+        vertices = np.asarray(o3d_mesh.vertices)
+        faces = np.asarray(o3d_mesh.triangles)
+
+        # Créer le mesh Trimesh avec vertex colors
+        segmented_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+
+        # Transférer les vertex colors si présentes
+        if o3d_mesh.has_vertex_colors():
+            vertex_colors = np.asarray(o3d_mesh.vertex_colors)
+            # Trimesh attend des couleurs RGBA en uint8 ou float 0-1
+            # Open3D donne float 0-1 en RGB, ajouter alpha=1
+            rgba_colors = np.ones((len(vertex_colors), 4))
+            rgba_colors[:, :3] = vertex_colors
+            segmented_mesh.visual.vertex_colors = (rgba_colors * 255).astype(np.uint8)
+
+        segmented_mesh.export(str(output_glb), file_type='glb')
+
+        final_vertices = len(segmented_mesh.vertices)
+        final_faces = len(segmented_mesh.faces)
+
+        print(f"[SEGMENTATION-GLB] Success: {result.get('num_segments', 0)} segments")
+
+        return {
+            **result,
+            "output_filename": output_glb.name,
+            "output_format": "glb",
+            "original_vertices": original_vertices,
+            "original_faces": original_faces,
+            "vertices_count": final_vertices,
+            "faces_count": final_faces,
+            "had_textures": had_textures,
+            "textures_lost": had_textures  # Toujours perdues après segmentation
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": f"GLB segmentation error: {str(e)}"
+        }
+    finally:
+        safe_delete(temp_in)
+        safe_delete(temp_out)
+        # Aussi supprimer le .mtl qui accompagne le .obj
+        if temp_out:
+            mtl_file = temp_out.with_suffix('.mtl')
+            safe_delete(mtl_file)
+        print(f"[SEGMENTATION-GLB] Temp files cleaned up")

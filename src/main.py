@@ -28,7 +28,7 @@ from .glb_cache import (
 )
 from .stability_client import generate_mesh_from_image_sf3d
 from .retopology import retopologize_mesh, retopologize_mesh_glb
-from .segmentation import segment_mesh
+from .segmentation import segment_mesh, segment_mesh_glb
 from .temp_utils import cleanup_temp_directory, safe_delete
 
 # Charger les variables d'environnement depuis .env
@@ -1530,8 +1530,9 @@ def retopologize_task_handler(task: Task):
 
 def segment_task_handler(task: Task):
     """
-    Handler pour la tâche de segmentation
-    Appelle le module segmentation.py selon la méthode choisie
+    Handler pour la tâche de segmentation.
+
+    GLB-First: Utilise segment_mesh_glb pour les fichiers GLB.
     """
     params = task.params
     filename = params.get("filename")
@@ -1554,17 +1555,11 @@ def segment_task_handler(task: Task):
         input_path = DATA_INPUT / filename
         source_label = "input"
 
-    # Générer le nom de sortie
-    base_name = Path(filename).stem
-    extension = Path(filename).suffix
-    output_filename = f"{base_name}_segmented{extension}"
-    output_path = DATA_SEGMENTED / output_filename
+    print(f"\n[SEGMENT] Starting segmentation")
+    print(f"  Input: {filename} ({source_label})")
+    print(f"  Method: {method}")
 
-    print(f"[SEGMENT-TASK] Segmentation de {filename}")
-    print(f"  Méthode: {method}")
-    print(f"  Source: {source_label}")
-
-    # Construire les kwargs pour segment_mesh
+    # Construire les kwargs
     kwargs = {}
     if params.get("angle_threshold") is not None:
         kwargs["angle_threshold"] = params["angle_threshold"]
@@ -1573,8 +1568,52 @@ def segment_task_handler(task: Task):
     if params.get("num_planes") is not None:
         kwargs["num_planes"] = params["num_planes"]
 
-    # Appeler la fonction de segmentation
     try:
+        # GLB-First: Utiliser segment_mesh_glb pour les GLB
+        if input_path.suffix.lower() == '.glb':
+            print(f"  [GLB-First] Direct GLB segmentation pipeline")
+
+            # Sortie en GLB
+            output_filename = f"{input_path.stem}_segmented.glb"
+            output_path = DATA_SEGMENTED / output_filename
+
+            result = segment_mesh_glb(
+                input_glb=input_path,
+                output_glb=output_path,
+                method=method,
+                temp_dir=DATA_TEMP,
+                **kwargs
+            )
+
+            if result.get('success'):
+                print(f"  [OK] Segmentation completed: {result.get('num_segments', 0)} segments")
+                if result.get('textures_lost'):
+                    print(f"  [WARN] Textures were lost during segmentation")
+
+                return {
+                    "success": True,
+                    "output_filename": output_filename,
+                    "output_size": output_path.stat().st_size if output_path.exists() else 0,
+                    "num_segments": result.get("num_segments", 0),
+                    "method": method,
+                    "vertices_count": result.get("vertices_count", 0),
+                    "faces_count": result.get("faces_count", 0),
+                    "had_textures": result.get("had_textures", False),
+                    "textures_lost": result.get("textures_lost", False),
+                    **{k: v for k, v in result.items() if k not in [
+                        'success', 'output_filename', 'output_format',
+                        'original_vertices', 'original_faces', 'vertices_count',
+                        'faces_count', 'had_textures', 'textures_lost'
+                    ]}
+                }
+            return result
+
+        # Fallback pour autres formats
+        base_name = Path(filename).stem
+        extension = Path(filename).suffix
+        output_filename = f"{base_name}_segmented{extension}"
+        output_path = DATA_SEGMENTED / output_filename
+
         result = segment_mesh(
             input_path=input_path,
             output_path=output_path,
@@ -1582,37 +1621,26 @@ def segment_task_handler(task: Task):
             **kwargs
         )
 
-        if not result.get("success", False):
-            error_msg = result.get("error", "Erreur inconnue")
-            print(f"[SEGMENT-TASK] Échec: {error_msg}")
+        if result.get("success"):
+            print(f"  [OK] Segmentation completed: {result.get('num_segments', 0)} segments")
             return {
-                "success": False,
-                "error": error_msg
+                "success": True,
+                "output_filename": output_filename,
+                "output_size": output_path.stat().st_size,
+                "num_segments": result.get("num_segments", 0),
+                "method": method,
+                **result
             }
 
-        # Calculer la taille du fichier
-        file_size = output_path.stat().st_size
-
-        print(f"[SEGMENT-TASK] Succès: {result.get('num_segments', 0)} segments")
-        print(f"  Fichier: {output_filename} ({file_size} bytes)")
-
-        return {
-            "success": True,
-            "output_filename": output_filename,
-            "output_size": file_size,
-            "num_segments": result.get("num_segments", 0),
-            "method": method,
-            **result  # Inclure les méta-données spécifiques à la méthode
-        }
+        print(f"  [ERROR] Segmentation failed: {result.get('error')}")
+        return result
 
     except Exception as e:
-        error_msg = f"Erreur lors de la segmentation: {str(e)}"
-        print(f"[SEGMENT-TASK] Exception: {error_msg}")
         import traceback
         traceback.print_exc()
         return {
             "success": False,
-            "error": error_msg
+            "error": f"Segmentation error: {str(e)}"
         }
 
 @app.post("/generate-mesh-fake")
