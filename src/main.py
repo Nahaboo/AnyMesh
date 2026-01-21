@@ -18,7 +18,7 @@ import trimesh
 
 from .task_manager import task_manager, Task
 from .simplify import simplify_mesh, adaptive_simplify_mesh
-from .converter import convert_and_compress, convert_mesh_format
+from .converter import convert_and_compress, convert_mesh_format, convert_any_to_glb
 from .glb_cache import (
     invalidate_glb_cache,
     should_convert_to_glb,
@@ -278,11 +278,18 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
 @app.post("/upload")
 async def upload_mesh(file: UploadFile = File(...)):
     """
-    Upload un fichier de maillage 3D avec analyse complète
+    Upload un fichier de maillage 3D avec conversion automatique vers GLB.
+
+    GLB-First Architecture:
+    - Tous les fichiers sont convertis en GLB (format master)
+    - Le fichier original est sauvegardé temporairement puis supprimé
+    - Seul le GLB reste dans data/input/
+
     Formats supportés: OBJ, STL, PLY, OFF, GLTF, GLB
     """
+    import uuid
     start_total = time.time()
-    print(f"\n [PERF] Upload started: {file.filename}")
+    print(f"\n[UPLOAD] Started: {file.filename}")
 
     # Vérification de l'extension
     file_ext = Path(file.filename).suffix.lower()
@@ -292,11 +299,12 @@ async def upload_mesh(file: UploadFile = File(...)):
             detail=f"Format non supporté. Formats acceptés: {', '.join(SUPPORTED_FORMATS)}"
         )
 
-    # Sauvegarde du fichier
+    # GLB-First: Sauvegarder d'abord dans temp/
     start_save = time.time()
-    file_path = DATA_INPUT / file.filename
+    temp_path = DATA_TEMP / f"upload_{uuid.uuid4().hex[:8]}{file_ext}"
+
     try:
-        with open(file_path, "wb") as buffer:
+        with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
         raise HTTPException(
@@ -305,65 +313,66 @@ async def upload_mesh(file: UploadFile = File(...)):
         ) from e
 
     save_duration = (time.time() - start_save) * 1000
-    print(f"   File save: {save_duration:.2f}ms ({file_path.stat().st_size / 1024 / 1024:.2f} MB)")
+    original_size = temp_path.stat().st_size
+    print(f"  Temp save: {save_duration:.2f}ms ({original_size / 1024 / 1024:.2f} MB)")
 
-    # Utilisation de trimesh pour toutes les analyses
-    start_load = time.time()
+    # GLB-First: Définir le chemin GLB avant le try pour le cleanup
+    glb_filename = f"{Path(file.filename).stem}.glb"
+    glb_path = DATA_INPUT / glb_filename
+
     try:
-        loaded = trimesh.load(str(file_path))
-        load_duration = (time.time() - start_load) * 1000
-        print(f"   trimesh load: {load_duration:.2f}ms")
+        # GLB-First: Convertir vers GLB
+        start_convert = time.time()
 
-        # Si c'est une Scene, extraire et fusionner les géométries
+        conversion_result = convert_any_to_glb(temp_path, glb_path)
+        convert_duration = (time.time() - start_convert) * 1000
+
+        if not conversion_result['success']:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Conversion GLB echouee: {conversion_result.get('error')}"
+            )
+
+        print(f"  GLB conversion: {convert_duration:.2f}ms")
+        print(f"    Original format: {conversion_result['original_format']}")
+        print(f"    Has textures: {conversion_result['has_textures']}")
+
+        # Charger le GLB pour analyse
+        start_load = time.time()
+        loaded = trimesh.load(str(glb_path))
+
+        # Gérer les Scenes
         if hasattr(loaded, 'geometry'):
-            # C'est une Scene avec potentiellement plusieurs meshes
-            print(f"  🔍 Scene détectée avec {len(loaded.geometry)} géométrie(s)")
             meshes = list(loaded.geometry.values())
             if len(meshes) == 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="La scène ne contient aucune géométrie"
-                )
-            elif len(meshes) == 1:
-                mesh = meshes[0]
-            else:
-                # Fusionner plusieurs meshes
-                mesh = trimesh.util.concatenate(meshes)
-                print(f"  🔗 {len(meshes)} meshes fusionnés")
+                raise HTTPException(status_code=400, detail="La scene ne contient aucune geometrie")
+            mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
         else:
-            # C'est directement un Mesh
             mesh = loaded
 
+        load_duration = (time.time() - start_load) * 1000
+        print(f"  GLB load: {load_duration:.2f}ms")
+
+        # Validation
         if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Le fichier ne contient pas de vertices valides"
-            )
-
+            raise HTTPException(status_code=400, detail="Le fichier ne contient pas de vertices valides")
         if not hasattr(mesh, 'faces') or len(mesh.faces) == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Le fichier ne contient pas de faces (mesh vide ou nuage de points)"
-            )
+            raise HTTPException(status_code=400, detail="Le fichier ne contient pas de faces")
 
-        # Extraction des propriétés du maillage
+        # Analyse du mesh
         start_analyze = time.time()
 
-        # Convertir les propriétés trimesh en types JSON-sérialisables
         is_watertight = bool(mesh.is_watertight) if hasattr(mesh, 'is_watertight') else False
         is_winding_consistent = bool(mesh.is_winding_consistent) if hasattr(mesh, 'is_winding_consistent') else None
 
-        # Volume - calcul sécurisé uniquement si watertight
         volume = None
         if is_watertight:
             try:
                 volume = float(mesh.volume)
             except Exception:
-                # Ignorer si le calcul échoue (mesh invalide)
                 pass
 
-        # Bounding box pour ajuster la caméra frontend
-        bounds = mesh.bounds  # [[min_x, min_y, min_z], [max_x, max_y, max_z]]
+        bounds = mesh.bounds
         bounding_box = {
             "min": [float(bounds[0][0]), float(bounds[0][1]), float(bounds[0][2])],
             "max": [float(bounds[1][0]), float(bounds[1][1]), float(bounds[1][2])],
@@ -371,142 +380,69 @@ async def upload_mesh(file: UploadFile = File(...)):
                      float(bounds[1][1] - bounds[0][1]),
                      float(bounds[1][2] - bounds[0][2])],
             "center": [float(mesh.centroid[0]), float(mesh.centroid[1]), float(mesh.centroid[2])],
-            "diagonal": float(mesh.scale)  # Longueur de la diagonale de la bounding box
+            "diagonal": float(mesh.scale)
         }
 
         mesh_info = {
-            "filename": file.filename,
-            "file_size": file_path.stat().st_size,
-            "format": file_ext,
+            "filename": glb_filename,  # GLB-First: filename est toujours le GLB
+            "original_filename": file.filename,  # Nom original pour référence
+            "original_format": conversion_result['original_format'],
+            "file_size": glb_path.stat().st_size,
+            "format": ".glb",  # GLB-First: format est toujours .glb
             "vertices_count": int(len(mesh.vertices)),
             "triangles_count": int(len(mesh.faces)),
             "has_normals": hasattr(mesh, 'vertex_normals') and mesh.vertex_normals is not None,
             "has_colors": bool(hasattr(mesh.visual, 'vertex_colors') and mesh.visual.vertex_colors is not None),
+            "has_textures": conversion_result['has_textures'],
             "is_watertight": is_watertight,
             "is_orientable": is_winding_consistent,
-            "is_manifold": None,  # Trimesh n'a pas d'équivalent direct simple
-            # Propriétés supplémentaires trimesh
+            "is_manifold": None,
             "euler_number": int(mesh.euler_number) if hasattr(mesh, 'euler_number') else None,
             "volume": volume,
-            "bounding_box": bounding_box  # Pour ajuster la caméra Three.js
+            "bounding_box": bounding_box
         }
+
         analyze_duration = (time.time() - start_analyze) * 1000
-        print(f"   Analysis: {analyze_duration:.2f}ms")
-        print(f"     Vertices: {mesh_info['vertices_count']:,}")
-        print(f"     Triangles: {mesh_info['triangles_count']:,}")
-
-        # Conversion automatique vers GLB pour la visualisation frontend
-        # IMPORTANT: Le GLB sert UNIQUEMENT à la visualisation
-        # Toutes les opérations (simplification, réparation) utilisent le fichier original
-        glb_filename = file.filename
-        conversion_result = None
-
-        if not is_glb_file(file.filename):
-            # Vérifier si la conversion est recommandée (limite de taille)
-            should_convert, reason = should_convert_to_glb(
-                file.filename,
-                file_path.stat().st_size,
-                max_size_mb=50
-            )
-
-            if should_convert:
-                # Générer le nom du fichier GLB
-                glb_filename = f"{file_path.stem}.glb"
-                glb_path = DATA_INPUT / glb_filename
-
-                # Invalider le cache GLB existant pour forcer la reconversion
-                invalidate_glb_cache(file.filename, DATA_INPUT)
-
-                # Convertir vers GLB
-                conversion_result = convert_and_compress(
-                    input_path=file_path,
-                    output_path=glb_path,
-                    enable_draco=False,
-                    compression_level=7
-                )
-
-                if conversion_result['success']:
-                    # Mettre à jour mesh_info avec le nouveau filename GLB
-                    mesh_info['glb_filename'] = glb_filename
-                    mesh_info['glb_size'] = conversion_result['final_size']
-                    mesh_info['original_filename'] = file.filename
-                    mesh_info['original_size'] = file_path.stat().st_size
-                    print(f"  ✓ GLB generated for visualization: {glb_filename}")
-                else:
-                    print(f"   GLB conversion failed: {conversion_result.get('error')}")
-                    # Continuer avec le fichier original
-                    glb_filename = file.filename
-            else:
-                # Conversion non recommandée (fichier trop gros)
-                print(f"   Skipping GLB conversion: {reason}")
-                conversion_result = {
-                    'skipped': True,
-                    'reason': reason
-                }
-        else:
-            # Fichier déjà GLB/GLTF
-            print("   File is already GLB/GLTF")
-
-            # Convertir GLB → OBJ pour permettre les opérations (simplification, retopo, segmentation)
-            obj_filename = f"{file_path.stem}.obj"
-            obj_path = DATA_INPUT / obj_filename
-
-            print(f"   Converting GLB → OBJ for processing: {obj_filename}")
-            obj_conversion_result = convert_mesh_format(
-                input_path=file_path,
-                output_path=obj_path,
-                output_format='obj'
-            )
-
-            if obj_conversion_result['success']:
-                # Mettre à jour mesh_info pour indiquer qu'on a un fichier OBJ pour le traitement
-                mesh_info['original_filename'] = file.filename  # GLB original pour visualisation
-                mesh_info['processing_filename'] = obj_filename  # OBJ pour opérations
-                mesh_info['processing_size'] = obj_path.stat().st_size
-                print(f"   ✓ OBJ created for processing: {obj_filename}")
-            else:
-                print(f"   ⚠️ OBJ conversion failed: {obj_conversion_result.get('error')}")
-                # Continuer avec le GLB (les opérations seront bloquées côté frontend)
-
-            conversion_result = {
-                'skipped': True,
-                'reason': 'File is already GLB/GLTF',
-                'obj_conversion': obj_conversion_result
-            }
+        print(f"  Analysis: {analyze_duration:.2f}ms")
+        print(f"    Vertices: {mesh_info['vertices_count']:,}")
+        print(f"    Triangles: {mesh_info['triangles_count']:,}")
 
         total_duration = (time.time() - start_total) * 1000
-        print(f" [PERF] Upload completed: {total_duration:.2f}ms\n")
+        print(f"[UPLOAD] Completed: {total_duration:.2f}ms\n")
 
-        # Timings pour le frontend
         backend_timings = {
             "file_save_ms": round(save_duration, 2),
+            "glb_conversion_ms": round(convert_duration, 2),
             "trimesh_load_ms": round(load_duration, 2),
             "analysis_ms": round(analyze_duration, 2),
             "total_ms": round(total_duration, 2)
         }
 
-        # Ajouter les timings de conversion si disponibles
-        if conversion_result and not conversion_result.get('skipped'):
-            if conversion_result.get('conversion'):
-                backend_timings['glb_conversion_ms'] = conversion_result['conversion'].get('conversion_time_ms', 0)
-            if conversion_result.get('compression'):
-                backend_timings['draco_compression_ms'] = conversion_result['compression'].get('compression_time_ms', 0)
-
         return {
-            "message": "Fichier uploadé avec succès",
+            "message": "Fichier uploade et converti en GLB avec succes",
             "mesh_info": mesh_info,
             "backend_timings": backend_timings,
-            "conversion": conversion_result  # Informations sur la conversion GLB
+            "conversion": {
+                "success": True,
+                "original_format": conversion_result['original_format'],
+                "has_textures": conversion_result['has_textures'],
+                "glb_filename": glb_filename
+            }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        # Supprimer le fichier si le chargement échoue
-        if file_path.exists():
-            file_path.unlink()
+        # Supprimer le GLB si créé
+        if glb_path.exists():
+            glb_path.unlink()
         raise HTTPException(
             status_code=400,
             detail=f"Erreur lors du chargement du maillage: {str(e)}"
         ) from e
+    finally:
+        # GLB-First: Toujours supprimer le fichier temporaire
+        safe_delete(temp_path)
 
 @app.get("/analyze/{filename}")
 async def analyze_mesh(filename: str):

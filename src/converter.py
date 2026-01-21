@@ -406,6 +406,122 @@ def convert_mesh_format(
         }
 
 
+def convert_any_to_glb(input_path: Path, output_path: Path) -> dict:
+    """
+    GLB-First: Convertit n'importe quel format 3D vers GLB.
+
+    Cette fonction est utilisée lors de l'upload pour convertir
+    tous les fichiers en GLB (format master).
+
+    Args:
+        input_path: Chemin du fichier source (OBJ, STL, PLY, OFF, GLTF, GLB)
+        output_path: Chemin du fichier GLB de sortie
+
+    Returns:
+        dict: {
+            'success': bool,
+            'has_textures': bool,  # True si le mesh a des textures/matériaux
+            'original_format': str,  # Extension originale (.obj, .stl, etc.)
+            'vertices': int,
+            'triangles': int,
+            'error': str (si échec)
+        }
+    """
+    import shutil
+
+    try:
+        original_format = input_path.suffix.lower()
+
+        # Si déjà GLB, copier simplement
+        if original_format == '.glb':
+            shutil.copy2(input_path, output_path)
+            mesh = trimesh.load(str(output_path))
+
+            # Vérifier si textures présentes
+            has_textures = _mesh_has_textures(mesh)
+
+            return {
+                'success': True,
+                'has_textures': has_textures,
+                'original_format': '.glb',
+                'vertices': len(mesh.vertices) if hasattr(mesh, 'vertices') else 0,
+                'triangles': len(mesh.faces) if hasattr(mesh, 'faces') else 0
+            }
+
+        # Charger le mesh
+        loaded = trimesh.load(str(input_path))
+
+        # Gérer les Scenes (plusieurs meshes)
+        if hasattr(loaded, 'geometry'):
+            meshes = list(loaded.geometry.values())
+            if len(meshes) == 0:
+                return {'success': False, 'error': 'Scene contains no geometry'}
+            elif len(meshes) == 1:
+                mesh = meshes[0]
+            else:
+                mesh = trimesh.util.concatenate(meshes)
+        else:
+            mesh = loaded
+
+        # Vérifier validité
+        if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:
+            return {'success': False, 'error': 'No valid vertices in mesh'}
+        if not hasattr(mesh, 'faces') or len(mesh.faces) == 0:
+            return {'success': False, 'error': 'No faces in mesh (point cloud?)'}
+
+        # Détecter textures/matériaux
+        has_textures = _mesh_has_textures(mesh)
+
+        # Exporter en GLB
+        mesh.export(str(output_path), file_type='glb')
+
+        if not output_path.exists():
+            return {'success': False, 'error': 'GLB file was not created'}
+
+        return {
+            'success': True,
+            'has_textures': has_textures,
+            'original_format': original_format,
+            'vertices': len(mesh.vertices),
+            'triangles': len(mesh.faces)
+        }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Conversion error: {str(e)}",
+            'original_format': input_path.suffix.lower() if input_path else 'unknown'
+        }
+
+
+def _mesh_has_textures(mesh) -> bool:
+    """
+    Vérifie si un mesh Trimesh a des textures ou matériaux.
+
+    Returns:
+        bool: True si le mesh a des données visuelles (textures, matériaux)
+    """
+    if not hasattr(mesh, 'visual'):
+        return False
+
+    visual = mesh.visual
+
+    # Vérifier si c'est un TextureVisuals avec matériau
+    if hasattr(visual, 'material') and visual.material is not None:
+        return True
+
+    # Vérifier si c'est un ColorVisuals avec vertex colors
+    if hasattr(visual, 'vertex_colors'):
+        colors = visual.vertex_colors
+        if colors is not None and len(colors) > 0:
+            # Vérifier si ce n'est pas juste la couleur par défaut
+            # (tous les vertices avec la même couleur grise)
+            if hasattr(colors, 'shape') and colors.shape[0] > 0:
+                return True
+
+    return False
+
+
 def convert_and_compress(
     input_path: Path,
     output_path: Path,
