@@ -34,10 +34,12 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
 
       // Utiliser originalFilename pour la retopologie (fichier source, pas GLB)
       const filenameForRetopology = meshInfo.originalFilename || meshInfo.filename
+      const isSimplified = meshInfo.isSimplified === true
       console.log('[DEBUG] Retopologie du fichier:', filenameForRetopology)
       console.log('[DEBUG] Current faces:', currentFaces)
       console.log('[DEBUG] Target faces:', targetFaceCount)
       console.log('[DEBUG] Is generated mesh:', isGenerated)
+      console.log('[DEBUG] Is simplified mesh:', isSimplified)
 
       onRetopologize({
         filename: filenameForRetopology,
@@ -45,7 +47,8 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
         original_face_count: currentFaces,  // Envoyer le nombre de faces original
         deterministic: deterministic,
         preserve_boundaries: preserveBoundaries,
-        is_generated: isGenerated  // Indiquer si c'est un mesh généré
+        is_generated: isGenerated,  // Indiquer si c'est un mesh généré
+        is_simplified: isSimplified  // Indiquer si c'est un mesh simplifié
       })
     }
   }

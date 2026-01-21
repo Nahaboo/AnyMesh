@@ -1,6 +1,6 @@
 /**
  * Left Toolbar - Vertical tools menu
- * Includes: Simplification (active), Refine, Segmentation, Retopology, Texturing, Rigging (placeholders)
+ * Includes: Simplification, Segmentation, Retopology
  */
 function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
   // Vérifier si on visualise un mesh retopologisé
@@ -18,6 +18,7 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
       enabled: !isRetopologizedMesh,
       disabledReason: isRetopologizedMesh ? 'Mesh retopologisé (quads). La simplification produirait des résultats dégradés. Workflow recommandé: Simplification → Retopologie.' : null
     },
+    /* DISABLED - Refine (not implemented yet)
     {
       id: 'refine',
       label: 'Refine',
@@ -28,6 +29,7 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
       ),
       enabled: false
     },
+    */
     {
       id: 'segmentation',
       label: 'Segmentation',
@@ -47,7 +49,8 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
         </svg>
       ),
       enabled: true
-    },
+    }
+    /* DISABLED - Texturing & Rigging (not implemented yet)
     {
       id: 'texturing',
       label: 'Texturing',
@@ -68,6 +71,7 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
       ),
       enabled: false
     }
+    */
   ]
 
   return (

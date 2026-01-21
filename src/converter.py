@@ -7,6 +7,7 @@ import os
 import subprocess
 from pathlib import Path
 import trimesh
+import numpy as np
 
 
 def convert_to_glb(input_path: Path, output_path: Path) -> dict:
@@ -34,31 +35,70 @@ def convert_to_glb(input_path: Path, output_path: Path) -> dict:
     try:
         # Charger le mesh avec Trimesh
         print(f"   Converting {input_path.name} to GLB...")
-        loaded = trimesh.load(str(input_path))
 
-        # Vérifier le type chargé
-        print(f"   Type chargé: {type(loaded).__name__}")
+        mesh = None
+        trimesh_error = None
 
-        # Si c'est une Scene, extraire le premier mesh
-        if hasattr(loaded, 'geometry'):
-            # C'est une Scene avec potentiellement plusieurs meshes
-            print(f"   Scene détectée avec {len(loaded.geometry)} géométrie(s)")
-            # Fusionner toutes les géométries en un seul mesh
-            meshes = list(loaded.geometry.values())
-            if len(meshes) == 0:
-                return {
-                    'success': False,
-                    'error': 'La scène ne contient aucune géométrie'
-                }
-            elif len(meshes) == 1:
-                mesh = meshes[0]
+        try:
+            loaded = trimesh.load(str(input_path))
+
+            # Vérifier le type chargé
+            print(f"   Type chargé: {type(loaded).__name__}")
+
+            # Si c'est une Scene, extraire le premier mesh
+            if hasattr(loaded, 'geometry'):
+                # C'est une Scene avec potentiellement plusieurs meshes
+                print(f"   Scene détectée avec {len(loaded.geometry)} géométrie(s)")
+                # Fusionner toutes les géométries en un seul mesh
+                meshes = list(loaded.geometry.values())
+                if len(meshes) == 0:
+                    return {
+                        'success': False,
+                        'error': 'La scène ne contient aucune géométrie'
+                    }
+                elif len(meshes) == 1:
+                    mesh = meshes[0]
+                else:
+                    # Fusionner plusieurs meshes
+                    mesh = trimesh.util.concatenate(meshes)
+                    print(f"  🔗 {len(meshes)} meshes fusionnés")
             else:
-                # Fusionner plusieurs meshes
-                mesh = trimesh.util.concatenate(meshes)
-                print(f"  🔗 {len(meshes)} meshes fusionnés")
-        else:
-            # C'est directement un Mesh
-            mesh = loaded
+                # C'est directement un Mesh
+                mesh = loaded
+
+        except Exception as e:
+            trimesh_error = str(e)
+            print(f"   [WARNING] Trimesh failed to load: {trimesh_error}")
+
+            # Fallback vers Open3D pour les fichiers PLY d'Instant Meshes
+            if input_path.suffix.lower() == '.ply':
+                print(f"   [INFO] Trying Open3D for PLY file...")
+                import open3d as o3d
+
+                # Charger avec Open3D
+                mesh_o3d = o3d.io.read_triangle_mesh(str(input_path))
+
+                if not mesh_o3d.has_vertices() or len(mesh_o3d.vertices) == 0:
+                    return {
+                        'success': False,
+                        'error': f'PLY file has no vertices (Trimesh error: {trimesh_error})'
+                    }
+
+                # Convertir Open3D mesh vers Trimesh
+                vertices = np.asarray(mesh_o3d.vertices)
+                faces = np.asarray(mesh_o3d.triangles)
+
+                mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+                print(f"   [OK] Loaded with Open3D: {len(vertices)} vertices, {len(faces)} faces")
+            else:
+                # Re-raise l'erreur pour les autres formats
+                raise
+
+        if mesh is None:
+            return {
+                'success': False,
+                'error': f'Failed to load mesh: {trimesh_error}'
+            }
 
         # Vérifier que le mesh est valide
         if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:

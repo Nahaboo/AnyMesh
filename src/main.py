@@ -28,6 +28,7 @@ from .glb_cache import (
 )
 from .stability_client import generate_mesh_from_image_sf3d
 from .retopology import retopologize_mesh
+from .segmentation import segment_mesh
 
 # Charger les variables d'environnement depuis .env
 load_dotenv()
@@ -53,11 +54,15 @@ DATA_OUTPUT = Path("data/output")
 DATA_INPUT_IMAGES = Path("data/input_images")
 DATA_GENERATED_MESHES = Path("data/generated_meshes")
 DATA_RETOPO = Path("data/retopo")
+DATA_SEGMENTED = Path("data/segmented")
+DATA_GLB_CACHE = Path("data/glb_cache")
 DATA_INPUT.mkdir(parents=True, exist_ok=True)
 DATA_OUTPUT.mkdir(parents=True, exist_ok=True)
 DATA_INPUT_IMAGES.mkdir(parents=True, exist_ok=True)
 DATA_GENERATED_MESHES.mkdir(parents=True, exist_ok=True)
 DATA_RETOPO.mkdir(parents=True, exist_ok=True)
+DATA_SEGMENTED.mkdir(parents=True, exist_ok=True)
+DATA_GLB_CACHE.mkdir(parents=True, exist_ok=True)
 
 # Formats de fichiers supportés
 SUPPORTED_FORMATS = {".obj", ".stl", ".ply", ".off", ".gltf", ".glb"}
@@ -95,6 +100,18 @@ class RetopologyRequest(BaseModel):
     deterministic: bool = True
     preserve_boundaries: bool = True
     is_generated: bool = False  # Si True, cherche dans data/generated_meshes
+    is_simplified: bool = False  # Si True, cherche dans data/output
+
+class SegmentRequest(BaseModel):
+    """Paramètres de segmentation de mesh"""
+    filename: str
+    method: str = "connectivity"  # 'connectivity', 'sharp_edges', 'curvature', 'planes'
+    angle_threshold: Optional[float] = None  # Pour sharp_edges (degrés)
+    num_clusters: Optional[int] = None  # Pour curvature
+    num_planes: Optional[int] = None  # Pour planes
+    is_generated: bool = False  # Si True, cherche dans data/generated_meshes
+    is_simplified: bool = False  # Si True, cherche dans data/output
+    is_retopo: bool = False  # Si True, cherche dans data/retopo
 
 @app.get("/")
 async def root():
@@ -198,7 +215,7 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
         vertices_count = 0
         faces_count = 0
 
-    # Conversion automatique vers GLB si nécessaire
+    # Conversion automatique vers GLB si nécessaire (sauvegardé dans cache séparé)
     glb_filename = file.filename
     conversion_result = None
 
@@ -213,9 +230,9 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
             # Générer un nom unique pour éviter les conflits de cache
             timestamp = int(time.time() * 1000)  # timestamp en millisecondes
             glb_filename = f"{file_path.stem}_{timestamp}.glb"
-            glb_path = DATA_INPUT / glb_filename
+            glb_path = DATA_GLB_CACHE / glb_filename  # MODIFIÉ: utilise glb_cache au lieu de input
 
-            invalidate_glb_cache(file.filename, DATA_INPUT)
+            invalidate_glb_cache(file.filename, DATA_GLB_CACHE)  # MODIFIÉ: invalide dans glb_cache
 
             conversion_result = convert_and_compress(
                 input_path=file_path,
@@ -226,7 +243,7 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
 
             if conversion_result['success']:
                 glb_filename = glb_filename
-                print(f"  ✓ GLB generated: {glb_filename}")
+                print(f"  ✓ GLB generated in cache: {glb_filename}")
             else:
                 print(f"  ⚠️ GLB conversion failed: {conversion_result.get('error')}")
                 glb_filename = file.filename
@@ -236,11 +253,17 @@ async def upload_mesh_fast(file: UploadFile = File(...)):
     total_duration = (time.time() - start_total) * 1000
     print(f" [UPLOAD-FAST] Completed: {total_duration:.2f}ms\n")
 
+    # Retourner un nom de fichier simplifié (sans timestamp) pour le frontend
+    # Ex: bunny.obj uploadé → GLB créé dans cache → retourner "bunny.glb"
+    # Le frontend demandera bunny.glb, et l'endpoint /mesh/input/{filename}
+    # cherchera automatiquement bunny_*.glb dans le cache
+    display_filename = f"{file_path.stem}.glb" if glb_filename != file.filename else file.filename
+
     return {
         "message": "Fichier uploadé avec succès",
         "filename": file.filename,
-        "glb_filename": glb_filename,
-        "original_filename": file.filename if glb_filename != file.filename else None,
+        "glb_filename": display_filename,  # Nom simplifié (ex: bunny.glb)
+        "original_filename": file.filename if display_filename != file.filename else None,
         "file_size": file_size,
         "format": file_ext,
         "bounding_box": bounding_box,
@@ -418,11 +441,34 @@ async def upload_mesh(file: UploadFile = File(...)):
                     'reason': reason
                 }
         else:
-            # Fichier déjà GLB/GLTF, pas de conversion nécessaire
-            print("   File is already GLB/GLTF, no conversion needed")
+            # Fichier déjà GLB/GLTF
+            print("   File is already GLB/GLTF")
+
+            # Convertir GLB → OBJ pour permettre les opérations (simplification, retopo, segmentation)
+            obj_filename = f"{file_path.stem}.obj"
+            obj_path = DATA_INPUT / obj_filename
+
+            print(f"   Converting GLB → OBJ for processing: {obj_filename}")
+            obj_conversion_result = convert_mesh_format(
+                input_path=file_path,
+                output_path=obj_path,
+                output_format='obj'
+            )
+
+            if obj_conversion_result['success']:
+                # Mettre à jour mesh_info pour indiquer qu'on a un fichier OBJ pour le traitement
+                mesh_info['original_filename'] = file.filename  # GLB original pour visualisation
+                mesh_info['processing_filename'] = obj_filename  # OBJ pour opérations
+                mesh_info['processing_size'] = obj_path.stat().st_size
+                print(f"   ✓ OBJ created for processing: {obj_filename}")
+            else:
+                print(f"   ⚠️ OBJ conversion failed: {obj_conversion_result.get('error')}")
+                # Continuer avec le GLB (les opérations seront bloquées côté frontend)
+
             conversion_result = {
                 'skipped': True,
-                'reason': 'File is already GLB/GLTF'
+                'reason': 'File is already GLB/GLTF',
+                'obj_conversion': obj_conversion_result
             }
 
         total_duration = (time.time() - start_total) * 1000
@@ -590,12 +636,14 @@ def simplify_task_handler(task: Task):
         print(f"  [INFO] Using temporary OBJ: {temp_obj_filename}")
 
     # Exécute la simplification
+    # TEMPORAIRE: Utiliser Trimesh au lieu d'Open3D pour tester
     result = simplify_mesh(
         input_path=Path(input_file),
         output_path=Path(output_file),
         target_triangles=target_triangles,
         reduction_ratio=reduction_ratio,
-        preserve_boundary=preserve_boundary
+        preserve_boundary=preserve_boundary,
+        use_trimesh=True  # TEST: Utiliser Trimesh
     )
 
     # IMPORTANT: Après simplification, invalider le cache GLB du fichier SOURCE
@@ -687,12 +735,14 @@ def adaptive_simplify_task_handler(task: Task):
         print(f"  [INFO] Using temporary OBJ: {temp_obj_filename}")
 
     # Exécute la simplification adaptative
-    result = adaptive_simplify_mesh(
+    # TEMPORAIRE: Utiliser Trimesh en mode standard (pas de vraie adaptation)
+    # car Open3D donne de mauvais résultats sur les gros modèles
+    result = simplify_mesh(
         input_path=Path(input_file),
         output_path=Path(output_file),
-        target_ratio=target_ratio,
-        flat_multiplier=flat_multiplier,
-        curvature_threshold=curvature_threshold
+        reduction_ratio=target_ratio,
+        preserve_boundary=True,
+        use_trimesh=True  # Utiliser Trimesh
     )
 
     if result.get('success'):
@@ -759,13 +809,17 @@ async def simplify_mesh_async(request: SimplifyRequest):
     # Vérification du format et conversion si nécessaire
     file_ext = input_path.suffix.lower()
     if file_ext in {".gltf", ".glb"}:
-        # Pour les meshes générés (GLB), on va les convertir en OBJ automatiquement dans le task handler
-        if not request.is_generated:
-            raise HTTPException(
-                status_code=400,
-                detail="La simplification des fichiers GLTF/GLB uploadés n'est pas supportée. Utilisez OBJ, STL ou PLY."
-            )
-        # Si c'est un mesh généré (GLB), on laisse le task handler gérer la conversion
+        # Les GLB sont automatiquement convertis en OBJ lors de l'upload
+        # On utilise le fichier OBJ correspondant pour les opérations
+        obj_filename = f"{input_path.stem}.obj"
+        obj_path = source_dir / obj_filename
+
+        if obj_path.exists():
+            print(f"  [INFO] Using converted OBJ file: {obj_filename}")
+            input_path = obj_path
+        else:
+            # Si pas de fichier OBJ (ancien upload ou mesh généré), on laisse le task handler gérer la conversion
+            print(f"  [INFO] No OBJ file found, will convert in task handler")
 
     # Génération du nom de fichier de sortie
     output_filename = f"{input_path.stem}_simplified{input_path.suffix}"
@@ -808,13 +862,17 @@ async def simplify_mesh_adaptive_async(request: AdaptiveSimplifyRequest):
     # Vérification du format et conversion si nécessaire
     file_ext = input_path.suffix.lower()
     if file_ext in {".gltf", ".glb"}:
-        # Pour les meshes générés (GLB), on va les convertir en OBJ automatiquement dans le task handler
-        if not request.is_generated:
-            raise HTTPException(
-                status_code=400,
-                detail="La simplification des fichiers GLTF/GLB uploadés n'est pas supportée. Utilisez OBJ, STL ou PLY."
-            )
-        # Si c'est un mesh généré (GLB), on laisse le task handler gérer la conversion
+        # Les GLB sont automatiquement convertis en OBJ lors de l'upload
+        # On utilise le fichier OBJ correspondant pour les opérations
+        obj_filename = f"{input_path.stem}.obj"
+        obj_path = source_dir / obj_filename
+
+        if obj_path.exists():
+            print(f"  [INFO] Using converted OBJ file: {obj_filename}")
+            input_path = obj_path
+        else:
+            # Si pas de fichier OBJ (ancien upload ou mesh généré), on laisse le task handler gérer la conversion
+            print(f"  [INFO] No OBJ file found, will convert in task handler")
 
     # Génération du nom de fichier de sortie
     output_filename = f"{input_path.stem}_adaptive{input_path.suffix}"
@@ -863,21 +921,42 @@ async def list_tasks():
 async def get_input_mesh(filename: str):
     """
     Sert un fichier de maillage depuis data/input pour la visualisation
-    Si un fichier GLB converti existe, il sera servi en priorité
+    Si un fichier GLB est demandé, cherche dans le cache avec pattern {stem}_*.glb
+    Sinon, sert le fichier original depuis data/input
     """
     file_path = DATA_INPUT / filename
+    file_ext = Path(filename).suffix.lower()
 
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+    # Si un GLB est demandé, chercher dans le cache avec pattern {stem}_*.glb
+    if file_ext in {".glb", ".gltf"}:
+        import glob
+        stem = Path(filename).stem
+        glb_pattern = str(DATA_GLB_CACHE / f"{stem}_*.glb")
+        matching_glbs = glob.glob(glb_pattern)
 
-    # Stratégie: Servir le GLB s'il existe, sinon le fichier original
-    file_ext = file_path.suffix.lower()
+        if matching_glbs:
+            # Prendre le plus récent (dernier timestamp)
+            glb_path = Path(max(matching_glbs, key=lambda p: Path(p).stat().st_mtime))
+            print(f"  ⚡ Serving GLB from cache: {glb_path.name} (requested: {filename})")
+            file_path = glb_path
+        else:
+            # Fallback: chercher le GLB directement dans data/input (pour les GLB uploadés)
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail=f"Fichier GLB introuvable (cherché dans cache et input)")
+    else:
+        # Fichier non-GLB demandé : vérifier qu'il existe dans data/input
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Fichier non trouvé")
 
-    # Si le fichier demandé n'est pas GLB, vérifier si une version GLB existe
-    if file_ext not in {".glb", ".gltf"}:
-        glb_path = DATA_INPUT / f"{file_path.stem}.glb"
-        if glb_path.exists():
-            print(f"  ⚡ Serving GLB instead of {filename}: {glb_path.name}")
+        # Chercher si une version GLB existe dans le cache pour l'optimisation
+        import glob
+        glb_pattern = str(DATA_GLB_CACHE / f"{file_path.stem}_*.glb")
+        matching_glbs = glob.glob(glb_pattern)
+
+        if matching_glbs:
+            # Prendre le plus récent (dernier timestamp)
+            glb_path = Path(max(matching_glbs, key=lambda p: Path(p).stat().st_mtime))
+            print(f"  ⚡ Serving GLB from cache instead of {filename}: {glb_path.name}")
             file_path = glb_path
             file_ext = ".glb"
 
@@ -988,7 +1067,7 @@ async def download_mesh(filename: str):
     )
 
 @app.get("/export/{filename}")
-async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False, is_simplified: bool = False, is_retopologized: bool = False):
+async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False, is_simplified: bool = False, is_retopologized: bool = False, is_segmented: bool = False):
     """
     Exporte un fichier de maillage dans le format demandé
 
@@ -998,12 +1077,15 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
         is_generated: Si True, cherche dans data/generated_meshes
         is_simplified: Si True, cherche dans data/output (meshes simplifiés)
         is_retopologized: Si True, cherche dans data/retopo (meshes retopologisés)
+        is_segmented: Si True, cherche dans data/segmented (meshes segmentés)
 
     Returns:
         Le fichier converti au format demandé
     """
     # Déterminer le dossier source
-    if is_retopologized:
+    if is_segmented:
+        source_dir = DATA_SEGMENTED
+    elif is_retopologized:
         source_dir = DATA_RETOPO
     elif is_simplified:
         source_dir = DATA_OUTPUT
@@ -1312,17 +1394,15 @@ def retopologize_task_handler(task: Task):
     deterministic = params.get("deterministic", True)
     preserve_boundaries = params.get("preserve_boundaries", True)
     is_generated = params.get("is_generated", False)
+    is_simplified = params.get("is_simplified", False)
 
-    # Chercher le fichier dans plusieurs dossiers selon l'origine
-    # 1. data/generated_meshes (meshes générés par API)
-    # 2. data/output (fichiers simplifiés)
-    # 3. data/input (fichiers originaux)
-    if is_generated:
+    # Déterminer le dossier source selon le flag
+    if is_simplified:
+        input_file = DATA_OUTPUT / filename
+    elif is_generated:
         input_file = DATA_GENERATED_MESHES / filename
     else:
-        input_file = DATA_OUTPUT / filename
-        if not input_file.exists():
-            input_file = DATA_INPUT / filename
+        input_file = DATA_INPUT / filename
 
     # Si le fichier n'existe pas, erreur
     if not input_file.exists():
@@ -1356,7 +1436,8 @@ def retopologize_task_handler(task: Task):
         filename = temp_obj_filename
 
     # Générer le nom du fichier de sortie
-    output_filename = f"{Path(filename).stem}_retopo{Path(filename).suffix}"
+    # Instant Meshes produit toujours du PLY, donc forcer l'extension
+    output_filename = f"{Path(filename).stem}_retopo.ply"
     output_file = DATA_RETOPO / output_filename
 
     # Supprimer les anciens fichiers de résultat s'ils existent (OBJ/STL/PLY et GLB)
@@ -1402,6 +1483,93 @@ def retopologize_task_handler(task: Task):
         input_file.unlink()
 
     return result
+
+def segment_task_handler(task: Task):
+    """
+    Handler pour la tâche de segmentation
+    Appelle le module segmentation.py selon la méthode choisie
+    """
+    params = task.params
+    filename = params.get("filename")
+    method = params.get("method", "connectivity")
+    is_generated = params.get("is_generated", False)
+    is_simplified = params.get("is_simplified", False)
+    is_retopo = params.get("is_retopo", False)
+
+    # Déterminer le fichier source selon les flags
+    if is_generated:
+        input_path = DATA_GENERATED_MESHES / filename
+        source_label = "generated"
+    elif is_simplified:
+        input_path = DATA_OUTPUT / filename
+        source_label = "output"
+    elif is_retopo:
+        input_path = DATA_RETOPO / filename
+        source_label = "retopo"
+    else:
+        input_path = DATA_INPUT / filename
+        source_label = "input"
+
+    # Générer le nom de sortie
+    base_name = Path(filename).stem
+    extension = Path(filename).suffix
+    output_filename = f"{base_name}_segmented{extension}"
+    output_path = DATA_SEGMENTED / output_filename
+
+    print(f"[SEGMENT-TASK] Segmentation de {filename}")
+    print(f"  Méthode: {method}")
+    print(f"  Source: {source_label}")
+
+    # Construire les kwargs pour segment_mesh
+    kwargs = {}
+    if params.get("angle_threshold") is not None:
+        kwargs["angle_threshold"] = params["angle_threshold"]
+    if params.get("num_clusters") is not None:
+        kwargs["num_clusters"] = params["num_clusters"]
+    if params.get("num_planes") is not None:
+        kwargs["num_planes"] = params["num_planes"]
+
+    # Appeler la fonction de segmentation
+    try:
+        result = segment_mesh(
+            input_path=input_path,
+            output_path=output_path,
+            method=method,
+            **kwargs
+        )
+
+        if not result.get("success", False):
+            error_msg = result.get("error", "Erreur inconnue")
+            print(f"[SEGMENT-TASK] Échec: {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg
+            }
+
+        # Calculer la taille du fichier
+        file_size = output_path.stat().st_size
+
+        print(f"[SEGMENT-TASK] Succès: {result.get('num_segments', 0)} segments")
+        print(f"  Fichier: {output_filename} ({file_size} bytes)")
+
+        return {
+            "success": True,
+            "output_filename": output_filename,
+            "output_size": file_size,
+            "num_segments": result.get("num_segments", 0),
+            "method": method,
+            **result  # Inclure les méta-données spécifiques à la méthode
+        }
+
+    except Exception as e:
+        error_msg = f"Erreur lors de la segmentation: {str(e)}"
+        print(f"[SEGMENT-TASK] Exception: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": error_msg
+        }
 
 @app.post("/generate-mesh-fake")
 async def generate_mesh_fake(request: GenerateMeshRequest):
@@ -1583,8 +1751,14 @@ async def retopologize(request: RetopologyRequest):
     """
     Lance une tâche de retopologie avec Instant Meshes
     """
-    # Déterminer le dossier source selon is_generated
-    source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
+    # Déterminer le dossier source selon le flag
+    if request.is_simplified:
+        source_dir = DATA_OUTPUT
+    elif request.is_generated:
+        source_dir = DATA_GENERATED_MESHES
+    else:
+        source_dir = DATA_INPUT
+
     input_file = source_dir / request.filename
 
     if not input_file.exists():
@@ -1617,7 +1791,8 @@ async def retopologize(request: RetopologyRequest):
             "target_face_count": request.target_face_count,
             "deterministic": request.deterministic,
             "preserve_boundaries": request.preserve_boundaries,
-            "is_generated": request.is_generated
+            "is_generated": request.is_generated,
+            "is_simplified": request.is_simplified
         }
     )
 
@@ -1690,6 +1865,85 @@ async def get_retopo_mesh(filename: str):
         }
     )
 
+@app.post("/segment")
+async def segment(request: SegmentRequest):
+    """
+    Crée une tâche de segmentation asynchrone
+
+    La segmentation colore le mesh selon différentes méthodes géométriques.
+    Formats supportés: OBJ, STL, PLY, OFF
+    """
+    # Déterminer le dossier source selon les flags
+    if request.is_generated:
+        input_dir = DATA_GENERATED_MESHES
+        source_label = "generated"
+    elif request.is_simplified:
+        input_dir = DATA_OUTPUT
+        source_label = "output"
+    elif request.is_retopo:
+        input_dir = DATA_RETOPO
+        source_label = "retopo"
+    else:
+        input_dir = DATA_INPUT
+        source_label = "input"
+
+    input_path = input_dir / request.filename
+
+    # Vérifier que le fichier existe
+    if not input_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Fichier {request.filename} introuvable dans {source_label}"
+        )
+
+    # Créer la tâche asynchrone
+    task_id = task_manager.create_task(
+        task_type="segment",
+        params={
+            "filename": request.filename,
+            "method": request.method,
+            "angle_threshold": request.angle_threshold,
+            "num_clusters": request.num_clusters,
+            "num_planes": request.num_planes,
+            "is_generated": request.is_generated,
+            "is_simplified": request.is_simplified,
+            "is_retopo": request.is_retopo
+        }
+    )
+
+    return {
+        "task_id": task_id,
+        "message": f"Segmentation lancée avec méthode '{request.method}'"
+    }
+
+@app.get("/mesh/segmented/{filename}")
+async def get_segmented_mesh(filename: str):
+    """Télécharge un mesh segmenté depuis data/segmented/"""
+    file_path = DATA_SEGMENTED / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier segmenté introuvable")
+
+    return FileResponse(
+        path=str(file_path),
+        media_type="application/octet-stream",
+        filename=filename
+    )
+
+@app.get("/mesh/glb_cache/{filename}")
+async def get_glb_cache_mesh(filename: str):
+    """Sert un fichier GLB depuis le cache data/glb_cache/"""
+    file_path = DATA_GLB_CACHE / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier GLB cache introuvable")
+
+    return FileResponse(
+        path=str(file_path),
+        media_type="model/gltf-binary",
+        filename=filename
+    )
+
 # Initialisation du gestionnaire de tâches
 @app.on_event("startup")
 async def startup_event():
@@ -1711,6 +1965,7 @@ async def startup_event():
     task_manager.register_handler("simplify_adaptive", adaptive_simplify_task_handler)
     task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
     task_manager.register_handler("retopologize", retopologize_task_handler)
+    task_manager.register_handler("segment", segment_task_handler)
     task_manager.start()
 
     # Afficher les statistiques du cache GLB au démarrage

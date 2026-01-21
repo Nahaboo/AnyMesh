@@ -14,7 +14,7 @@ import { getMaterialShader } from '../shaders/materials'
  * RenderModeController - Handles different rendering modes for 3D models
  * Modes: solid, wireframe, normal (normal map visualization), smooth, textured, shader:*
  */
-function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, renderMode = 'solid', shaderParams = {}, uploadId }) {
+function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, renderMode = 'solid', shaderParams = {}, uploadId }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
 
   // Check if renderMode is a custom shader (format: "shader:toon")
@@ -25,7 +25,9 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
   // Build URL - handle different mesh sources
   // Add uploadId as cache-busting parameter to force browser to reload file
   let meshUrl
-  if (isRetopologized) {
+  if (isSegmented) {
+    meshUrl = `http://localhost:8000/mesh/segmented/${filename}?v=${uploadId || Date.now()}`
+  } else if (isRetopologized) {
     meshUrl = `http://localhost:8000/mesh/retopo/${filename}?v=${uploadId || Date.now()}`
   } else if (isSimplified) {
     meshUrl = `http://localhost:8000/mesh/output/${filename}?v=${uploadId || Date.now()}`
@@ -116,13 +118,28 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
 
         switch (renderMode) {
           case 'solid':
-            // Use matcap for performance and uniform lighting
-            child.material = new THREE.MeshMatcapMaterial({
-              matcap: matcapTexture,
-              side: THREE.DoubleSide,
-              flatShading: false
-            })
-            console.log('[RenderModeController] Applied SOLID mode with matcap')
+            // Check if geometry has vertex colors (for segmented meshes)
+            const hasVertexColors = child.geometry.attributes.color !== undefined
+
+            if (hasVertexColors) {
+              // Use MeshStandardMaterial with vertex colors enabled
+              child.material = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                side: THREE.DoubleSide,
+                flatShading: false,
+                metalness: 0.1,
+                roughness: 0.8
+              })
+              console.log('[RenderModeController] Applied SOLID mode with VERTEX COLORS (segmented mesh)')
+            } else {
+              // Use matcap for performance and uniform lighting
+              child.material = new THREE.MeshMatcapMaterial({
+                matcap: matcapTexture,
+                side: THREE.DoubleSide,
+                flatShading: false
+              })
+              console.log('[RenderModeController] Applied SOLID mode with matcap')
+            }
             break
 
           case 'wireframe':

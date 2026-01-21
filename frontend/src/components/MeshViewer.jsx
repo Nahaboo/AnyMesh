@@ -91,6 +91,7 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
             isGenerated={meshInfo.isGenerated || false}
             isSimplified={meshInfo.isSimplified || false}
             isRetopologized={meshInfo.isRetopologized || false}
+            isSegmented={meshInfo.isSegmented || false}
             renderMode={renderMode}
             shaderParams={shaderParams}
             uploadId={meshInfo.uploadId}

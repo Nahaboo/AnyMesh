@@ -30,6 +30,7 @@ function ViewerLayout({
   onLoadSegmented,
   onLoadRetopologized,
   onLoadOriginal,
+  onLoadParent,
   currentTask,
   isProcessing
 }) {
@@ -114,7 +115,8 @@ function ViewerLayout({
     const isGenerated = meshInfo.isGenerated || false
     const isSimplified = meshInfo.isSimplified || false
     const isRetopologized = meshInfo.isRetopologized || false
-    const exportUrl = `http://localhost:8000/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}&is_simplified=${isSimplified}&is_retopologized=${isRetopologized}`
+    const isSegmented = meshInfo.isSegmented || false
+    const exportUrl = `http://localhost:8000/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}&is_simplified=${isSimplified}&is_retopologized=${isRetopologized}&is_segmented=${isSegmented}`
 
     console.log(`[ViewerLayout] Exporting ${meshInfo.filename} as ${format.label}`)
 
@@ -239,6 +241,7 @@ function ViewerLayout({
                   meshInfo={meshInfo}
                   onSegment={onSegment}
                   onLoadSegmented={onLoadSegmented}
+                  onLoadOriginal={onLoadParent}
                   currentTask={currentTask}
                   isProcessing={isProcessing}
                 />
@@ -247,7 +250,7 @@ function ViewerLayout({
                   meshInfo={meshInfo}
                   onRetopologize={onRetopologize}
                   onLoadRetopologized={onLoadRetopologized}
-                  onLoadOriginal={onLoadOriginal}
+                  onLoadOriginal={onLoadParent}
                   currentTask={currentTask}
                   isProcessing={isProcessing}
                 />

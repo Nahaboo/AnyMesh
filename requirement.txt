@@ -19,4 +19,9 @@ httpx>=0.24.0
 
 # Génération de maillages via Stability AI API
 python-dotenv>=1.0.0  # Gestion fichier .env
-pillow>=10.0.0  # Validation images 
+pillow>=10.0.0  # Validation images
+
+# Segmentation de maillages
+open3d>=0.18.0  # Compatible Python 3.12.x
+pymeshlab>=2024.12  # Version récente stable
+scikit-learn>=1.3.0  # Pour k-means clustering (curvature method)

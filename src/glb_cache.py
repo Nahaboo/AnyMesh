@@ -33,28 +33,38 @@ def get_glb_path(original_filename: str, base_dir: Path) -> Path:
 
 def invalidate_glb_cache(original_filename: str, base_dir: Path) -> bool:
     """
-    Supprime le fichier GLB converti pour forcer la régénération
+    Supprime les fichiers GLB convertis pour forcer la régénération
 
     À appeler après toute modification du fichier source :
     - Simplification
     - Réparation
     - Édition manuelle
 
+    Depuis que les GLB sont dans un cache séparé avec timestamp,
+    cette fonction supprime tous les GLB qui correspondent au pattern {stem}_*.glb
+
     Args:
         original_filename: Nom du fichier original (ex: "bunny.obj")
-        base_dir: Dossier de base (généralement DATA_INPUT)
+        base_dir: Dossier du cache GLB (généralement DATA_GLB_CACHE)
 
     Returns:
-        True si un fichier GLB a été supprimé, False sinon
+        True si au moins un fichier GLB a été supprimé, False sinon
     """
-    glb_path = get_glb_path(original_filename, base_dir)
+    stem = Path(original_filename).stem
 
-    if glb_path.exists():
+    # Chercher tous les GLB avec pattern {stem}_*.glb
+    import glob
+    glb_pattern = str(base_dir / f"{stem}_*.glb")
+    matching_glbs = glob.glob(glb_pattern)
+
+    deleted = False
+    for glb_path_str in matching_glbs:
+        glb_path = Path(glb_path_str)
         print(f"  🗑️ [GLB CACHE] Invalidating: {glb_path.name}")
         glb_path.unlink()
-        return True
+        deleted = True
 
-    return False
+    return deleted
 
 
 def is_glb_file(filename: str) -> bool:

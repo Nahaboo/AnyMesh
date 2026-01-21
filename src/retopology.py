@@ -140,9 +140,19 @@ def retopologize_mesh(
 
     # Charger le mesh résultant pour les statistiques
     try:
-        retopo_mesh = trimesh.load(str(output_path))
-        retopo_vertices = len(retopo_mesh.vertices)
-        retopo_faces = len(retopo_mesh.faces)
+        # Trimesh peut avoir des problèmes avec certains PLY générés par Instant Meshes
+        # On essaie d'abord avec trimesh, puis avec open3d si ça échoue
+        try:
+            retopo_mesh = trimesh.load(str(output_path), process=False)
+            retopo_vertices = len(retopo_mesh.vertices)
+            retopo_faces = len(retopo_mesh.faces)
+        except Exception as trimesh_error:
+            print(f"  [WARNING] Trimesh failed to load PLY: {trimesh_error}")
+            print(f"  [INFO] Trying with Open3D instead...")
+            import open3d as o3d
+            retopo_mesh_o3d = o3d.io.read_triangle_mesh(str(output_path))
+            retopo_vertices = len(retopo_mesh_o3d.vertices)
+            retopo_faces = len(retopo_mesh_o3d.triangles)
     except Exception as e:
         return {
             "success": False,

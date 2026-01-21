@@ -140,18 +140,34 @@ function App() {
   // Handler to reload the original mesh
   const handleLoadOriginal = () => {
     if (!initialMeshInfo) {
-      console.error('[App] No original mesh to load')
+      console.error('[App] No initial mesh to load')
       return
     }
 
-    console.log('[App] Reloading original mesh:', initialMeshInfo)
-    // Reload original mesh with new uploadId to force refresh
+    console.log('[App] Reloading initial uploaded mesh:', initialMeshInfo)
+    // Reload initial mesh with new uploadId to force refresh
     setMeshInfo({
       ...initialMeshInfo,
       uploadId: Date.now()
     })
-    // Also reset originalMeshInfo to initial for future operations
+    // Reset originalMeshInfo to initial for future operations
     setOriginalMeshInfo(initialMeshInfo)
+  }
+
+  const handleLoadParent = () => {
+    if (!originalMeshInfo) {
+      console.error('[App] No parent mesh to load')
+      return
+    }
+
+    console.log('[App] Reloading parent mesh (before segmentation):', originalMeshInfo)
+    // Reload parent mesh with new uploadId to force refresh
+    // This preserves simplified/retopologized state if applicable
+    setMeshInfo({
+      ...originalMeshInfo,
+      uploadId: Date.now()
+    })
+    // originalMeshInfo stays the same - it's the correct base for operations
   }
 
   // Handler for mesh segmentation
@@ -217,6 +233,7 @@ function App() {
 
     const segmentedMeshInfo = {
       filename: result.output_filename,
+      originalFilename: originalMeshInfo.originalFilename || originalMeshInfo.filename,
       file_size: result.output_size || 0,
       format: originalMeshInfo.format || '.obj',
       vertices_count: originalMeshInfo.vertices_count || 0,
@@ -226,10 +243,15 @@ function App() {
       uploadId: Date.now(),
       isSegmented: true,
       num_segments: result.num_segments,
-      method: result.method
+      method: result.method,
+      // Préserver les flags du modèle parent (simplifié/retopo/généré)
+      isSimplified: originalMeshInfo.isSimplified || false,
+      isRetopologized: originalMeshInfo.isRetopologized || false,
+      isGenerated: originalMeshInfo.isGenerated || false
     }
 
     console.log('[App] Loading segmented mesh:', segmentedMeshInfo)
+    // Ne pas modifier originalMeshInfo - le mesh segmenté est juste une visualisation
     setMeshInfo(segmentedMeshInfo)
   }
 
@@ -289,6 +311,12 @@ function App() {
     }
 
     const result = currentTask.result
+
+    // Vérifier que le résultat contient bien output_filename
+    if (!result || !result.output_filename) {
+      console.error('[App] Retopology result missing output_filename:', result)
+      return
+    }
 
     // Le backend convertit automatiquement en GLB
     // Remplacer l'extension par .glb pour charger le fichier converti
@@ -398,6 +426,7 @@ function App() {
           onLoadSegmented={handleLoadSegmented}
           onLoadRetopologized={handleLoadRetopologized}
           onLoadOriginal={handleLoadOriginal}
+          onLoadParent={handleLoadParent}
           currentTask={currentTask}
           isProcessing={isProcessing}
         />
