@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import SaveButton from './SaveButton'
 
 /**
  * Bottom Toolbar - Export controls and mesh statistics
- * Left side: Export button + Format dropdown
+ * Left side: Export button + Format dropdown + Save button
  * Right side: Mesh info (Faces, Vertices) + 3D axes widget
  */
-function BottomToolbar({ meshInfo, onExport, axesWidget }) {
+function BottomToolbar({ meshInfo, onExport, onMeshSaved, axesWidget }) {
   const [selectedFormat, setSelectedFormat] = useState('obj')
   const [showFormatMenu, setShowFormatMenu] = useState(false)
 
@@ -56,6 +57,13 @@ function BottomToolbar({ meshInfo, onExport, axesWidget }) {
           </svg>
           Export
         </button>
+
+        {/* GLB-First: Save Button */}
+        <SaveButton
+          meshInfo={meshInfo}
+          onSaved={onMeshSaved}
+          disabled={!meshInfo}
+        />
 
         <div style={{ position: 'relative' }}>
           <button

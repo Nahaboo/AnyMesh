@@ -58,6 +58,7 @@ DATA_RETOPO = Path("data/retopo")
 DATA_SEGMENTED = Path("data/segmented")
 DATA_GLB_CACHE = Path("data/glb_cache")
 DATA_TEMP = Path("data/temp")  # GLB-First: Fichiers temporaires pour conversions
+DATA_SAVED = Path("data/saved")  # GLB-First: Meshes sauvegardés par l'utilisateur
 DATA_INPUT.mkdir(parents=True, exist_ok=True)
 DATA_OUTPUT.mkdir(parents=True, exist_ok=True)
 DATA_INPUT_IMAGES.mkdir(parents=True, exist_ok=True)
@@ -115,6 +116,13 @@ class SegmentRequest(BaseModel):
     is_generated: bool = False  # Si True, cherche dans data/generated_meshes
     is_simplified: bool = False  # Si True, cherche dans data/output
     is_retopo: bool = False  # Si True, cherche dans data/retopo
+
+
+class SaveMeshRequest(BaseModel):
+    """GLB-First: Paramètres pour sauvegarder un mesh"""
+    source_filename: str  # Nom du fichier source (dans n'importe quel dossier)
+    save_name: str  # Nom de la sauvegarde (sans extension)
+
 
 @app.get("/")
 async def root():
@@ -534,6 +542,120 @@ async def list_meshes():
                 "format": file_path.suffix.lower()
             })
     return {"meshes": meshes, "count": len(meshes)}
+
+
+# ============================================================================
+# GLB-First: Endpoints de sauvegarde à la demande (M6)
+# ============================================================================
+
+def _find_mesh_in_directories(filename: str) -> Optional[Path]:
+    """
+    GLB-First: Recherche un mesh dans tous les dossiers de données.
+
+    Ordre de recherche: input → output → retopo → segmented → generated_meshes
+    """
+    search_dirs = [
+        DATA_INPUT,
+        DATA_OUTPUT,
+        DATA_RETOPO,
+        DATA_SEGMENTED,
+        DATA_GENERATED_MESHES
+    ]
+    for directory in search_dirs:
+        file_path = directory / filename
+        if file_path.exists():
+            return file_path
+    return None
+
+
+@app.post("/save")
+async def save_mesh(request: SaveMeshRequest):
+    """
+    GLB-First: Sauvegarde un mesh avec un nom personnalisé.
+
+    Permet à l'utilisateur de sauvegarder le résultat d'une opération
+    avant de procéder à une autre opération.
+    """
+    # Trouver le fichier source
+    source_path = _find_mesh_in_directories(request.source_filename)
+    if not source_path:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Fichier non trouve: {request.source_filename}"
+        )
+
+    # Valider le nom de sauvegarde
+    save_name = request.save_name.strip()
+    if not save_name:
+        raise HTTPException(status_code=400, detail="Nom de sauvegarde requis")
+
+    # Nettoyer le nom (enlever caractères spéciaux)
+    import re
+    save_name = re.sub(r'[^\w\-]', '_', save_name)
+
+    # Créer le dossier si nécessaire
+    DATA_SAVED.mkdir(parents=True, exist_ok=True)
+
+    # Copier le fichier
+    save_path = DATA_SAVED / f"{save_name}.glb"
+    shutil.copy2(source_path, save_path)
+
+    print(f"[SAVE] {source_path.name} -> {save_path.name}")
+
+    return {
+        "success": True,
+        "saved_filename": save_path.name,
+        "saved_size": save_path.stat().st_size,
+        "source_filename": request.source_filename
+    }
+
+
+@app.get("/saved")
+async def list_saved_meshes():
+    """GLB-First: Liste tous les meshes sauvegardés par l'utilisateur."""
+    if not DATA_SAVED.exists():
+        return {"saved_meshes": [], "count": 0}
+
+    saved = []
+    for file_path in DATA_SAVED.glob("*.glb"):
+        saved.append({
+            "filename": file_path.name,
+            "size": file_path.stat().st_size,
+            "saved_at": file_path.stat().st_mtime
+        })
+
+    # Trier par date (plus récent en premier)
+    saved.sort(key=lambda x: x["saved_at"], reverse=True)
+
+    return {"saved_meshes": saved, "count": len(saved)}
+
+
+@app.delete("/saved/{filename}")
+async def delete_saved_mesh(filename: str):
+    """GLB-First: Supprime un mesh sauvegardé."""
+    file_path = DATA_SAVED / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouve")
+
+    file_path.unlink()
+    print(f"[DELETE] Saved mesh deleted: {filename}")
+
+    return {"success": True, "deleted_filename": filename}
+
+
+@app.get("/mesh/saved/{filename}")
+async def get_saved_mesh(filename: str):
+    """GLB-First: Stream un mesh sauvegardé pour visualisation."""
+    file_path = DATA_SAVED / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouve")
+
+    return FileResponse(
+        path=file_path,
+        media_type="model/gltf-binary",
+        filename=filename
+    )
+
 
 # Handler pour les tâches de simplification
 def simplify_task_handler(task: Task):

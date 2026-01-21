@@ -31,6 +31,7 @@ function ViewerLayout({
   onLoadRetopologized,
   onLoadOriginal,
   onLoadParent,
+  onMeshSaved,
   currentTask,
   isProcessing
 }) {
@@ -178,6 +179,7 @@ function ViewerLayout({
           <BottomToolbar
             meshInfo={meshInfo}
             onExport={handleExport}
+            onMeshSaved={onMeshSaved}
             axesWidget={<AxesWidget mainCameraQuaternion={cameraQuaternion} />}
           />
         </div>

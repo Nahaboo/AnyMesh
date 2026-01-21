@@ -311,4 +311,48 @@ export const getRetopologyMeshUrl = (filename) => {
   return `${API_BASE_URL}/mesh/retopo/${filename}`
 }
 
+// ===== GLB-First: API SAUVEGARDE À LA DEMANDE =====
+
+/**
+ * Sauvegarde un mesh avec un nom personnalisé
+ * @param {string} sourceFilename - Nom du fichier source
+ * @param {string} saveName - Nom de la sauvegarde (sans extension)
+ * @returns {Promise} Informations de la sauvegarde
+ */
+export const saveMesh = async (sourceFilename, saveName) => {
+  const response = await api.post('/save', {
+    source_filename: sourceFilename,
+    save_name: saveName
+  })
+  return response.data
+}
+
+/**
+ * Liste tous les meshes sauvegardés
+ * @returns {Promise} Liste des meshes sauvegardés
+ */
+export const listSavedMeshes = async () => {
+  const response = await api.get('/saved')
+  return response.data
+}
+
+/**
+ * Supprime un mesh sauvegardé
+ * @param {string} filename - Nom du fichier à supprimer
+ * @returns {Promise} Confirmation de suppression
+ */
+export const deleteSavedMesh = async (filename) => {
+  const response = await api.delete(`/saved/${filename}`)
+  return response.data
+}
+
+/**
+ * Obtient l'URL d'un mesh sauvegardé
+ * @param {string} filename - Nom du fichier sauvegardé
+ * @returns {string} URL du mesh sauvegardé
+ */
+export const getSavedMeshUrl = (filename) => {
+  return `${API_BASE_URL}/mesh/saved/${filename}`
+}
+
 export default api

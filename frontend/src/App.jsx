@@ -427,6 +427,7 @@ function App() {
           onLoadRetopologized={handleLoadRetopologized}
           onLoadOriginal={handleLoadOriginal}
           onLoadParent={handleLoadParent}
+          onMeshSaved={(result) => console.log('[App] Mesh saved:', result)}
           currentTask={currentTask}
           isProcessing={isProcessing}
         />
