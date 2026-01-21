@@ -27,7 +27,7 @@ from .glb_cache import (
     is_glb_file
 )
 from .stability_client import generate_mesh_from_image_sf3d
-from .retopology import retopologize_mesh
+from .retopology import retopologize_mesh, retopologize_mesh_glb
 from .segmentation import segment_mesh
 from .temp_utils import cleanup_temp_directory, safe_delete
 
@@ -1428,7 +1428,11 @@ def generate_mesh_task_handler(task: Task):
     return result
 
 def retopologize_task_handler(task: Task):
-    """Handler qui exécute la retopologie avec Instant Meshes"""
+    """
+    Handler qui exécute la retopologie avec Instant Meshes.
+
+    GLB-First: Utilise retopologize_mesh_glb pour les fichiers GLB.
+    """
     params = task.params
     filename = params["filename"]
     target_face_count = params.get("target_face_count", 10000)
@@ -1445,60 +1449,65 @@ def retopologize_task_handler(task: Task):
     else:
         input_file = DATA_INPUT / filename
 
-    # Si le fichier n'existe pas, erreur
     if not input_file.exists():
         return {
             'success': False,
-            'error': f'Fichier source non trouvé: {filename}'
+            'error': f'Fichier source non trouve: {filename}'
         }
-
-    # Si le fichier est un GLB, le convertir en OBJ pour la retopologie
-    # (Instant Meshes ne supporte que OBJ/PLY)
-    if input_file.suffix.lower() == '.glb':
-        print(f"  [INFO] Converting GLB to OBJ for retopology...")
-        temp_obj_filename = f"{input_file.stem}_temp.obj"
-        temp_obj_file = input_file.parent / temp_obj_filename
-
-        from .converter import convert_mesh_format
-        conversion_result = convert_mesh_format(
-            input_path=input_file,
-            output_path=temp_obj_file,
-            output_format='obj'
-        )
-
-        if not conversion_result['success']:
-            return {
-                'success': False,
-                'error': f"Conversion GLB→OBJ échouée: {conversion_result.get('error')}"
-            }
-
-        # Utiliser le fichier OBJ temporaire comme input
-        input_file = temp_obj_file
-        filename = temp_obj_filename
-
-    # Générer le nom du fichier de sortie
-    # Instant Meshes produit toujours du PLY, donc forcer l'extension
-    output_filename = f"{Path(filename).stem}_retopo.ply"
-    output_file = DATA_RETOPO / output_filename
-
-    # Supprimer les anciens fichiers de résultat s'ils existent (OBJ/STL/PLY et GLB)
-    if output_file.exists():
-        print(f"  Removing old result: {output_filename}")
-        output_file.unlink()
-
-    # Supprimer aussi le GLB correspondant s'il existe
-    glb_filename = f"{Path(filename).stem}_retopo.glb"
-    glb_file = DATA_RETOPO / glb_filename
-    if glb_file.exists():
-        print(f"  Removing old GLB: {glb_filename}")
-        glb_file.unlink()
 
     print(f"\n[RETOPOLOGIZE] Starting retopology")
     print(f"  Input: {filename}")
-    print(f"  Output: {output_filename}")
     print(f"  Target faces: {target_face_count}")
 
-    # Exécuter la retopologie
+    # GLB-First: Utiliser retopologize_mesh_glb directement pour les GLB
+    if input_file.suffix.lower() == '.glb':
+        print(f"  [GLB-First] Direct GLB retopology pipeline")
+
+        # Sortie en GLB
+        output_filename = f"{input_file.stem}_retopo.glb"
+        output_file = DATA_RETOPO / output_filename
+
+        # Supprimer l'ancien résultat s'il existe
+        if output_file.exists():
+            output_file.unlink()
+
+        result = retopologize_mesh_glb(
+            input_glb=input_file,
+            output_glb=output_file,
+            target_face_count=target_face_count,
+            deterministic=deterministic,
+            preserve_boundaries=preserve_boundaries,
+            temp_dir=DATA_TEMP
+        )
+
+        if result.get('success'):
+            print(f"  [OK] Retopology completed")
+            if result.get('textures_lost'):
+                print(f"  [WARN] Textures were lost during retopology")
+
+            return {
+                'success': True,
+                'output_filename': output_filename,
+                'output_file': str(output_file),
+                'vertices_count': result.get('retopo_vertices', 0),
+                'faces_count': result.get('retopo_faces', 0),
+                'output_size': output_file.stat().st_size if output_file.exists() else 0,
+                'original_vertices': result.get('original_vertices', 0),
+                'original_faces': result.get('original_faces', 0),
+                'retopo_vertices': result.get('retopo_vertices', 0),
+                'retopo_faces': result.get('retopo_faces', 0),
+                'had_textures': result.get('had_textures', False),
+                'textures_lost': result.get('textures_lost', False)
+            }
+        return result
+
+    # Fallback pour autres formats (OBJ, PLY, etc.)
+    output_filename = f"{Path(filename).stem}_retopo.ply"
+    output_file = DATA_RETOPO / output_filename
+
+    if output_file.exists():
+        output_file.unlink()
+
     result = retopologize_mesh(
         input_path=input_file,
         output_path=output_file,
@@ -1511,17 +1520,11 @@ def retopologize_task_handler(task: Task):
         print(f"  [OK] Retopology completed")
         result['output_filename'] = output_filename
         result['output_file'] = str(output_file)
-        # Ajouter les stats pour le frontend (avec les noms attendus)
         result['vertices_count'] = result.get('retopo_vertices', 0)
         result['faces_count'] = result.get('retopo_faces', 0)
         result['output_size'] = output_file.stat().st_size if output_file.exists() else 0
     else:
         print(f"  [ERROR] Retopology failed: {result.get('error', 'Unknown error')}")
-
-    # Nettoyer le fichier OBJ temporaire si on a converti depuis GLB
-    if '_temp.obj' in str(input_file) and input_file.exists():
-        print(f"  [CLEANUP] Removing temporary OBJ file")
-        input_file.unlink()
 
     return result
 
