@@ -29,6 +29,7 @@ from .glb_cache import (
 from .stability_client import generate_mesh_from_image_sf3d
 from .retopology import retopologize_mesh
 from .segmentation import segment_mesh
+from .temp_utils import cleanup_temp_directory, safe_delete
 
 # Charger les variables d'environnement depuis .env
 load_dotenv()
@@ -56,6 +57,7 @@ DATA_GENERATED_MESHES = Path("data/generated_meshes")
 DATA_RETOPO = Path("data/retopo")
 DATA_SEGMENTED = Path("data/segmented")
 DATA_GLB_CACHE = Path("data/glb_cache")
+DATA_TEMP = Path("data/temp")  # GLB-First: Fichiers temporaires pour conversions
 DATA_INPUT.mkdir(parents=True, exist_ok=True)
 DATA_OUTPUT.mkdir(parents=True, exist_ok=True)
 DATA_INPUT_IMAGES.mkdir(parents=True, exist_ok=True)
@@ -63,6 +65,7 @@ DATA_GENERATED_MESHES.mkdir(parents=True, exist_ok=True)
 DATA_RETOPO.mkdir(parents=True, exist_ok=True)
 DATA_SEGMENTED.mkdir(parents=True, exist_ok=True)
 DATA_GLB_CACHE.mkdir(parents=True, exist_ok=True)
+DATA_TEMP.mkdir(parents=True, exist_ok=True)
 
 # Formats de fichiers supportés
 SUPPORTED_FORMATS = {".obj", ".stl", ".ply", ".off", ".gltf", ".glb"}
@@ -1967,6 +1970,10 @@ async def startup_event():
     task_manager.register_handler("retopologize", retopologize_task_handler)
     task_manager.register_handler("segment", segment_task_handler)
     task_manager.start()
+
+    # GLB-First: Nettoyer les fichiers temporaires au démarrage
+    print("\n[TEMP] Nettoyage des fichiers temporaires...")
+    cleanup_temp_directory(DATA_TEMP, max_age_hours=1)
 
     # Afficher les statistiques du cache GLB au démarrage
     print("\n [GLB CACHE] Statistics at startup:")
