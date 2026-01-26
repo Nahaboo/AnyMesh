@@ -4,10 +4,12 @@ Fournit les endpoints pour l'upload et le traitement de maillages 3D
 """
 
 import os
+import re
 import shutil
 import time
 from pathlib import Path
 from typing import Optional
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -18,14 +20,7 @@ import trimesh
 
 from .task_manager import task_manager, Task
 from .simplify import simplify_mesh, adaptive_simplify_mesh, simplify_mesh_glb
-from .converter import convert_and_compress, convert_mesh_format, convert_any_to_glb
-from .glb_cache import (
-    invalidate_glb_cache,
-    should_convert_to_glb,
-    cleanup_orphaned_glb_files,
-    get_cache_stats,
-    is_glb_file
-)
+from .converter import convert_mesh_format, convert_any_to_glb
 from .stability_client import generate_mesh_from_image_sf3d
 from .retopology import retopologize_mesh, retopologize_mesh_glb
 from .segmentation import segment_mesh, segment_mesh_glb
@@ -34,10 +29,54 @@ from .temp_utils import cleanup_temp_directory, safe_delete
 # Charger les variables d'environnement depuis .env
 load_dotenv()
 
+
+# Q1: Lifespan context manager (remplace @app.on_event deprecated)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Gestion du cycle de vie de l'application.
+    Remplace les @app.on_event("startup") et @app.on_event("shutdown") dépréciés.
+    """
+    # === STARTUP ===
+    print("\n=== MeshSimplifier Backend Starting ===")
+
+    # Valider la clé API Stability
+    api_key = os.getenv('STABILITY_API_KEY')
+    if not api_key:
+        print("[!] WARNING: STABILITY_API_KEY not set - mesh generation will fail")
+        print("    Create .env file and add: STABILITY_API_KEY=sk-your-key-here")
+    elif not api_key.startswith('sk-'):
+        print("[!] WARNING: STABILITY_API_KEY may be invalid (should start with 'sk-')")
+    else:
+        print(f"[OK] Stability API key loaded: {api_key[:10]}...")
+
+    # Enregistrer les handlers de tâches
+    task_manager.register_handler("simplify", simplify_task_handler)
+    task_manager.register_handler("simplify_adaptive", adaptive_simplify_task_handler)
+    task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
+    task_manager.register_handler("retopologize", retopologize_task_handler)
+    task_manager.register_handler("segment", segment_task_handler)
+    task_manager.start()
+
+    # GLB-First: Nettoyer les fichiers temporaires au démarrage
+    print("\n[TEMP] Nettoyage des fichiers temporaires...")
+    cleanup_temp_directory(DATA_TEMP, max_age_hours=1)
+
+    print("=====================================\n")
+
+    yield  # L'application tourne ici
+
+    # === SHUTDOWN ===
+    print("\n=== MeshSimplifier Backend Stopping ===")
+    task_manager.stop()
+    print("=====================================\n")
+
+
 app = FastAPI(
     title="MeshSimplifier API",
     description="API pour la simplification et réparation de maillages 3D",
-    version="0.1.0"
+    version="0.2.0",
+    lifespan=lifespan  # Q1: Utilisation du nouveau système lifespan
 )
 
 # Configuration CORS - Permettre toutes les origines en développement
@@ -56,7 +95,6 @@ DATA_INPUT_IMAGES = Path("data/input_images")
 DATA_GENERATED_MESHES = Path("data/generated_meshes")
 DATA_RETOPO = Path("data/retopo")
 DATA_SEGMENTED = Path("data/segmented")
-DATA_GLB_CACHE = Path("data/glb_cache")
 DATA_TEMP = Path("data/temp")  # GLB-First: Fichiers temporaires pour conversions
 DATA_SAVED = Path("data/saved")  # GLB-First: Meshes sauvegardés par l'utilisateur
 DATA_INPUT.mkdir(parents=True, exist_ok=True)
@@ -65,12 +103,49 @@ DATA_INPUT_IMAGES.mkdir(parents=True, exist_ok=True)
 DATA_GENERATED_MESHES.mkdir(parents=True, exist_ok=True)
 DATA_RETOPO.mkdir(parents=True, exist_ok=True)
 DATA_SEGMENTED.mkdir(parents=True, exist_ok=True)
-DATA_GLB_CACHE.mkdir(parents=True, exist_ok=True)
 DATA_TEMP.mkdir(parents=True, exist_ok=True)
 
 # Formats de fichiers supportés
 SUPPORTED_FORMATS = {".obj", ".stl", ".ply", ".off", ".gltf", ".glb"}
 SUPPORTED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png"}
+
+# Limite de taille de fichier (95 MB)
+MAX_UPLOAD_SIZE = 95 * 1024 * 1024  # 95 MB en bytes
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Nettoie un nom de fichier pour éviter les path traversal attacks.
+
+    Sécurité:
+    - Retire tout chemin (garde seulement le nom de fichier)
+    - Retire les séquences ".." dangereuses
+    - Limite aux caractères alphanumériques, points, tirets et underscores
+    """
+    if not filename:
+        raise ValueError("Nom de fichier vide")
+
+    # Retirer tout chemin (garde seulement le nom de fichier)
+    filename = os.path.basename(filename)
+
+    # Retirer les caractères dangereux de path traversal
+    filename = filename.replace("..", "")
+
+    # Limiter aux caractères sûrs: alphanumériques, point, tiret, underscore
+    # Préserver l'extension en traitant séparément
+    stem = Path(filename).stem
+    ext = Path(filename).suffix.lower()
+
+    # Nettoyer le stem (nom sans extension)
+    clean_stem = re.sub(r'[^\w\-]', '_', stem)
+
+    # Reconstruire le filename
+    clean_filename = f"{clean_stem}{ext}" if ext else clean_stem
+
+    if not clean_filename or clean_filename in ('.', '..'):
+        raise ValueError("Nom de fichier invalide apres nettoyage")
+
+    return clean_filename
 
 # Modèles Pydantic
 class SimplifyRequest(BaseModel):
@@ -90,11 +165,13 @@ class AdaptiveSimplifyRequest(BaseModel):
     is_generated: bool = False  # Si True, cherche dans data/generated_meshes
 
 class GenerateMeshRequest(BaseModel):
-    """Paramètres de génération de maillage à partir d'images"""
+    """Paramètres de génération de maillage à partir d'images
+    GLB-First: Le format de sortie est toujours GLB (natif de l'API Stability ou TripoSR)
+    """
     session_id: str
     resolution: str = "medium"  # 'low', 'medium', 'high'
-    output_format: str = "obj"  # 'obj', 'stl', 'ply'
-    remesh_option: str = "quad"  # 'none', 'triangle', 'quad' - Topologie du mesh généré
+    remesh_option: str = "quad"  # 'none', 'triangle', 'quad' - Topologie du mesh généré (Stability only)
+    provider: str = "stability"  # 'stability' (API cloud) ou 'triposr' (local, gratuit)
 
 class RetopologyRequest(BaseModel):
     """Paramètres de retopologie avec Instant Meshes"""
@@ -138,151 +215,6 @@ async def health_check():
     """Vérification de l'état de l'API"""
     return {"status": "healthy"}
 
-@app.post("/upload-fast")
-async def upload_mesh_fast(file: UploadFile = File(...)):
-    """
-    Upload rapide d'un fichier de maillage 3D pour visualisation immédiate
-    Sauvegarde le fichier et convertit en GLB sans analyse détaillée
-    Formats supportés: OBJ, STL, PLY, OFF, GLTF, GLB
-    """
-    start_total = time.time()
-    print(f"\n [UPLOAD-FAST] Upload started: {file.filename}")
-
-    # Vérification de l'extension
-    file_ext = Path(file.filename).suffix.lower()
-    if file_ext not in SUPPORTED_FORMATS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Format non supporté. Formats acceptés: {', '.join(SUPPORTED_FORMATS)}"
-        )
-
-    # Sauvegarde du fichier
-    start_save = time.time()
-    file_path = DATA_INPUT / file.filename
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur lors de la sauvegarde: {str(e)}"
-        ) from e
-
-    save_duration = (time.time() - start_save) * 1000
-    file_size = file_path.stat().st_size
-    print(f"   File save: {save_duration:.2f}ms ({file_size / 1024 / 1024:.2f} MB)")
-
-    # Bounding box basique (rapide, juste pour la caméra)
-    # On charge le mesh uniquement pour avoir la bounding box
-    try:
-        loaded = trimesh.load(str(file_path))
-        if hasattr(loaded, 'geometry'):
-            meshes = list(loaded.geometry.values())
-            if len(meshes) > 0:
-                mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
-            else:
-                raise HTTPException(status_code=400, detail="La scène ne contient aucune géométrie")
-        else:
-            mesh = loaded
-
-        #  NORMALISATION DU MESH: Centrer à l'origine
-        # Cela garantit que tous les modèles sont centrés pour une visualisation cohérente
-        original_centroid = mesh.centroid.copy()
-        original_scale = mesh.scale
-
-        # Translater les vertices pour centrer le mesh à l'origine
-        mesh.vertices -= mesh.centroid
-
-        # Sauvegarder le mesh normalisé (écrase le fichier original)
-        mesh.export(str(file_path))
-
-        print(f"   Mesh normalized:")
-        print(f"     Original centroid: [{original_centroid[0]:.2f}, {original_centroid[1]:.2f}, {original_centroid[2]:.2f}]")
-        print(f"     Original scale: {original_scale:.2f}")
-        print(f"     New centroid: [0.00, 0.00, 0.00]")
-
-        bounds = mesh.bounds
-        bounding_box = {
-            "min": [float(bounds[0][0]), float(bounds[0][1]), float(bounds[0][2])],
-            "max": [float(bounds[1][0]), float(bounds[1][1]), float(bounds[1][2])],
-            "center": [float(mesh.centroid[0]), float(mesh.centroid[1]), float(mesh.centroid[2])],
-            "diagonal": float(mesh.scale)
-        }
-
-        # Calculer les statistiques du mesh
-        vertices_count = int(len(mesh.vertices))
-        faces_count = int(len(mesh.faces))
-        print(f"   Mesh stats: {vertices_count:,} vertices, {faces_count:,} faces")
-
-    except Exception as e:
-        print(f"   Could not compute bounding box: {e}")
-        # Bounding box par défaut si le calcul échoue
-        bounding_box = {
-            "min": [-1.0, -1.0, -1.0],
-            "max": [1.0, 1.0, 1.0],
-            "center": [0.0, 0.0, 0.0],
-            "diagonal": 1.732
-        }
-        vertices_count = 0
-        faces_count = 0
-
-    # Conversion automatique vers GLB si nécessaire (sauvegardé dans cache séparé)
-    glb_filename = file.filename
-    conversion_result = None
-
-    if not is_glb_file(file.filename):
-        should_convert, reason = should_convert_to_glb(
-            file.filename,
-            file_size,
-            max_size_mb=50
-        )
-
-        if should_convert:
-            # Générer un nom unique pour éviter les conflits de cache
-            timestamp = int(time.time() * 1000)  # timestamp en millisecondes
-            glb_filename = f"{file_path.stem}_{timestamp}.glb"
-            glb_path = DATA_GLB_CACHE / glb_filename  # MODIFIÉ: utilise glb_cache au lieu de input
-
-            invalidate_glb_cache(file.filename, DATA_GLB_CACHE)  # MODIFIÉ: invalide dans glb_cache
-
-            conversion_result = convert_and_compress(
-                input_path=file_path,
-                output_path=glb_path,
-                enable_draco=False,
-                compression_level=7
-            )
-
-            if conversion_result['success']:
-                glb_filename = glb_filename
-                print(f"  ✓ GLB generated in cache: {glb_filename}")
-            else:
-                print(f"  ⚠️ GLB conversion failed: {conversion_result.get('error')}")
-                glb_filename = file.filename
-        else:
-            print(f"  ⚠️ Skipping GLB conversion: {reason}")
-
-    total_duration = (time.time() - start_total) * 1000
-    print(f" [UPLOAD-FAST] Completed: {total_duration:.2f}ms\n")
-
-    # Retourner un nom de fichier simplifié (sans timestamp) pour le frontend
-    # Ex: bunny.obj uploadé → GLB créé dans cache → retourner "bunny.glb"
-    # Le frontend demandera bunny.glb, et l'endpoint /mesh/input/{filename}
-    # cherchera automatiquement bunny_*.glb dans le cache
-    display_filename = f"{file_path.stem}.glb" if glb_filename != file.filename else file.filename
-
-    return {
-        "message": "Fichier uploadé avec succès",
-        "filename": file.filename,
-        "glb_filename": display_filename,  # Nom simplifié (ex: bunny.glb)
-        "original_filename": file.filename if display_filename != file.filename else None,
-        "file_size": file_size,
-        "format": file_ext,
-        "bounding_box": bounding_box,
-        "vertices_count": vertices_count,
-        "faces_count": faces_count,
-        "upload_time_ms": round(total_duration, 2)
-    }
-
 @app.post("/upload")
 async def upload_mesh(file: UploadFile = File(...)):
     """
@@ -299,8 +231,27 @@ async def upload_mesh(file: UploadFile = File(...)):
     start_total = time.time()
     print(f"\n[UPLOAD] Started: {file.filename}")
 
+    # S1: Sécuriser le nom de fichier (path traversal protection)
+    try:
+        safe_filename = sanitize_filename(file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    print(f"  Filename sanitized: {file.filename} -> {safe_filename}")
+
+    # S2: Vérifier la taille du fichier AVANT d'écrire
+    file.file.seek(0, 2)  # Aller à la fin
+    file_size = file.file.tell()
+    file.file.seek(0)  # Revenir au début
+
+    if file_size > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,  # Payload Too Large
+            detail=f"Fichier trop volumineux ({file_size / 1024 / 1024:.1f} MB). Maximum: {MAX_UPLOAD_SIZE // (1024*1024)} MB"
+        )
+
     # Vérification de l'extension
-    file_ext = Path(file.filename).suffix.lower()
+    file_ext = Path(safe_filename).suffix.lower()
     if file_ext not in SUPPORTED_FORMATS:
         raise HTTPException(
             status_code=400,
@@ -325,7 +276,8 @@ async def upload_mesh(file: UploadFile = File(...)):
     print(f"  Temp save: {save_duration:.2f}ms ({original_size / 1024 / 1024:.2f} MB)")
 
     # GLB-First: Définir le chemin GLB avant le try pour le cleanup
-    glb_filename = f"{Path(file.filename).stem}.glb"
+    # S1: Utiliser le filename sécurisé
+    glb_filename = f"{Path(safe_filename).stem}.glb"
     glb_path = DATA_INPUT / glb_filename
 
     try:
@@ -836,8 +788,10 @@ def adaptive_simplify_task_handler(task: Task):
 @app.post("/simplify")
 async def simplify_mesh_async(request: SimplifyRequest):
     """
-    Lance une tâche de simplification de maillage en arrière-plan
-    Retourne un task_id pour suivre la progression
+    GLB-First: Lance une tâche de simplification de maillage en arrière-plan.
+
+    Avec l'architecture GLB-First, tous les fichiers sont en GLB.
+    Le task handler utilise simplify_mesh_glb pour traiter directement les GLB.
     """
     # Déterminer le dossier source selon is_generated
     source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
@@ -845,25 +799,10 @@ async def simplify_mesh_async(request: SimplifyRequest):
 
     # Vérification que le fichier existe
     if not input_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {request.filename}")
 
-    # Vérification du format et conversion si nécessaire
-    file_ext = input_path.suffix.lower()
-    if file_ext in {".gltf", ".glb"}:
-        # Les GLB sont automatiquement convertis en OBJ lors de l'upload
-        # On utilise le fichier OBJ correspondant pour les opérations
-        obj_filename = f"{input_path.stem}.obj"
-        obj_path = source_dir / obj_filename
-
-        if obj_path.exists():
-            print(f"  [INFO] Using converted OBJ file: {obj_filename}")
-            input_path = obj_path
-        else:
-            # Si pas de fichier OBJ (ancien upload ou mesh généré), on laisse le task handler gérer la conversion
-            print(f"  [INFO] No OBJ file found, will convert in task handler")
-
-    # Génération du nom de fichier de sortie
-    output_filename = f"{input_path.stem}_simplified{input_path.suffix}"
+    # GLB-First: Le fichier est déjà en GLB, sortie aussi en GLB
+    output_filename = f"{input_path.stem}_simplified.glb"
     output_path = DATA_OUTPUT / output_filename
 
     # Création de la tâche
@@ -888,9 +827,10 @@ async def simplify_mesh_async(request: SimplifyRequest):
 @app.post("/simplify-adaptive")
 async def simplify_mesh_adaptive_async(request: AdaptiveSimplifyRequest):
     """
-    Lance une tâche de simplification adaptative en arrière-plan
-    Détecte les zones plates et les simplifie plus agressivement
-    Retourne un task_id pour suivre la progression
+    GLB-First: Lance une tâche de simplification adaptative en arrière-plan.
+
+    Détecte les zones plates et les simplifie plus agressivement.
+    Note: Cette fonctionnalité n'a pas encore de version GLB-native.
     """
     # Déterminer le dossier source selon is_generated
     source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
@@ -898,25 +838,10 @@ async def simplify_mesh_adaptive_async(request: AdaptiveSimplifyRequest):
 
     # Vérification que le fichier existe
     if not input_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {request.filename}")
 
-    # Vérification du format et conversion si nécessaire
-    file_ext = input_path.suffix.lower()
-    if file_ext in {".gltf", ".glb"}:
-        # Les GLB sont automatiquement convertis en OBJ lors de l'upload
-        # On utilise le fichier OBJ correspondant pour les opérations
-        obj_filename = f"{input_path.stem}.obj"
-        obj_path = source_dir / obj_filename
-
-        if obj_path.exists():
-            print(f"  [INFO] Using converted OBJ file: {obj_filename}")
-            input_path = obj_path
-        else:
-            # Si pas de fichier OBJ (ancien upload ou mesh généré), on laisse le task handler gérer la conversion
-            print(f"  [INFO] No OBJ file found, will convert in task handler")
-
-    # Génération du nom de fichier de sortie
-    output_filename = f"{input_path.stem}_adaptive{input_path.suffix}"
+    # GLB-First: Sortie en GLB
+    output_filename = f"{input_path.stem}_adaptive.glb"
     output_path = DATA_OUTPUT / output_filename
 
     # Création de la tâche
@@ -961,45 +886,17 @@ async def list_tasks():
 @app.get("/mesh/input/{filename}")
 async def get_input_mesh(filename: str):
     """
-    Sert un fichier de maillage depuis data/input pour la visualisation
-    Si un fichier GLB est demandé, cherche dans le cache avec pattern {stem}_*.glb
-    Sinon, sert le fichier original depuis data/input
+    GLB-First: Sert un fichier de maillage depuis data/input pour la visualisation.
+
+    Avec l'architecture GLB-First, tous les fichiers uploadés sont convertis en GLB
+    et stockés directement dans data/input.
     """
     file_path = DATA_INPUT / filename
     file_ext = Path(filename).suffix.lower()
 
-    # Si un GLB est demandé, chercher dans le cache avec pattern {stem}_*.glb
-    if file_ext in {".glb", ".gltf"}:
-        import glob
-        stem = Path(filename).stem
-        glb_pattern = str(DATA_GLB_CACHE / f"{stem}_*.glb")
-        matching_glbs = glob.glob(glb_pattern)
-
-        if matching_glbs:
-            # Prendre le plus récent (dernier timestamp)
-            glb_path = Path(max(matching_glbs, key=lambda p: Path(p).stat().st_mtime))
-            print(f"  ⚡ Serving GLB from cache: {glb_path.name} (requested: {filename})")
-            file_path = glb_path
-        else:
-            # Fallback: chercher le GLB directement dans data/input (pour les GLB uploadés)
-            if not file_path.exists():
-                raise HTTPException(status_code=404, detail=f"Fichier GLB introuvable (cherché dans cache et input)")
-    else:
-        # Fichier non-GLB demandé : vérifier qu'il existe dans data/input
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="Fichier non trouvé")
-
-        # Chercher si une version GLB existe dans le cache pour l'optimisation
-        import glob
-        glb_pattern = str(DATA_GLB_CACHE / f"{file_path.stem}_*.glb")
-        matching_glbs = glob.glob(glb_pattern)
-
-        if matching_glbs:
-            # Prendre le plus récent (dernier timestamp)
-            glb_path = Path(max(matching_glbs, key=lambda p: Path(p).stat().st_mtime))
-            print(f"  ⚡ Serving GLB from cache instead of {filename}: {glb_path.name}")
-            file_path = glb_path
-            file_ext = ".glb"
+    # GLB-First: Le fichier devrait exister directement dans data/input
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {filename}")
 
     # Déterminer le media_type
     media_type_mapping = {
@@ -1038,31 +935,9 @@ async def get_output_mesh(filename: str):
     """
     file_path = DATA_OUTPUT / filename
 
-    # Si on demande un fichier GLB qui n'existe pas, essayer de le convertir depuis le fichier source
-    if not file_path.exists() and filename.endswith('.glb'):
-        # Chercher le fichier source (OBJ, STL, PLY, etc.)
-        stem = file_path.stem
-        for ext in ['.obj', '.stl', '.ply', '.off']:
-            source_path = DATA_OUTPUT / f"{stem}{ext}"
-            if source_path.exists():
-                print(f"   Converting {source_path.name} to GLB for visualization...")
-                try:
-                    result = convert_and_compress(
-                        input_path=source_path,
-                        output_path=file_path,
-                        enable_draco=False,
-                        compression_level=7
-                    )
-                    if result and result.get('success'):
-                        print(f"   GLB created: {file_path.name}")
-                        break
-                    else:
-                        print(f"   GLB conversion failed: {result.get('error', 'Unknown error')}")
-                except Exception as e:
-                    print(f"   GLB conversion failed: {e}")
-
+    # GLB-First: Le fichier devrait exister directement en GLB
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {filename}")
 
     # Déterminer le media_type
     file_ext = file_path.suffix.lower()
@@ -1110,10 +985,13 @@ async def download_mesh(filename: str):
 @app.get("/export/{filename}")
 async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False, is_simplified: bool = False, is_retopologized: bool = False, is_segmented: bool = False):
     """
-    Exporte un fichier de maillage dans le format demandé
+    GLB-First: Exporte un fichier de maillage dans le format demandé.
+
+    Avec l'architecture GLB-First, tous les fichiers source sont en GLB.
+    L'export convertit depuis GLB vers le format demandé.
 
     Args:
-        filename: Nom du fichier source
+        filename: Nom du fichier source (GLB)
         format: Format de sortie ('obj', 'stl', 'ply', 'glb')
         is_generated: Si True, cherche dans data/generated_meshes
         is_simplified: Si True, cherche dans data/output (meshes simplifiés)
@@ -1137,22 +1015,10 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
 
     source_path = source_dir / filename
 
-    # Si on exporte un mesh simplifié et que le fichier est un GLB,
-    # essayer de trouver le fichier source original (OBJ, STL, PLY)
-    # pour une meilleure conversion
-    if is_simplified and filename.endswith('.glb'):
-        stem = source_path.stem
-        for ext in ['.obj', '.stl', '.ply', '.off']:
-            original_source = source_dir / f"{stem}{ext}"
-            if original_source.exists():
-                print(f"   Using original source {original_source.name} instead of GLB")
-                source_path = original_source
-                filename = original_source.name
-                break
-
+    # GLB-First: Le fichier source est toujours en GLB
     # Vérifier que le fichier existe
     if not source_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {filename}")
 
     # Si le format demandé est le même que le fichier source, le renvoyer directement
     source_ext = source_path.suffix.lower().lstrip('.')
@@ -1188,83 +1054,6 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
         filename=output_filename,
         media_type="application/octet-stream"
     )
-
-@app.get("/debug/download-glb/{original_filename}")
-async def debug_download_glb(original_filename: str):
-    """
-    [DEBUG] Télécharge le fichier GLB converti depuis data/input
-    Usage: /debug/download-glb/bunny.obj → télécharge bunny.glb
-    """
-    # Extraire le nom sans extension
-    file_stem = Path(original_filename).stem
-    glb_filename = f"{file_stem}.glb"
-    glb_path = DATA_INPUT / glb_filename
-
-    if not glb_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"GLB converti non trouvé: {glb_filename}. Uploadez d'abord le fichier."
-        )
-
-    return FileResponse(
-        path=str(glb_path),
-        filename=glb_filename,
-        media_type="model/gltf-binary",
-        headers={"Content-Disposition": f'attachment; filename="{glb_filename}"'}
-    )
-
-@app.get("/cache/glb/stats")
-async def get_glb_cache_stats():
-    """
-    Retourne des statistiques sur le cache GLB
-
-    Utile pour monitoring et debugging
-    """
-    stats = get_cache_stats(DATA_INPUT)
-    return {
-        "cache_stats": stats,
-        "message": "GLB cache statistics"
-    }
-
-@app.post("/cache/glb/cleanup")
-async def cleanup_glb_cache():
-    """
-    Nettoie les fichiers GLB orphelins (sans fichier source correspondant)
-
-    Les fichiers GLB sont générés automatiquement pour la visualisation.
-    Cet endpoint supprime les GLB dont le fichier source a été supprimé.
-    """
-    deleted = cleanup_orphaned_glb_files(DATA_INPUT)
-
-    return {
-        "deleted_files": deleted,
-        "count": len(deleted),
-        "message": f"Cleaned up {len(deleted)} orphaned GLB file(s)"
-    }
-
-@app.delete("/cache/glb/{original_filename}")
-async def invalidate_glb_cache_endpoint(original_filename: str):
-    """
-    Invalide le cache GLB d'un fichier spécifique
-
-    Force la régénération du GLB au prochain chargement.
-    Utile après une modification manuelle du fichier source.
-
-    Args:
-        original_filename: Nom du fichier source (ex: bunny.obj)
-    """
-    was_deleted = invalidate_glb_cache(original_filename, DATA_INPUT)
-
-    if was_deleted:
-        return {
-            "message": f"GLB cache invalidated for {original_filename}",
-            "deleted": True
-        }
-    else:
-        return {
-            "message": f"No GLB cache found for {original_filename}",
-            "deleted": False
-        }
 
 # ===== ENDPOINTS GÉNÉRATION DE MAILLAGES À PARTIR D'IMAGES =====
 
@@ -1356,12 +1145,15 @@ async def list_session_images(session_id: str):
 
 # Handler pour les tâches de génération de maillages
 def generate_mesh_task_handler(task: Task):
-    """Handler qui exécute la génération de maillage avec Stability AI"""
+    """Handler qui exécute la génération de maillage avec Stability AI ou TripoSR
+    GLB-First: Sauvegarde toujours en GLB
+    Providers: 'stability' (API cloud) ou 'triposr' (local, gratuit)
+    """
     params = task.params
     session_id = params["session_id"]
     resolution = params.get("resolution", "medium")
-    output_format = params.get("output_format", "obj")
     remesh_option = params.get("remesh_option", "quad")
+    provider = params.get("provider", "stability")
 
     # [DEV/TEST] Si c'est une tâche fake, elle est déjà complétée, ne rien faire
     if params.get("fake", False):
@@ -1376,7 +1168,7 @@ def generate_mesh_task_handler(task: Task):
             'error': 'Session non trouvée'
         }
 
-    print(f"\n [GENERATE-MESH] Starting Stability AI generation")
+    print(f"\n [GENERATE-MESH] Starting generation with provider: {provider}")
     print(f"  Session: {session_id}")
     print(f"  Resolution: {resolution}")
 
@@ -1392,38 +1184,48 @@ def generate_mesh_task_handler(task: Task):
             'error': 'Aucune image trouvée dans la session'
         }
 
-    # Stability Fast 3D : utilise uniquement la première image
+    # Les deux providers utilisent uniquement la première image
     first_image = image_paths[0]
     print(f"  Images in session: {len(image_paths)}")
     if len(image_paths) > 1:
-        print(f"  [INFO] Using first image: {first_image.name} (SF3D single-view only)")
+        print(f"  [INFO] Using first image: {first_image.name} (single-view only)")
 
-    # Générer le nom de fichier de sortie
-    output_filename = f"{session_id}_generated.{output_format}"
+    # GLB-First: Format de sortie toujours GLB
+    output_filename = f"{session_id}_generated.glb"
     output_path = DATA_GENERATED_MESHES / output_filename
 
-    # Charger l'API key depuis .env
-    api_key = os.getenv('STABILITY_API_KEY')
-    if not api_key:
-        return {
-            'success': False,
-            'error': 'STABILITY_API_KEY non configurée dans .env'
-        }
+    # Router vers le bon provider
+    if provider == "triposr":
+        # TripoSR: génération locale, gratuite
+        from .triposr_client import generate_mesh_from_image_triposr
+        result = generate_mesh_from_image_triposr(
+            image_path=first_image,
+            output_path=output_path,
+            resolution=resolution
+        )
+    else:
+        # Stability AI: API cloud (défaut)
+        api_key = os.getenv('STABILITY_API_KEY')
+        if not api_key:
+            return {
+                'success': False,
+                'error': 'STABILITY_API_KEY non configurée dans .env'
+            }
 
-    # Exécuter la génération avec Stability AI
-    result = generate_mesh_from_image_sf3d(
-        image_path=first_image,
-        output_path=output_path,
-        resolution=resolution,
-        remesh_option=remesh_option,
-        api_key=api_key
-    )
+        result = generate_mesh_from_image_sf3d(
+            image_path=first_image,
+            output_path=output_path,
+            resolution=resolution,
+            remesh_option=remesh_option,
+            api_key=api_key
+        )
 
     if result.get('success'):
         print(f"   [OK] Mesh generated: {output_filename}")
         result['output_filename'] = output_filename
         result['session_id'] = session_id
-        result['images_used'] = 1  # SF3D uses only first image
+        result['images_used'] = 1
+        result['provider'] = provider
 
     return result
 
@@ -1501,28 +1303,44 @@ def retopologize_task_handler(task: Task):
             }
         return result
 
-    # Fallback pour autres formats (OBJ, PLY, etc.)
-    output_filename = f"{Path(filename).stem}_retopo.ply"
+    # GLB-First: Ce code ne devrait pas être atteint car tous les uploads sont GLB
+    # Mais par sécurité, on produit quand même un GLB en sortie
+    print(f"  [WARN] Non-GLB input detected ({input_file.suffix}), converting to GLB pipeline")
+
+    output_filename = f"{Path(filename).stem}_retopo.glb"
     output_file = DATA_RETOPO / output_filename
+    temp_ply = DATA_TEMP / f"{Path(filename).stem}_retopo_temp.ply"
 
     if output_file.exists():
         output_file.unlink()
 
+    # Retopologie vers PLY temporaire
     result = retopologize_mesh(
         input_path=input_file,
-        output_path=output_file,
+        output_path=temp_ply,
         target_face_count=target_face_count,
         deterministic=deterministic,
         preserve_boundaries=preserve_boundaries
     )
 
     if result.get('success'):
-        print(f"  [OK] Retopology completed")
-        result['output_filename'] = output_filename
-        result['output_file'] = str(output_file)
-        result['vertices_count'] = result.get('retopo_vertices', 0)
-        result['faces_count'] = result.get('retopo_faces', 0)
-        result['output_size'] = output_file.stat().st_size if output_file.exists() else 0
+        # Convertir le PLY résultant en GLB
+        try:
+            import trimesh
+            mesh = trimesh.load(str(temp_ply), process=False)
+            mesh.export(str(output_file), file_type='glb')
+            print(f"  [OK] Retopology completed (converted to GLB)")
+            result['output_filename'] = output_filename
+            result['output_file'] = str(output_file)
+            result['vertices_count'] = result.get('retopo_vertices', 0)
+            result['faces_count'] = result.get('retopo_faces', 0)
+            result['output_size'] = output_file.stat().st_size if output_file.exists() else 0
+        except Exception as e:
+            print(f"  [ERROR] GLB conversion failed: {e}")
+            result['success'] = False
+            result['error'] = f"GLB conversion failed: {e}"
+        finally:
+            safe_delete(temp_ply)
     else:
         print(f"  [ERROR] Retopology failed: {result.get('error', 'Unknown error')}")
 
@@ -1608,29 +1426,45 @@ def segment_task_handler(task: Task):
                 }
             return result
 
-        # Fallback pour autres formats
+        # GLB-First: Ce code ne devrait pas être atteint car tous les uploads sont GLB
+        # Mais par sécurité, on produit quand même un GLB en sortie
+        print(f"  [WARN] Non-GLB input detected ({input_path.suffix}), converting to GLB pipeline")
+
         base_name = Path(filename).stem
-        extension = Path(filename).suffix
-        output_filename = f"{base_name}_segmented{extension}"
+        temp_output = DATA_TEMP / f"{base_name}_segmented_temp{input_path.suffix}"
+        output_filename = f"{base_name}_segmented.glb"
         output_path = DATA_SEGMENTED / output_filename
 
         result = segment_mesh(
             input_path=input_path,
-            output_path=output_path,
+            output_path=temp_output,
             method=method,
             **kwargs
         )
 
         if result.get("success"):
-            print(f"  [OK] Segmentation completed: {result.get('num_segments', 0)} segments")
-            return {
-                "success": True,
-                "output_filename": output_filename,
-                "output_size": output_path.stat().st_size,
-                "num_segments": result.get("num_segments", 0),
-                "method": method,
-                **result
-            }
+            # Convertir en GLB
+            try:
+                import trimesh
+                mesh = trimesh.load(str(temp_output), process=False)
+                mesh.export(str(output_path), file_type='glb')
+                print(f"  [OK] Segmentation completed (converted to GLB): {result.get('num_segments', 0)} segments")
+                return {
+                    "success": True,
+                    "output_filename": output_filename,
+                    "output_size": output_path.stat().st_size if output_path.exists() else 0,
+                    "num_segments": result.get("num_segments", 0),
+                    "method": method,
+                    **result
+                }
+            except Exception as e:
+                print(f"  [ERROR] GLB conversion failed: {e}")
+                return {"success": False, "error": f"GLB conversion failed: {e}"}
+            finally:
+                safe_delete(temp_output)
+                # Aussi supprimer le .mtl si présent
+                mtl_path = temp_output.with_suffix('.mtl')
+                safe_delete(mtl_path)
 
         print(f"  [ERROR] Segmentation failed: {result.get('error')}")
         return result
@@ -1688,13 +1522,12 @@ async def generate_mesh_fake(request: GenerateMeshRequest):
     vertices_count = len(mesh.vertices)
     faces_count = len(mesh.faces)
 
-    # Créer une tâche fake qui se termine immédiatement
+    # GLB-First: Créer une tâche fake qui se termine immédiatement
     task_id = task_manager.create_task(
         task_type="generate_mesh",
         params={
             "session_id": request.session_id,
             "resolution": request.resolution,
-            "output_format": request.output_format,
             "remesh_option": request.remesh_option,
             "fake": True
         }
@@ -1755,12 +1588,7 @@ async def generate_mesh_async(request: GenerateMeshRequest):
             detail="Résolution invalide. Valeurs acceptées: 'low', 'medium', 'high'"
         )
 
-    # Validation du format de sortie
-    if request.output_format not in ['obj', 'stl', 'ply', 'glb']:
-        raise HTTPException(
-            status_code=400,
-            detail="Format invalide. Valeurs acceptées: 'obj', 'stl', 'ply', 'glb'"
-        )
+    # GLB-First: Le format de sortie est toujours GLB (natif de l'API Stability)
 
     # Création de la tâche
     task_id = task_manager.create_task(
@@ -1768,7 +1596,7 @@ async def generate_mesh_async(request: GenerateMeshRequest):
         params={
             "session_id": request.session_id,
             "resolution": request.resolution,
-            "output_format": request.output_format
+            "remesh_option": request.remesh_option
         }
     )
 
@@ -1877,33 +1705,11 @@ async def retopologize(request: RetopologyRequest):
 @app.get("/mesh/retopo/{filename}")
 async def get_retopo_mesh(filename: str):
     """
-    Sert un fichier de maillage retopologisé depuis data/retopo pour la visualisation
-    Convertit automatiquement en GLB pour de meilleures performances
+    GLB-First: Sert un fichier de maillage retopologisé depuis data/retopo.
+
+    Avec l'architecture GLB-First, tous les fichiers retopologisés sont directement en GLB.
     """
     file_path = DATA_RETOPO / filename
-
-    # Si on demande un fichier GLB qui n'existe pas, essayer de le convertir depuis le fichier source
-    if not file_path.exists() and filename.endswith('.glb'):
-        # Chercher le fichier source (OBJ, STL, PLY, etc.)
-        stem = file_path.stem
-        for ext in ['.obj', '.stl', '.ply', '.off']:
-            source_path = DATA_RETOPO / f"{stem}{ext}"
-            if source_path.exists():
-                print(f"  Converting {source_path.name} to GLB for visualization...")
-                try:
-                    result = convert_and_compress(
-                        input_path=source_path,
-                        output_path=file_path,
-                        enable_draco=False,
-                        compression_level=7
-                    )
-                    if result and result.get('success'):
-                        print(f"  [OK] GLB created: {file_path.name}")
-                        break
-                    else:
-                        print(f"  [WARNING] GLB conversion failed: {result.get('error', 'Unknown error')}")
-                except Exception as e:
-                    print(f"  [WARNING] GLB conversion failed: {e}")
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Fichier non trouvé")
@@ -2002,63 +1808,9 @@ async def get_segmented_mesh(filename: str):
         filename=filename
     )
 
-@app.get("/mesh/glb_cache/{filename}")
-async def get_glb_cache_mesh(filename: str):
-    """Sert un fichier GLB depuis le cache data/glb_cache/"""
-    file_path = DATA_GLB_CACHE / filename
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier GLB cache introuvable")
-
-    return FileResponse(
-        path=str(file_path),
-        media_type="model/gltf-binary",
-        filename=filename
-    )
-
-# Initialisation du gestionnaire de tâches
-@app.on_event("startup")
-async def startup_event():
-    """Démarre le gestionnaire de tâches"""
-    print("\n=== MeshSimplifier Backend Starting ===")
-
-    # Valider la clé API Stability
-    api_key = os.getenv('STABILITY_API_KEY')
-    if not api_key:
-        print("[!] WARNING: STABILITY_API_KEY not set - mesh generation will fail")
-        print("    Create .env file and add: STABILITY_API_KEY=sk-your-key-here")
-    elif not api_key.startswith('sk-'):
-        print("[!] WARNING: STABILITY_API_KEY may be invalid (should start with 'sk-')")
-    else:
-        print(f"[OK] Stability API key loaded: {api_key[:10]}...")
-
-    # Enregistrer les handlers de tâches
-    task_manager.register_handler("simplify", simplify_task_handler)
-    task_manager.register_handler("simplify_adaptive", adaptive_simplify_task_handler)
-    task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
-    task_manager.register_handler("retopologize", retopologize_task_handler)
-    task_manager.register_handler("segment", segment_task_handler)
-    task_manager.start()
-
-    # GLB-First: Nettoyer les fichiers temporaires au démarrage
-    print("\n[TEMP] Nettoyage des fichiers temporaires...")
-    cleanup_temp_directory(DATA_TEMP, max_age_hours=1)
-
-    # Afficher les statistiques du cache GLB au démarrage
-    print("\n [GLB CACHE] Statistics at startup:")
-    stats = get_cache_stats(DATA_INPUT)
-    print(f"  Total GLB files: {stats['total_glb_files']}")
-    print(f"  Total size: {stats['total_size_mb']:.2f} MB")
-    if stats['orphaned_count'] > 0:
-        print(f"   Orphaned files: {stats['orphaned_count']}")
-        print(f"     Use POST /cache/glb/cleanup to clean them up")
-
-    print("=====================================\n")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Arrête proprement le gestionnaire de tâches"""
-    task_manager.stop()
+# NOTE: Les @app.on_event("startup") et @app.on_event("shutdown")
+# ont été migrés vers le système lifespan (voir ligne ~33)
+# Cette migration suit les recommandations FastAPI 0.93+
 
 if __name__ == "__main__":
     import uvicorn

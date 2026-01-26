@@ -5,6 +5,7 @@ Gestionnaire de taches asynchrones pour le traitement de maillages
 import threading
 import queue
 import uuid
+import random
 from typing import Dict, Any, Callable
 from datetime import datetime
 from enum import Enum
@@ -66,6 +67,10 @@ class TaskManager:
         self.running = False
         self.lock = threading.Lock()
 
+        # P1: Configuration du nettoyage automatique des tâches
+        self.task_ttl_seconds = 3600  # Garder les tâches terminées 1 heure
+        self.max_tasks = 1000  # Maximum 1000 tâches en mémoire
+
     def register_handler(self, task_type: str, handler: Callable):
         """
         Enregistre une fonction pour traiter un type de tache specifique
@@ -106,11 +111,39 @@ class TaskManager:
         with self.lock:
             return dict(self.tasks)
 
+    def cleanup_old_tasks(self):
+        """
+        P1: Supprime les tâches terminées depuis plus de task_ttl_seconds.
+        Appelé périodiquement par les workers pour éviter les fuites mémoire.
+        """
+        now = datetime.now()
+        with self.lock:
+            tasks_to_remove = []
+
+            for task_id, task in self.tasks.items():
+                # Seulement nettoyer les tâches terminées (completed ou failed)
+                if task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED]:
+                    if task.completed_at:
+                        age = (now - task.completed_at).total_seconds()
+                        if age > self.task_ttl_seconds:
+                            tasks_to_remove.append(task_id)
+
+            # Supprimer les vieilles tâches
+            for task_id in tasks_to_remove:
+                del self.tasks[task_id]
+
+            if tasks_to_remove:
+                print(f"[TASK_MANAGER] Cleaned up {len(tasks_to_remove)} old tasks (>{self.task_ttl_seconds}s)")
+
     def _worker(self, worker_id: int):
         """Thread worker qui traite les taches de la file d'attente"""
         print(f"[WORKER-{worker_id}] Started and waiting for tasks...")
         while self.running:
             try:
+                # P1: Nettoyage périodique des vieilles tâches (10% de chance à chaque itération)
+                if random.random() < 0.1:
+                    self.cleanup_old_tasks()
+
                 # Recupere une tache avec timeout pour permettre l'arret propre
                 task_id = self.task_queue.get(timeout=1)
 
