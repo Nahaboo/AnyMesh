@@ -9,6 +9,7 @@ import * as THREE from 'three'
 import { TextureLoader } from 'three'
 import ShaderMaterialController from './ShaderMaterialController'
 import { getMaterialShader } from '../shaders/materials'
+import { API_BASE_URL } from '../utils/api'
 
 /**
  * RenderModeController - Handles different rendering modes for 3D models
@@ -22,19 +23,19 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
   const shaderId = isShaderMode ? renderMode.split(':')[1] : null
   const shaderConfig = shaderId ? getMaterialShader(shaderId) : null
 
-  // Build URL - handle different mesh sources
+  // Q4: Build URL - handle different mesh sources (utilise API_BASE_URL configurable)
   // Add uploadId as cache-busting parameter to force browser to reload file
   let meshUrl
   if (isSegmented) {
-    meshUrl = `http://localhost:8000/mesh/segmented/${filename}?v=${uploadId || Date.now()}`
+    meshUrl = `${API_BASE_URL}/mesh/segmented/${filename}?v=${uploadId || Date.now()}`
   } else if (isRetopologized) {
-    meshUrl = `http://localhost:8000/mesh/retopo/${filename}?v=${uploadId || Date.now()}`
+    meshUrl = `${API_BASE_URL}/mesh/retopo/${filename}?v=${uploadId || Date.now()}`
   } else if (isSimplified) {
-    meshUrl = `http://localhost:8000/mesh/output/${filename}?v=${uploadId || Date.now()}`
+    meshUrl = `${API_BASE_URL}/mesh/output/${filename}?v=${uploadId || Date.now()}`
   } else if (isGenerated) {
-    meshUrl = `http://localhost:8000/mesh/generated/${filename}?v=${uploadId || Date.now()}`
+    meshUrl = `${API_BASE_URL}/mesh/generated/${filename}?v=${uploadId || Date.now()}`
   } else {
-    meshUrl = `http://localhost:8000/mesh/input/${filename}?v=${uploadId || Date.now()}`
+    meshUrl = `${API_BASE_URL}/mesh/input/${filename}?v=${uploadId || Date.now()}`
   }
 
   // Determine file format (with safety check)

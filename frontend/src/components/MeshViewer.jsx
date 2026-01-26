@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import CameraController from './CameraController'
 import RenderModeController from './RenderModeController'
+import ModelErrorBoundary from './ModelErrorBoundary'
 
 /**
  * CameraSync - Component that syncs camera rotation to parent
@@ -73,7 +74,7 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
         {/* Matcap materials (solid/flat) don't need directional lights */}
         <ambientLight intensity={1.0} />
 
-        {/* 3D Model with render mode */}
+        {/* Q5: 3D Model with render mode + Error Boundary */}
         <Suspense fallback={
           <group>
             <mesh>
@@ -86,16 +87,18 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
             </mesh>
           </group>
         }>
-          <RenderModeController
-            filename={meshInfo.displayFilename || meshInfo.filename}
-            isGenerated={meshInfo.isGenerated || false}
-            isSimplified={meshInfo.isSimplified || false}
-            isRetopologized={meshInfo.isRetopologized || false}
-            isSegmented={meshInfo.isSegmented || false}
-            renderMode={renderMode}
-            shaderParams={shaderParams}
-            uploadId={meshInfo.uploadId}
-          />
+          <ModelErrorBoundary>
+            <RenderModeController
+              filename={meshInfo.displayFilename || meshInfo.filename}
+              isGenerated={meshInfo.isGenerated || false}
+              isSimplified={meshInfo.isSimplified || false}
+              isRetopologized={meshInfo.isRetopologized || false}
+              isSegmented={meshInfo.isSegmented || false}
+              renderMode={renderMode}
+              shaderParams={shaderParams}
+              uploadId={meshInfo.uploadId}
+            />
+          </ModelErrorBoundary>
         </Suspense>
 
         {/* Camera Controls */}

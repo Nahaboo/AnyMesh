@@ -7,11 +7,20 @@ import os
 import re
 import shutil
 import time
+import logging
 from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
+
+# Q2: Configuration du logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
@@ -38,17 +47,17 @@ async def lifespan(app: FastAPI):
     Remplace les @app.on_event("startup") et @app.on_event("shutdown") dépréciés.
     """
     # === STARTUP ===
-    print("\n=== MeshSimplifier Backend Starting ===")
+    logger.info("=== MeshSimplifier Backend Starting ===")
 
     # Valider la clé API Stability
     api_key = os.getenv('STABILITY_API_KEY')
     if not api_key:
-        print("[!] WARNING: STABILITY_API_KEY not set - mesh generation will fail")
-        print("    Create .env file and add: STABILITY_API_KEY=sk-your-key-here")
+        logger.warning("STABILITY_API_KEY not set - mesh generation will fail")
+        logger.warning("Create .env file and add: STABILITY_API_KEY=sk-your-key-here")
     elif not api_key.startswith('sk-'):
-        print("[!] WARNING: STABILITY_API_KEY may be invalid (should start with 'sk-')")
+        logger.warning("STABILITY_API_KEY may be invalid (should start with 'sk-')")
     else:
-        print(f"[OK] Stability API key loaded: {api_key[:10]}...")
+        logger.info(f"Stability API key loaded: {api_key[:10]}...")
 
     # Enregistrer les handlers de tâches
     task_manager.register_handler("simplify", simplify_task_handler)
@@ -59,17 +68,17 @@ async def lifespan(app: FastAPI):
     task_manager.start()
 
     # GLB-First: Nettoyer les fichiers temporaires au démarrage
-    print("\n[TEMP] Nettoyage des fichiers temporaires...")
+    logger.info("Nettoyage des fichiers temporaires...")
     cleanup_temp_directory(DATA_TEMP, max_age_hours=1)
 
-    print("=====================================\n")
+    logger.info("Backend started successfully")
 
     yield  # L'application tourne ici
 
     # === SHUTDOWN ===
-    print("\n=== MeshSimplifier Backend Stopping ===")
+    logger.info("=== MeshSimplifier Backend Stopping ===")
     task_manager.stop()
-    print("=====================================\n")
+    logger.info("Backend stopped")
 
 
 app = FastAPI(
@@ -229,7 +238,7 @@ async def upload_mesh(file: UploadFile = File(...)):
     """
     import uuid
     start_total = time.time()
-    print(f"\n[UPLOAD] Started: {file.filename}")
+    logger.info(f"[UPLOAD] Started: {file.filename}")
 
     # S1: Sécuriser le nom de fichier (path traversal protection)
     try:
@@ -237,7 +246,7 @@ async def upload_mesh(file: UploadFile = File(...)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    print(f"  Filename sanitized: {file.filename} -> {safe_filename}")
+    logger.debug(f"Filename sanitized: {file.filename} -> {safe_filename}")
 
     # S2: Vérifier la taille du fichier AVANT d'écrire
     file.file.seek(0, 2)  # Aller à la fin
@@ -273,7 +282,7 @@ async def upload_mesh(file: UploadFile = File(...)):
 
     save_duration = (time.time() - start_save) * 1000
     original_size = temp_path.stat().st_size
-    print(f"  Temp save: {save_duration:.2f}ms ({original_size / 1024 / 1024:.2f} MB)")
+    logger.debug(f"Temp save: {save_duration:.2f}ms ({original_size / 1024 / 1024:.2f} MB)")
 
     # GLB-First: Définir le chemin GLB avant le try pour le cleanup
     # S1: Utiliser le filename sécurisé
@@ -293,9 +302,8 @@ async def upload_mesh(file: UploadFile = File(...)):
                 detail=f"Conversion GLB echouee: {conversion_result.get('error')}"
             )
 
-        print(f"  GLB conversion: {convert_duration:.2f}ms")
-        print(f"    Original format: {conversion_result['original_format']}")
-        print(f"    Has textures: {conversion_result['has_textures']}")
+        logger.debug(f"GLB conversion: {convert_duration:.2f}ms")
+        logger.debug(f"Original format: {conversion_result['original_format']}, Has textures: {conversion_result['has_textures']}")
 
         # Charger le GLB pour analyse
         start_load = time.time()
@@ -311,7 +319,7 @@ async def upload_mesh(file: UploadFile = File(...)):
             mesh = loaded
 
         load_duration = (time.time() - start_load) * 1000
-        print(f"  GLB load: {load_duration:.2f}ms")
+        logger.debug(f"GLB load: {load_duration:.2f}ms")
 
         # Validation
         if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:
@@ -363,12 +371,10 @@ async def upload_mesh(file: UploadFile = File(...)):
         }
 
         analyze_duration = (time.time() - start_analyze) * 1000
-        print(f"  Analysis: {analyze_duration:.2f}ms")
-        print(f"    Vertices: {mesh_info['vertices_count']:,}")
-        print(f"    Triangles: {mesh_info['triangles_count']:,}")
+        logger.debug(f"Analysis: {analyze_duration:.2f}ms - {mesh_info['vertices_count']:,} vertices, {mesh_info['triangles_count']:,} triangles")
 
         total_duration = (time.time() - start_total) * 1000
-        print(f"[UPLOAD] Completed: {total_duration:.2f}ms\n")
+        logger.info(f"[UPLOAD] Completed: {total_duration:.2f}ms - {safe_filename}")
 
         backend_timings = {
             "file_save_ms": round(save_duration, 2),
@@ -411,7 +417,7 @@ async def analyze_mesh(filename: str):
     Retourne les statistiques complètes (vertices, triangles, propriétés)
     """
     start_analyze = time.time()
-    print(f"\n [ANALYZE] Starting analysis: {filename}")
+    logger.info(f"[ANALYZE] Starting: {filename}")
 
     file_path = DATA_INPUT / filename
 
@@ -465,9 +471,7 @@ async def analyze_mesh(filename: str):
         }
 
         analyze_duration = (time.time() - start_analyze) * 1000
-        print(f"   Analysis completed: {analyze_duration:.2f}ms")
-        print(f"     Vertices: {mesh_stats['vertices_count']:,}")
-        print(f"     Triangles: {mesh_stats['triangles_count']:,}")
+        logger.info(f"[ANALYZE] Completed: {analyze_duration:.2f}ms - {mesh_stats['vertices_count']:,} vertices, {mesh_stats['triangles_count']:,} triangles")
 
         return {
             "success": True,
@@ -476,7 +480,7 @@ async def analyze_mesh(filename: str):
         }
 
     except Exception as e:
-        print(f"   Analysis failed: {e}")
+        logger.error(f"[ANALYZE] Failed: {e}")
         raise HTTPException(
             status_code=400,
             detail=f"Erreur lors de l'analyse: {str(e)}"
@@ -552,7 +556,7 @@ async def save_mesh(request: SaveMeshRequest):
     save_path = DATA_SAVED / f"{save_name}.glb"
     shutil.copy2(source_path, save_path)
 
-    print(f"[SAVE] {source_path.name} -> {save_path.name}")
+    logger.info(f"[SAVE] {source_path.name} -> {save_path.name}")
 
     return {
         "success": True,
@@ -590,7 +594,7 @@ async def delete_saved_mesh(filename: str):
         raise HTTPException(status_code=404, detail="Fichier non trouve")
 
     file_path.unlink()
-    print(f"[DELETE] Saved mesh deleted: {filename}")
+    logger.info(f"[DELETE] Saved mesh deleted: {filename}")
 
     return {"success": True, "deleted_filename": filename}
 
@@ -626,13 +630,11 @@ def simplify_task_handler(task: Task):
     input_path = Path(input_file)
     output_path = Path(output_file)
 
-    print(f"\n[SIMPLIFY] Starting simplification")
-    print(f"  Input: {input_path.name}")
-    print(f"  Output: {output_path.name}")
+    logger.info(f"[SIMPLIFY] Starting: {input_path.name} -> {output_path.name}")
 
     # GLB-First: Utiliser simplify_mesh_glb directement pour les GLB
     if input_path.suffix.lower() == '.glb':
-        print(f"  [GLB-First] Direct GLB simplification (no conversion)")
+        logger.debug("[GLB-First] Direct GLB simplification (no conversion)")
 
         # S'assurer que la sortie est aussi en GLB
         if output_path.suffix.lower() != '.glb':
@@ -656,11 +658,11 @@ def simplify_task_handler(task: Task):
         )
 
     if result.get('success'):
-        print(f"  [OK] Simplification completed")
+        logger.info("[SIMPLIFY] Completed successfully")
 
         # Warning si textures perdues
         if result.get('textures_lost'):
-            print(f"  [WARN] Textures were lost during simplification")
+            logger.warning("Textures were lost during simplification")
 
         return {
             'success': True,
@@ -697,16 +699,12 @@ def adaptive_simplify_task_handler(task: Task):
     curvature_threshold = params.get("curvature_threshold")
     is_generated = params.get("is_generated", False)
 
-    print(f"\n [ADAPTIVE SIMPLIFY] Starting adaptive simplification")
-    print(f"  Input: {Path(input_file).name}")
-    print(f"  Output: {Path(output_file).name}")
-    print(f"  Target ratio: {target_ratio}")
-    print(f"  Flat multiplier: {flat_multiplier}x")
+    logger.info(f"[ADAPTIVE SIMPLIFY] Starting: {Path(input_file).name} (ratio={target_ratio}, flat_mult={flat_multiplier}x)")
 
     # Si le fichier est un GLB, le convertir en OBJ pour la simplification
     input_path = Path(input_file)
     if input_path.suffix.lower() == '.glb':
-        print(f"  [INFO] Converting GLB to OBJ for simplification...")
+        logger.debug("Converting GLB to OBJ for simplification...")
         temp_obj_filename = f"{input_path.stem}_temp.obj"
         temp_obj_file = input_path.parent / temp_obj_filename
 
@@ -725,7 +723,7 @@ def adaptive_simplify_task_handler(task: Task):
 
         # Utiliser le fichier OBJ temporaire comme input
         input_file = str(temp_obj_file)
-        print(f"  [INFO] Using temporary OBJ: {temp_obj_filename}")
+        logger.debug(f"Using temporary OBJ: {temp_obj_filename}")
 
     # Exécute la simplification adaptative
     # TEMPORAIRE: Utiliser Trimesh en mode standard (pas de vraie adaptation)
@@ -739,13 +737,13 @@ def adaptive_simplify_task_handler(task: Task):
     )
 
     if result.get('success'):
-        print(f"   Adaptive simplification completed successfully")
+        logger.info("[ADAPTIVE SIMPLIFY] Completed successfully")
 
         # Afficher les stats adaptatives
         adaptive_stats = result.get('adaptive_stats', {})
-        print(f"  Flat regions: {adaptive_stats.get('flat_percentage', 0):.1f}% of mesh")
-        print(f"  Flat triangles: {adaptive_stats.get('flat_triangles_original', 0)} → {adaptive_stats.get('flat_triangles_final', 0)}")
-        print(f"  Curved triangles: {adaptive_stats.get('curved_triangles_original', 0)} → {adaptive_stats.get('curved_triangles_final', 0)}")
+        logger.debug(f"Flat regions: {adaptive_stats.get('flat_percentage', 0):.1f}% of mesh")
+        logger.debug(f"Flat triangles: {adaptive_stats.get('flat_triangles_original', 0)} -> {adaptive_stats.get('flat_triangles_final', 0)}")
+        logger.debug(f"Curved triangles: {adaptive_stats.get('curved_triangles_original', 0)} -> {adaptive_stats.get('curved_triangles_final', 0)}")
 
         # Transformer le résultat pour le frontend
         output_path = Path(output_file)
@@ -773,14 +771,14 @@ def adaptive_simplify_task_handler(task: Task):
 
         # Nettoyer le fichier OBJ temporaire si on a converti depuis GLB
         if '_temp.obj' in str(input_file) and Path(input_file).exists():
-            print(f"  [CLEANUP] Removing temporary OBJ file")
+            logger.debug("Removing temporary OBJ file")
             Path(input_file).unlink()
 
         return result_data
 
     # En cas d'échec, nettoyer quand même le fichier temporaire
     if '_temp.obj' in str(input_file) and Path(input_file).exists():
-        print(f"  [CLEANUP] Removing temporary OBJ file")
+        logger.debug("Removing temporary OBJ file")
         Path(input_file).unlink()
 
     return result
@@ -1035,7 +1033,7 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
     output_filename = f"{source_path.stem}.{target_format}"
     output_path = DATA_OUTPUT / output_filename
 
-    print(f"\n [EXPORT] Converting {filename} to {target_format.upper()}")
+    logger.info(f"[EXPORT] Converting {filename} to {target_format.upper()}")
 
     # Convertir le fichier
     result = convert_mesh_format(source_path, output_path, target_format)
@@ -1046,7 +1044,7 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
             detail=f"Erreur lors de la conversion: {result.get('error', 'Unknown error')}"
         )
 
-    print(f"  ✓ Export successful: {output_filename}")
+    logger.info(f"[EXPORT] Success: {output_filename}")
 
     # Retourner le fichier converti
     return FileResponse(
@@ -1075,8 +1073,7 @@ async def upload_images(files: list[UploadFile] = File(...)):
     session_path = DATA_INPUT_IMAGES / session_id
     session_path.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n [UPLOAD-IMAGES] Session: {session_id}")
-    print(f"  Images count: {len(files)}")
+    logger.info(f"[UPLOAD-IMAGES] Session: {session_id} ({len(files)} images)")
 
     uploaded_images = []
 
@@ -1107,9 +1104,9 @@ async def upload_images(files: list[UploadFile] = File(...)):
             "format": file_ext
         })
 
-        print(f"  ✓ Saved: {file.filename} → {file_path.name}")
+        logger.debug(f"Saved: {file.filename} -> {file_path.name}")
 
-    print(f" [UPLOAD-IMAGES] Completed: {len(uploaded_images)} images")
+    logger.info(f"[UPLOAD-IMAGES] Completed: {len(uploaded_images)} images")
 
     return {
         "message": "Images uploadées avec succès",
@@ -1157,7 +1154,7 @@ def generate_mesh_task_handler(task: Task):
 
     # [DEV/TEST] Si c'est une tâche fake, elle est déjà complétée, ne rien faire
     if params.get("fake", False):
-        print(f"  [GENERATE-MESH] Fake task detected, skipping API call")
+        logger.debug("[GENERATE-MESH] Fake task detected, skipping API call")
         return task.result  # Le résultat a déjà été défini dans l'endpoint
 
     session_path = DATA_INPUT_IMAGES / session_id
@@ -1168,9 +1165,7 @@ def generate_mesh_task_handler(task: Task):
             'error': 'Session non trouvée'
         }
 
-    print(f"\n [GENERATE-MESH] Starting generation with provider: {provider}")
-    print(f"  Session: {session_id}")
-    print(f"  Resolution: {resolution}")
+    logger.info(f"[GENERATE-MESH] Starting with {provider} (session={session_id}, resolution={resolution})")
 
     # Récupérer toutes les images de la session
     image_paths = sorted([
@@ -1186,9 +1181,9 @@ def generate_mesh_task_handler(task: Task):
 
     # Les deux providers utilisent uniquement la première image
     first_image = image_paths[0]
-    print(f"  Images in session: {len(image_paths)}")
+    logger.debug(f"Images in session: {len(image_paths)}")
     if len(image_paths) > 1:
-        print(f"  [INFO] Using first image: {first_image.name} (single-view only)")
+        logger.info(f"Using first image: {first_image.name} (single-view only)")
 
     # GLB-First: Format de sortie toujours GLB
     output_filename = f"{session_id}_generated.glb"
@@ -1221,7 +1216,7 @@ def generate_mesh_task_handler(task: Task):
         )
 
     if result.get('success'):
-        print(f"   [OK] Mesh generated: {output_filename}")
+        logger.info(f"[GENERATE-MESH] Success: {output_filename}")
         result['output_filename'] = output_filename
         result['session_id'] = session_id
         result['images_used'] = 1
@@ -1257,13 +1252,11 @@ def retopologize_task_handler(task: Task):
             'error': f'Fichier source non trouve: {filename}'
         }
 
-    print(f"\n[RETOPOLOGIZE] Starting retopology")
-    print(f"  Input: {filename}")
-    print(f"  Target faces: {target_face_count}")
+    logger.info(f"[RETOPOLOGIZE] Starting: {filename} (target={target_face_count} faces)")
 
     # GLB-First: Utiliser retopologize_mesh_glb directement pour les GLB
     if input_file.suffix.lower() == '.glb':
-        print(f"  [GLB-First] Direct GLB retopology pipeline")
+        logger.debug("[GLB-First] Direct GLB retopology pipeline")
 
         # Sortie en GLB
         output_filename = f"{input_file.stem}_retopo.glb"
@@ -1283,9 +1276,9 @@ def retopologize_task_handler(task: Task):
         )
 
         if result.get('success'):
-            print(f"  [OK] Retopology completed")
+            logger.info("[RETOPOLOGIZE] Completed successfully")
             if result.get('textures_lost'):
-                print(f"  [WARN] Textures were lost during retopology")
+                logger.warning("Textures were lost during retopology")
 
             return {
                 'success': True,
@@ -1305,7 +1298,7 @@ def retopologize_task_handler(task: Task):
 
     # GLB-First: Ce code ne devrait pas être atteint car tous les uploads sont GLB
     # Mais par sécurité, on produit quand même un GLB en sortie
-    print(f"  [WARN] Non-GLB input detected ({input_file.suffix}), converting to GLB pipeline")
+    logger.warning(f"Non-GLB input detected ({input_file.suffix}), converting to GLB pipeline")
 
     output_filename = f"{Path(filename).stem}_retopo.glb"
     output_file = DATA_RETOPO / output_filename
@@ -1329,20 +1322,20 @@ def retopologize_task_handler(task: Task):
             import trimesh
             mesh = trimesh.load(str(temp_ply), process=False)
             mesh.export(str(output_file), file_type='glb')
-            print(f"  [OK] Retopology completed (converted to GLB)")
+            logger.info("[RETOPOLOGIZE] Completed (converted to GLB)")
             result['output_filename'] = output_filename
             result['output_file'] = str(output_file)
             result['vertices_count'] = result.get('retopo_vertices', 0)
             result['faces_count'] = result.get('retopo_faces', 0)
             result['output_size'] = output_file.stat().st_size if output_file.exists() else 0
         except Exception as e:
-            print(f"  [ERROR] GLB conversion failed: {e}")
+            logger.error(f"GLB conversion failed: {e}")
             result['success'] = False
             result['error'] = f"GLB conversion failed: {e}"
         finally:
             safe_delete(temp_ply)
     else:
-        print(f"  [ERROR] Retopology failed: {result.get('error', 'Unknown error')}")
+        logger.error(f"Retopology failed: {result.get('error', 'Unknown error')}")
 
     return result
 
@@ -1373,9 +1366,7 @@ def segment_task_handler(task: Task):
         input_path = DATA_INPUT / filename
         source_label = "input"
 
-    print(f"\n[SEGMENT] Starting segmentation")
-    print(f"  Input: {filename} ({source_label})")
-    print(f"  Method: {method}")
+    logger.info(f"[SEGMENT] Starting: {filename} ({source_label}) method={method}")
 
     # Construire les kwargs
     kwargs = {}
@@ -1389,7 +1380,7 @@ def segment_task_handler(task: Task):
     try:
         # GLB-First: Utiliser segment_mesh_glb pour les GLB
         if input_path.suffix.lower() == '.glb':
-            print(f"  [GLB-First] Direct GLB segmentation pipeline")
+            logger.debug("[GLB-First] Direct GLB segmentation pipeline")
 
             # Sortie en GLB
             output_filename = f"{input_path.stem}_segmented.glb"
@@ -1404,9 +1395,9 @@ def segment_task_handler(task: Task):
             )
 
             if result.get('success'):
-                print(f"  [OK] Segmentation completed: {result.get('num_segments', 0)} segments")
+                logger.info(f"[SEGMENT] Completed: {result.get('num_segments', 0)} segments")
                 if result.get('textures_lost'):
-                    print(f"  [WARN] Textures were lost during segmentation")
+                    logger.warning("Textures were lost during segmentation")
 
                 return {
                     "success": True,
@@ -1428,7 +1419,7 @@ def segment_task_handler(task: Task):
 
         # GLB-First: Ce code ne devrait pas être atteint car tous les uploads sont GLB
         # Mais par sécurité, on produit quand même un GLB en sortie
-        print(f"  [WARN] Non-GLB input detected ({input_path.suffix}), converting to GLB pipeline")
+        logger.warning(f"Non-GLB input detected ({input_path.suffix}), converting to GLB pipeline")
 
         base_name = Path(filename).stem
         temp_output = DATA_TEMP / f"{base_name}_segmented_temp{input_path.suffix}"
@@ -1448,7 +1439,7 @@ def segment_task_handler(task: Task):
                 import trimesh
                 mesh = trimesh.load(str(temp_output), process=False)
                 mesh.export(str(output_path), file_type='glb')
-                print(f"  [OK] Segmentation completed (converted to GLB): {result.get('num_segments', 0)} segments")
+                logger.info(f"[SEGMENT] Completed (converted to GLB): {result.get('num_segments', 0)} segments")
                 return {
                     "success": True,
                     "output_filename": output_filename,
@@ -1458,7 +1449,7 @@ def segment_task_handler(task: Task):
                     **result
                 }
             except Exception as e:
-                print(f"  [ERROR] GLB conversion failed: {e}")
+                logger.error(f"GLB conversion failed: {e}")
                 return {"success": False, "error": f"GLB conversion failed: {e}"}
             finally:
                 safe_delete(temp_output)
@@ -1466,7 +1457,7 @@ def segment_task_handler(task: Task):
                 mtl_path = temp_output.with_suffix('.mtl')
                 safe_delete(mtl_path)
 
-        print(f"  [ERROR] Segmentation failed: {result.get('error')}")
+        logger.error(f"Segmentation failed: {result.get('error')}")
         return result
 
     except Exception as e:
@@ -1499,7 +1490,7 @@ async def generate_mesh_fake(request: GenerateMeshRequest):
 
     # Utiliser le premier fichier GLB trouvé comme template
     template_glb = template_files[0]
-    print(f"\n [FAKE-GENERATE] Using template: {template_glb.name}")
+    logger.info(f"[FAKE-GENERATE] Using template: {template_glb.name}")
 
     # Générer le nom de fichier de sortie
     output_filename = f"{request.session_id}_generated.glb"
@@ -1508,7 +1499,7 @@ async def generate_mesh_fake(request: GenerateMeshRequest):
     # Copier le fichier template
     import shutil
     shutil.copy2(template_glb, output_path)
-    print(f"  [FAKE-GENERATE] Copied to: {output_filename}")
+    logger.debug(f"[FAKE-GENERATE] Copied to: {output_filename}")
 
     # Charger le mesh pour obtenir les stats
     import trimesh
@@ -1548,8 +1539,7 @@ async def generate_mesh_fake(request: GenerateMeshRequest):
             'session_id': request.session_id,
             'images_used': 1
         }
-        print(f"  [FAKE-GENERATE] Task completed immediately")
-        print(f"  [FAKE-GENERATE] Vertices: {vertices_count}, Faces: {faces_count}")
+        logger.info(f"[FAKE-GENERATE] Completed: {vertices_count} vertices, {faces_count} faces")
 
     return {
         "task_id": task_id,

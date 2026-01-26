@@ -7,6 +7,7 @@ import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader'
 import { Center } from '@react-three/drei'
 import * as THREE from 'three'
 import perf from '../utils/performance'
+import { API_BASE_URL } from '../utils/api'
 
 // Créer un loader personnalisé pour mesurer les performances
 class InstrumentedGLTFLoader extends GLTFLoader {
@@ -65,10 +66,10 @@ class InstrumentedGLTFLoader extends GLTFLoader {
  * @param {boolean} isGenerated - true si le fichier provient de /mesh/generated/, false pour /mesh/input/
  */
 function MeshModel({ filename, isGenerated = false }) {
-  // Construire l'URL du fichier sur le backend
+  // Q4: Construire l'URL du fichier sur le backend (utilise API_BASE_URL configurable)
   const meshUrl = isGenerated
-    ? `http://localhost:8000/mesh/generated/${filename}`
-    : `http://localhost:8000/mesh/input/${filename}`
+    ? `${API_BASE_URL}/mesh/generated/${filename}`
+    : `${API_BASE_URL}/mesh/input/${filename}`
 
   // Déterminer le format du fichier
   const extension = filename.split('.').pop().toLowerCase()

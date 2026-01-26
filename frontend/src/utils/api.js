@@ -1,11 +1,15 @@
 /**
  * Service API pour communiquer avec le backend FastAPI
- * Base URL: http://localhost:8000
+ * Base URL configurable via VITE_API_BASE_URL
  */
 
 import axios from 'axios'
 
-const API_BASE_URL = 'http://localhost:8000'
+// Q4: URL backend configurable via variable d'environnement
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
+// Export pour utilisation dans d'autres fichiers
+export { API_BASE_URL }
 
 // Configuration axios avec base URL
 const api = axios.create({
@@ -32,25 +36,7 @@ export const listMeshes = async () => {
 }
 
 /**
- * Upload rapide d'un fichier de maillage 3D (pour visualisation immédiate)
- * @param {File} file - Le fichier a uploader
- * @returns {Promise} Les informations minimales du maillage (sans analyse complète)
- */
-export const uploadMeshFast = async (file) => {
-  const formData = new FormData()
-  formData.append('file', file)
-
-  const response = await api.post('/upload-fast', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  })
-
-  return response.data
-}
-
-/**
- * Upload un fichier de maillage 3D avec analyse complète
+ * Upload un fichier de maillage 3D
  * @param {File} file - Le fichier a uploader
  * @returns {Promise} Les informations du maillage uploade
  */
@@ -147,16 +133,31 @@ export const getDownloadUrl = (filename) => {
 
 /**
  * Polling du statut d'une tache jusqu'a completion
+ * P3: Ajout d'un timeout pour eviter le polling infini
  * @param {string} taskId - ID de la tache
  * @param {function} onProgress - Callback appele a chaque update
  * @param {number} interval - Intervalle de polling en ms (default: 1000)
+ * @param {number} maxAttempts - Nombre max de tentatives (default: 300 = 5 min)
  * @returns {Promise} Resultat final de la tache
  */
-export const pollTaskStatus = async (taskId, onProgress, interval = 1000) => {
+export const pollTaskStatus = async (taskId, onProgress, interval = 1000, maxAttempts = 300) => {
   return new Promise((resolve, reject) => {
+    let attempts = 0
+    let networkRetries = 0
+    const maxNetworkRetries = 3
+
     const poll = async () => {
+      attempts++
+
+      // P3: Timeout apres maxAttempts
+      if (attempts > maxAttempts) {
+        reject(new Error(`Timeout: La tache ${taskId} a pris trop de temps (>${Math.round(maxAttempts * interval / 1000)}s)`))
+        return
+      }
+
       try {
         const task = await getTaskStatus(taskId)
+        networkRetries = 0 // Reset sur succes
 
         // Callback de progression
         if (onProgress) {
@@ -173,7 +174,14 @@ export const pollTaskStatus = async (taskId, onProgress, interval = 1000) => {
           setTimeout(poll, interval)
         }
       } catch (error) {
-        reject(error)
+        // Retry sur erreur reseau (3 tentatives max)
+        networkRetries++
+        if (networkRetries < maxNetworkRetries) {
+          console.warn(`[pollTaskStatus] Erreur reseau (tentative ${networkRetries}/${maxNetworkRetries}):`, error.message)
+          setTimeout(poll, interval * 2) // Backoff x2
+        } else {
+          reject(error)
+        }
       }
     }
 
@@ -208,10 +216,10 @@ export const uploadImages = async (files) => {
 
 /**
  * Lance une tâche de génération de maillage à partir d'images
+ * GLB-First: Le format de sortie est toujours GLB (natif de l'API Stability)
  * @param {Object} params - Paramètres de génération
  * @param {string} params.sessionId - ID de session (images uploadées)
  * @param {string} params.resolution - Résolution: 'low', 'medium', 'high'
- * @param {string} params.outputFormat - Format de sortie: 'obj', 'stl', 'ply'
  * @param {string} params.remeshOption - Topologie: 'none', 'triangle', 'quad' (optionnel, défaut: 'quad')
  * @returns {Promise} task_id et infos
  */
@@ -219,28 +227,8 @@ export const generateMesh = async (params) => {
   const response = await api.post('/generate-mesh', {
     session_id: params.sessionId,
     resolution: params.resolution,
-    output_format: params.outputFormat,
-    remesh_option: params.remeshOption || 'quad'
-  })
-  return response.data
-}
-
-/**
- * [DEV/TEST] Génère un mesh fake en copiant un GLB existant
- * Utile pour tester sans consommer de crédits API
- * @param {Object} params - Paramètres de génération
- * @param {string} params.sessionId - ID de la session
- * @param {string} params.resolution - Résolution ('low'|'medium'|'high')
- * @param {string} params.outputFormat - Format de sortie
- * @param {string} params.remeshOption - Topologie: 'none', 'triangle', 'quad' (optionnel, défaut: 'quad')
- * @returns {Promise} Réponse avec task_id
- */
-export const generateMeshFake = async (params) => {
-  const response = await api.post('/generate-mesh-fake', {
-    session_id: params.sessionId,
-    resolution: params.resolution,
-    output_format: params.outputFormat,
-    remesh_option: params.remeshOption || 'quad'
+    remesh_option: params.remeshOption || 'quad',
+    provider: params.provider || 'stability'
   })
   return response.data
 }
