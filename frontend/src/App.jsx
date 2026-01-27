@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ConfigSidebar from './components/ConfigSidebar'
 import ViewerLayout from './components/ViewerLayout'
-import { simplifyMesh, generateMesh, generateMeshFake, segmentMesh, retopologizeMesh, pollTaskStatus } from './utils/api'
+import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, pollTaskStatus } from './utils/api'
 import './styles/v2-theme.css'
 
 /**
@@ -126,7 +126,7 @@ function App() {
       bounding_box: meshInfo.bounding_box,
       uploadId: Date.now(),
       isSimplified: true,  // Flag to indicate this is from /mesh/output
-      originalFilename: originalName  // Fichier source simplifié (bunny_simplified.obj)
+      originalFilename: originalName  // Fichier source simplifié (bunny_simplified.glb)
     }
 
     console.log('[App] Loading simplified mesh (GLB):', simplifiedMeshInfo)
@@ -235,7 +235,7 @@ function App() {
       filename: result.output_filename,
       originalFilename: originalMeshInfo.originalFilename || originalMeshInfo.filename,
       file_size: result.output_size || 0,
-      format: originalMeshInfo.format || '.obj',
+      format: originalMeshInfo.format || '.glb',
       vertices_count: originalMeshInfo.vertices_count || 0,
       faces_count: originalMeshInfo.faces_count || originalMeshInfo.triangles_count || 0,
       triangles_count: originalMeshInfo.triangles_count || originalMeshInfo.faces_count || 0,
@@ -320,11 +320,11 @@ function App() {
 
     // Le backend convertit automatiquement en GLB
     // Remplacer l'extension par .glb pour charger le fichier converti
-    const originalName = result.output_filename  // Ex: bunny_retopo.obj
+    const originalName = result.output_filename  // Ex: bunny_retopo.glb
     const glbName = originalName.replace(/\.[^.]+$/, '.glb')  // Ex: bunny_retopo.glb
 
     const retopologizedMeshInfo = {
-      filename: originalName,  // Nom du fichier original (bunny_retopo.obj) - pour référence
+      filename: originalName,  // Nom du fichier GLB retopologisé
       displayFilename: glbName,  // Fichier GLB converti - c'est ce qui sera chargé par RenderModeController
       file_size: result.output_size || 0,
       format: originalMeshInfo.format,  // Format du mesh ORIGINAL (avant retopologie)
@@ -334,7 +334,7 @@ function App() {
       bounding_box: meshInfo.bounding_box,
       uploadId: Date.now(),
       isRetopologized: true,  // Flag to indicate this is from /mesh/output (retopologized)
-      originalFilename: originalName  // Fichier source retopologisé (bunny_retopo.obj)
+      originalFilename: originalName  // Fichier source retopologisé (bunny_retopo.glb)
     }
 
     console.log('[App] Loading retopologized mesh (GLB):', retopologizedMeshInfo)

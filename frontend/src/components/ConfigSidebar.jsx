@@ -5,11 +5,9 @@ import ImageUpload from './ImageUpload'
 /**
  * Configuration Sidebar - First page of the app
  * Allows user to choose between uploading a 3D file or generating from images
- * Includes options like "Remove background"
  */
 function ConfigSidebar({ onConfigComplete }) {
   const [mode, setMode] = useState('upload') // 'upload' or 'generate'
-  const [removeBackground, setRemoveBackground] = useState(false)
   const [uploadedData, setUploadedData] = useState(null)
 
   const handleFileUpload = (meshInfo) => {
@@ -30,12 +28,7 @@ function ConfigSidebar({ onConfigComplete }) {
 
   const handleOk = () => {
     if (uploadedData) {
-      onConfigComplete({
-        ...uploadedData,
-        options: {
-          removeBackground
-        }
-      })
+      onConfigComplete(uploadedData)
     }
   }
 
@@ -158,48 +151,6 @@ function ConfigSidebar({ onConfigComplete }) {
             )}
           </div>
         )}
-      </div>
-
-      {/* Options Section */}
-      <div style={{ marginBottom: 'var(--v2-spacing-xl)' }}>
-        <h3 style={{
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          color: 'var(--v2-text-secondary)',
-          marginBottom: 'var(--v2-spacing-md)'
-        }}>
-          Options
-        </h3>
-
-        <div className="v2-card">
-          <div className="v2-card-body" style={{ padding: 'var(--v2-spacing-md)' }}>
-            <label style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--v2-spacing-sm)' }}>
-                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                <span style={{ fontSize: '0.875rem', color: 'var(--v2-text-primary)' }}>
-                  Remove background
-                </span>
-              </div>
-
-              <div className="v2-toggle">
-                <input
-                  type="checkbox"
-                  checked={removeBackground}
-                  onChange={(e) => setRemoveBackground(e.target.checked)}
-                />
-                <span className="v2-toggle-slider"></span>
-              </div>
-            </label>
-          </div>
-        </div>
       </div>
 
       {/* OK Button */}

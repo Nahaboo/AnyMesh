@@ -12,10 +12,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
   const [deterministic, setDeterministic] = useState(true)
   const [preserveBoundaries, setPreserveBoundaries] = useState(true)
 
-  // Vérifier si le format est GLTF/GLB (non supporté pour la retopologie)
-  // Exception: Les meshes générés (GLB) peuvent être retopologisés car ils seront convertis automatiquement
   const isGenerated = meshInfo?.isGenerated === true
-  const isGltfFormat = (meshInfo?.format === '.gltf' || meshInfo?.format === '.glb') && !isGenerated
 
   // Vérifier si on visualise un mesh déjà retopologisé
   const isRetopologizedMesh = meshInfo?.isRetopologized === true
@@ -23,7 +20,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
   const handleSubmit = (e) => {
     e.preventDefault()
 
-    if (onRetopologize && !isGltfFormat) {
+    if (onRetopologize) {
       // Validation: s'assurer que currentFaces est valide
       if (!currentFaces || currentFaces <= 0) {
         console.error('[RetopologyControls] Invalid currentFaces:', currentFaces)
@@ -68,22 +65,6 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
       }}>
         Parametres de retopologie
       </h2>
-
-      {/* Avertissement pour GLTF/GLB */}
-      {isGltfFormat && (
-        <div style={{
-          background: 'var(--v2-warning-bg)',
-          border: '1px solid var(--v2-warning-border)',
-          borderRadius: 'var(--v2-radius-lg)',
-          padding: 'var(--v2-spacing-md)',
-          marginBottom: 'var(--v2-spacing-md)',
-          fontSize: '0.875rem',
-          color: 'var(--v2-warning-text)'
-        }}>
-          <strong style={{ display: 'block', marginBottom: '4px' }}>Format non supporté</strong>
-          Les formats GLTF/GLB ne peuvent pas être retopologisés. Veuillez utiliser un fichier OBJ, PLY, STL ou OFF.
-        </div>
-      )}
 
       {/* Avertissement si mesh déjà retopologisé */}
       {isRetopologizedMesh && (
@@ -150,12 +131,12 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
             step={Math.max(100, Math.floor((maxFaces - minFaces) / 100))}
             value={targetFaceCount}
             onChange={(e) => setTargetFaceCount(parseInt(e.target.value))}
-            disabled={isProcessing || isGltfFormat || isRetopologizedMesh}
+            disabled={isProcessing || isRetopologizedMesh}
             style={{
               width: '100%',
               accentColor: 'var(--v2-accent-primary)',
-              cursor: (isProcessing || isGltfFormat || isRetopologizedMesh) ? 'not-allowed' : 'pointer',
-              opacity: (isProcessing || isGltfFormat || isRetopologizedMesh) ? 0.5 : 1
+              cursor: (isProcessing || isRetopologizedMesh) ? 'not-allowed' : 'pointer',
+              opacity: (isProcessing || isRetopologizedMesh) ? 0.5 : 1
             }}
           />
 
@@ -226,19 +207,19 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
             gap: 'var(--v2-spacing-sm)',
             fontSize: '0.875rem',
             color: 'var(--v2-text-primary)',
-            cursor: (isProcessing || isGltfFormat || isRetopologizedMesh) ? 'not-allowed' : 'pointer',
-            opacity: (isProcessing || isGltfFormat || isRetopologizedMesh) ? 0.5 : 1
+            cursor: (isProcessing || isRetopologizedMesh) ? 'not-allowed' : 'pointer',
+            opacity: (isProcessing || isRetopologizedMesh) ? 0.5 : 1
           }}>
             <input
               type="checkbox"
               checked={deterministic}
               onChange={(e) => setDeterministic(e.target.checked)}
-              disabled={isProcessing || isGltfFormat || isRetopologizedMesh}
+              disabled={isProcessing || isRetopologizedMesh}
               style={{
                 width: '16px',
                 height: '16px',
                 accentColor: 'var(--v2-accent-primary)',
-                cursor: (isProcessing || isGltfFormat || isRetopologizedMesh) ? 'not-allowed' : 'pointer'
+                cursor: (isProcessing || isRetopologizedMesh) ? 'not-allowed' : 'pointer'
               }}
             />
             Mode déterministe (résultats reproductibles)
@@ -250,19 +231,19 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
             gap: 'var(--v2-spacing-sm)',
             fontSize: '0.875rem',
             color: 'var(--v2-text-primary)',
-            cursor: (isProcessing || isGltfFormat || isRetopologizedMesh) ? 'not-allowed' : 'pointer',
-            opacity: (isProcessing || isGltfFormat || isRetopologizedMesh) ? 0.5 : 1
+            cursor: (isProcessing || isRetopologizedMesh) ? 'not-allowed' : 'pointer',
+            opacity: (isProcessing || isRetopologizedMesh) ? 0.5 : 1
           }}>
             <input
               type="checkbox"
               checked={preserveBoundaries}
               onChange={(e) => setPreserveBoundaries(e.target.checked)}
-              disabled={isProcessing || isGltfFormat || isRetopologizedMesh}
+              disabled={isProcessing || isRetopologizedMesh}
               style={{
                 width: '16px',
                 height: '16px',
                 accentColor: 'var(--v2-accent-primary)',
-                cursor: (isProcessing || isGltfFormat || isRetopologizedMesh) ? 'not-allowed' : 'pointer'
+                cursor: (isProcessing || isRetopologizedMesh) ? 'not-allowed' : 'pointer'
               }}
             />
             Préserver les bordures (meshes ouverts)
@@ -272,23 +253,23 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
         {/* Bouton Lancer */}
         <button
           type="submit"
-          disabled={isProcessing || isGltfFormat || isRetopologizedMesh || !meshInfo}
+          disabled={isProcessing || isRetopologizedMesh || !meshInfo}
           style={{
             width: '100%',
             padding: 'var(--v2-spacing-md)',
-            background: (isProcessing || isGltfFormat || isRetopologizedMesh || !meshInfo)
+            background: (isProcessing || isRetopologizedMesh || !meshInfo)
               ? 'var(--v2-bg-tertiary)'
               : 'var(--v2-accent-primary)',
-            color: (isProcessing || isGltfFormat || isRetopologizedMesh || !meshInfo)
+            color: (isProcessing || isRetopologizedMesh || !meshInfo)
               ? 'var(--v2-text-tertiary)'
               : '#ffffff',
             border: 'none',
             borderRadius: 'var(--v2-radius-lg)',
             fontSize: '1rem',
             fontWeight: 600,
-            cursor: (isProcessing || isGltfFormat || isRetopologizedMesh || !meshInfo) ? 'not-allowed' : 'pointer',
+            cursor: (isProcessing || isRetopologizedMesh || !meshInfo) ? 'not-allowed' : 'pointer',
             transition: 'all 0.2s',
-            boxShadow: (isProcessing || isGltfFormat || isRetopologizedMesh || !meshInfo)
+            boxShadow: (isProcessing || isRetopologizedMesh || !meshInfo)
               ? 'none'
               : 'var(--v2-shadow-md)',
             marginBottom: 'var(--v2-spacing-md)'

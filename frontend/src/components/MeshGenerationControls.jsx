@@ -2,26 +2,36 @@ import { useState } from 'react'
 
 function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
   const [resolution, setResolution] = useState('medium')
-  const [outputFormat, setOutputFormat] = useState('obj')
   const [remeshOption, setRemeshOption] = useState('quad')
+  const [provider, setProvider] = useState('stability')
 
   const handleGenerate = () => {
     if (onGenerate) {
       onGenerate({
         sessionId: sessionInfo.sessionId,
         resolution,
-        outputFormat,
-        remeshOption
+        remeshOption,
+        provider
       })
     }
   }
 
-  // Estimation du temps de génération
-  const estimatedTime = {
-    low: '10-30 sec',
-    medium: '30-60 sec',
-    high: '1-3 min'
+  // Informations des providers
+  const providerInfo = {
+    stability: {
+      name: 'Stability AI',
+      description: 'API cloud, haute qualite',
+      time: { low: '10-30 sec', medium: '30-60 sec', high: '1-3 min' }
+    },
+    triposr: {
+      name: 'TripoSR (Local)',
+      description: 'Gratuit, necessite GPU',
+      time: { low: '< 5 sec', medium: '< 10 sec', high: '< 30 sec' }
+    }
   }
+
+  // Temps estime selon provider et resolution
+  const estimatedTime = providerInfo[provider].time[resolution]
 
   return (
     <div style={{
@@ -101,11 +111,11 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
             ))}
           </div>
           <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)', marginTop: 'var(--v2-spacing-xs)' }}>
-            Temps estimé: {estimatedTime[resolution]}
+            Temps estime: {estimatedTime}
           </p>
         </div>
 
-        {/* Format de sortie */}
+        {/* Selecteur de Provider */}
         <div>
           <label style={{
             display: 'block',
@@ -114,78 +124,82 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
             color: 'var(--v2-text-secondary)',
             marginBottom: 'var(--v2-spacing-xs)'
           }}>
-            Format de sortie
+            Moteur de generation
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
-            {['obj', 'stl', 'ply'].map((format) => (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
+            {['stability', 'triposr'].map((p) => (
               <button
-                key={format}
-                onClick={() => setOutputFormat(format)}
+                key={p}
+                onClick={() => setProvider(p)}
                 disabled={isProcessing}
                 style={{
-                  padding: 'var(--v2-spacing-xs) var(--v2-spacing-sm)',
+                  padding: 'var(--v2-spacing-sm)',
                   borderRadius: 'var(--v2-radius-lg)',
                   fontSize: '0.875rem',
-                  fontWeight: 500,
-                  textTransform: 'uppercase',
                   transition: 'all var(--v2-transition-base)',
-                  background: outputFormat === format ? 'var(--v2-accent-primary)' : 'var(--v2-bg-tertiary)',
-                  color: outputFormat === format ? '#ffffff' : 'var(--v2-text-secondary)',
+                  background: provider === p ? 'var(--v2-accent-primary)' : 'var(--v2-bg-tertiary)',
+                  color: provider === p ? '#ffffff' : 'var(--v2-text-secondary)',
                   border: 'none',
                   cursor: isProcessing ? 'not-allowed' : 'pointer',
-                  opacity: isProcessing ? 0.5 : 1
+                  opacity: isProcessing ? 0.5 : 1,
+                  textAlign: 'left'
                 }}
               >
-                {format}
+                <div style={{ fontWeight: 500 }}>{providerInfo[p].name}</div>
+                <div style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '2px' }}>
+                  {providerInfo[p].description}
+                </div>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Topologie du mesh (Remesh Option) */}
-        <div>
-          <label style={{
-            display: 'block',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: 'var(--v2-text-secondary)',
-            marginBottom: 'var(--v2-spacing-xs)'
-          }}>
-            Topologie du mesh
-          </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
-            {[
-              { value: 'none', label: 'Aucune' },
-              { value: 'triangle', label: 'Triangle' },
-              { value: 'quad', label: 'Quad' }
-            ].map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setRemeshOption(option.value)}
-                disabled={isProcessing}
-                style={{
-                  padding: 'var(--v2-spacing-xs) var(--v2-spacing-sm)',
-                  borderRadius: 'var(--v2-radius-lg)',
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
-                  transition: 'all var(--v2-transition-base)',
-                  background: remeshOption === option.value ? 'var(--v2-accent-primary)' : 'var(--v2-bg-tertiary)',
-                  color: remeshOption === option.value ? '#ffffff' : 'var(--v2-text-secondary)',
-                  border: 'none',
-                  cursor: isProcessing ? 'not-allowed' : 'pointer',
-                  opacity: isProcessing ? 0.5 : 1
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
+        {/* Topologie du mesh (Remesh Option) - Stability AI uniquement */}
+        {provider === 'stability' && (
+          <div>
+            <label style={{
+              display: 'block',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              color: 'var(--v2-text-secondary)',
+              marginBottom: 'var(--v2-spacing-xs)'
+            }}>
+              Topologie du mesh
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
+              {[
+                { value: 'none', label: 'Aucune' },
+                { value: 'triangle', label: 'Triangle' },
+                { value: 'quad', label: 'Quad' }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setRemeshOption(option.value)}
+                  disabled={isProcessing}
+                  style={{
+                    padding: 'var(--v2-spacing-xs) var(--v2-spacing-sm)',
+                    borderRadius: 'var(--v2-radius-lg)',
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                    transition: 'all var(--v2-transition-base)',
+                    background: remeshOption === option.value ? 'var(--v2-accent-primary)' : 'var(--v2-bg-tertiary)',
+                    color: remeshOption === option.value ? '#ffffff' : 'var(--v2-text-secondary)',
+                    border: 'none',
+                    cursor: isProcessing ? 'not-allowed' : 'pointer',
+                    opacity: isProcessing ? 0.5 : 1
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)', marginTop: 'var(--v2-spacing-xs)' }}>
+              {remeshOption === 'none' && 'Pas de remaillage (plus rapide, topologie basique)'}
+              {remeshOption === 'triangle' && 'Triangles optimises (bonne qualite)'}
+              {remeshOption === 'quad' && 'Quadrilateres (meilleure qualite, recommande)'}
+            </p>
           </div>
-          <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)', marginTop: 'var(--v2-spacing-xs)' }}>
-            {remeshOption === 'none' && 'Pas de remaillage (plus rapide, topologie basique)'}
-            {remeshOption === 'triangle' && 'Triangles optimisés (bonne qualité)'}
-            {remeshOption === 'quad' && 'Quadrilatères (meilleure qualité, recommandé)'}
-          </p>
-        </div>
+        )}
 
         {/* Bouton de génération */}
         <button

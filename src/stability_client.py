@@ -147,9 +147,12 @@ def generate_mesh_from_image_sf3d(
     """
     Genere un maillage 3D a partir d'une image en utilisant Stability AI Fast 3D
 
+    GLB-First: L'API Stability retourne nativement du GLB, donc on sauvegarde directement
+    sans conversion. Le parametre output_path doit etre un .glb.
+
     Args:
         image_path: Chemin vers l'image d'entree (JPG/PNG)
-        output_path: Chemin de sortie desire (.glb, .obj, .stl, .ply)
+        output_path: Chemin de sortie (.glb uniquement - GLB-First)
         resolution: 'low', 'medium', ou 'high'
         remesh_option: 'none', 'triangle', ou 'quad' - Topologie du mesh (None = auto selon resolution)
         api_key: Cle API Stability (requis)
@@ -221,40 +224,14 @@ def generate_mesh_from_image_sf3d(
             api_key=api_key
         )
 
-        # Determiner si une conversion de format est necessaire
-        requested_format = output_path.suffix.lower().lstrip('.')
+        # GLB-First: Sauvegarde directe du GLB (pas de conversion)
+        # Forcer l'extension .glb si ce n'est pas deja le cas
+        if output_path.suffix.lower() != '.glb':
+            output_path = output_path.with_suffix('.glb')
 
-        if requested_format == 'glb':
-            # Sauvegarde directe - pas de conversion necessaire
-            print(f"  Saving GLB directly to {output_path.name}")
-            output_path.write_bytes(glb_bytes)
-            final_output = output_path
-
-        else:
-            # Sauvegarder vers GLB temporaire, convertir au format demande
-            temp_glb = output_path.parent / f"{output_path.stem}_temp.glb"
-            print(f"  Saving temporary GLB for conversion...")
-            temp_glb.write_bytes(glb_bytes)
-
-            # Convertir en utilisant le convertisseur existant
-            from .converter import convert_mesh_format
-            print(f"  Converting GLB to {requested_format.upper()}...")
-            conversion_result = convert_mesh_format(
-                input_path=temp_glb,
-                output_path=output_path,
-                output_format=requested_format
-            )
-
-            # Nettoyer le fichier temporaire
-            temp_glb.unlink()
-
-            if not conversion_result['success']:
-                return {
-                    'success': False,
-                    'error': f"Conversion vers {requested_format.upper()} echouee: {conversion_result.get('error')}"
-                }
-
-            final_output = output_path
+        print(f"  [GLB-First] Saving GLB directly to {output_path.name}")
+        output_path.write_bytes(glb_bytes)
+        final_output = output_path
 
         # Charger le maillage pour les statistiques
         mesh = trimesh.load(str(final_output))

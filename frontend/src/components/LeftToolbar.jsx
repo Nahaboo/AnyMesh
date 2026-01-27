@@ -15,8 +15,7 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       ),
-      enabled: !isRetopologizedMesh,
-      disabledReason: isRetopologizedMesh ? 'Mesh retopologisé (quads). La simplification produirait des résultats dégradés. Workflow recommandé: Simplification → Retopologie.' : null
+      enabled: true  // Toujours cliquable, le panneau affiche l'avertissement si nécessaire
     },
     /* DISABLED - Refine (not implemented yet)
     {

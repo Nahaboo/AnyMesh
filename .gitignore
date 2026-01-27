@@ -48,8 +48,9 @@ yarn-error.log*
 *~
 .DS_Store
 
-# Archive
+# Archive (code obsolete garde en local)
 archive/
+_archived/
 
 # Fichiers de documentation (EXCLUS des commits)
 *.md

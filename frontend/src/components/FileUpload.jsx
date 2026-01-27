@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { uploadMeshFast } from '../utils/api'
+import { uploadMesh } from '../utils/api'
 
 
 function FileUpload({ onUploadSuccess }) {
@@ -60,28 +60,20 @@ function FileUpload({ onUploadSuccess }) {
         setUploadProgress(prev => Math.min(prev + 10, 90))
       }, 200)
 
-      // Appel API rapide (pas d'analyse complète)
-      const response = await uploadMeshFast(file)
+      // GLB-First: Appel API avec conversion automatique vers GLB
+      const response = await uploadMesh(file)
 
       clearInterval(progressInterval)
       setUploadProgress(100)
 
       // Success
-      console.log('🟢 [FileUpload] Upload rapide réussi:', response)
+      console.log('[FileUpload] Upload GLB-First reussi:', response)
 
       if (onUploadSuccess) {
-        // Créer un objet meshInfo avec les données minimales
-        const meshInfo = {
-          filename: response.filename,
-          displayFilename: response.glb_filename || response.filename,
-          originalFilename: response.original_filename || response.filename,
-          file_size: response.file_size,
-          format: response.format,
-          bounding_box: response.bounding_box,
-          vertices_count: response.vertices_count,
-          faces_count: response.faces_count,
-          uploadId: Date.now() // Pour forcer le rechargement
-        }
+        // GLB-First: mesh_info contient les données complètes
+        const meshInfo = response.mesh_info
+        // Ajouter uploadId pour forcer le rechargement du viewer
+        meshInfo.uploadId = Date.now()
         onUploadSuccess(meshInfo)
       }
 
