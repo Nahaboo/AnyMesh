@@ -221,8 +221,32 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Vérification de l'état de l'API"""
-    return {"status": "healthy"}
+    """
+    U6: Health check détaillé avec infos système.
+    Retourne le statut de l'API, les tâches en cours et l'espace disque.
+    """
+    # Espace disque disponible
+    disk = shutil.disk_usage(DATA_INPUT)
+    disk_free_gb = disk.free / (1024 ** 3)
+
+    # Tâches en cours
+    all_tasks = task_manager.get_all_tasks()
+    pending_count = sum(1 for t in all_tasks.values() if t.status.value == "pending")
+    processing_count = sum(1 for t in all_tasks.values() if t.status.value == "processing")
+
+    return {
+        "status": "healthy",
+        "version": "0.2.0",
+        "tasks": {
+            "pending": pending_count,
+            "processing": processing_count,
+            "total": len(all_tasks)
+        },
+        "disk": {
+            "free_gb": round(disk_free_gb, 2),
+            "warning": disk_free_gb < 1.0
+        }
+    }
 
 @app.post("/upload")
 async def upload_mesh(file: UploadFile = File(...)):
