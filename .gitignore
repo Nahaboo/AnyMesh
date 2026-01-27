@@ -66,6 +66,14 @@ data/input_images/*
 !data/input_images/.gitkeep
 data/generated_meshes/*
 !data/generated_meshes/.gitkeep
+data/segmented/*
+!data/segmented/.gitkeep
+data/retopo/*
+!data/retopo/.gitkeep
+data/saved/*
+!data/saved/.gitkeep
+data/temp/*
+!data/temp/.gitkeep
 data/test_generation/
 
 # Fichiers systeme Windows
@@ -119,6 +127,9 @@ documents/
 
 # Dossiers PyTorch3D compilés
 pytorch3d/
+
+# Outils externes (optionnels, lourds)
+tools/TripoSR/
 
 # Fichiers pip
 pip-log.txt
