@@ -7,7 +7,6 @@ from typing import Dict, Any, Tuple
 import open3d as o3d
 import trimesh
 import numpy as np
-import copy
 
 
 def build_triangle_adjacency(triangles: np.ndarray) -> list:
@@ -323,11 +322,9 @@ def simplify_mesh_trimesh(
         # S'assurer que target_triangles est valide (minimum 4 faces pour un tétraèdre)
         target_triangles = max(4, min(target_triangles, original_triangles))
 
-        # Création d'une copie profonde
-        mesh_simplified = copy.deepcopy(mesh_original)
-
         # Simplification avec l'algorithme Quadric Error Metric
-        mesh_simplified = mesh_simplified.simplify_quadric_decimation(
+        # Note: simplify_quadric_decimation retourne un nouveau mesh, pas de copie nécessaire
+        mesh_simplified = mesh_original.simplify_quadric_decimation(
             face_count=target_triangles
         )
 
@@ -438,11 +435,9 @@ def simplify_mesh_glb(
         target_triangles = int(target_triangles)
         target_triangles = max(4, min(target_triangles, original_triangles))
 
-        # Copie profonde pour simplification
-        mesh_simplified = copy.deepcopy(mesh)
-
         # Simplification Quadric Error Metric
-        mesh_simplified = mesh_simplified.simplify_quadric_decimation(
+        # Note: simplify_quadric_decimation retourne un nouveau mesh, pas de copie nécessaire
+        mesh_simplified = mesh.simplify_quadric_decimation(
             face_count=target_triangles
         )
 

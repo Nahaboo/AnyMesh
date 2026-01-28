@@ -82,6 +82,22 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
         </div>
       )}
 
+      {/* G10: Avertissement perte de textures pour mesh généré */}
+      {isGenerated && !isRetopologizedMesh && (
+        <div style={{
+          background: 'var(--v2-warning-bg)',
+          border: '1px solid var(--v2-warning-border)',
+          borderRadius: 'var(--v2-radius-lg)',
+          padding: 'var(--v2-spacing-md)',
+          marginBottom: 'var(--v2-spacing-md)',
+          fontSize: '0.875rem',
+          color: 'var(--v2-warning-text)'
+        }}>
+          <strong style={{ display: 'block', marginBottom: '4px' }}>Textures seront perdues</strong>
+          La retopologie recrée la géométrie. Les textures et matériaux ne seront pas conservés.
+        </div>
+      )}
+
       {/* Info retopologie */}
       <div style={{
         background: 'var(--v2-info-bg)',
