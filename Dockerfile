@@ -9,8 +9,10 @@ RUN apt-get update && apt-get install -y \
     libsm6 \
     libxext6 \
     libxrender-dev \
+    libgomp1 \
     wget \
     unzip \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Télécharger Instant Meshes Linux (binaire officiel AWS S3)
