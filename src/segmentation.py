@@ -665,17 +665,23 @@ def segment_mesh_glb(
         vertices = np.asarray(o3d_mesh.vertices)
         faces = np.asarray(o3d_mesh.triangles)
 
-        # Créer le mesh Trimesh avec vertex colors
-        segmented_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
-
         # Transférer les vertex colors si présentes
+        vertex_colors_rgba = None
         if o3d_mesh.has_vertex_colors():
             vertex_colors = np.asarray(o3d_mesh.vertex_colors)
-            # Trimesh attend des couleurs RGBA en uint8 ou float 0-1
+            # Trimesh attend des couleurs RGBA en uint8
             # Open3D donne float 0-1 en RGB, ajouter alpha=1
-            rgba_colors = np.ones((len(vertex_colors), 4))
-            rgba_colors[:, :3] = vertex_colors
-            segmented_mesh.visual.vertex_colors = (rgba_colors * 255).astype(np.uint8)
+            vertex_colors_rgba = np.ones((len(vertex_colors), 4), dtype=np.uint8)
+            vertex_colors_rgba[:, :3] = (vertex_colors * 255).astype(np.uint8)
+            vertex_colors_rgba[:, 3] = 255
+            print(f"[SEGMENTATION-GLB] Vertex colors detected: {len(vertex_colors)} vertices")
+
+        # Créer le mesh Trimesh avec vertex colors directement dans le constructeur
+        segmented_mesh = trimesh.Trimesh(
+            vertices=vertices,
+            faces=faces,
+            vertex_colors=vertex_colors_rgba
+        )
 
         segmented_mesh.export(str(output_glb), file_type='glb')
 
