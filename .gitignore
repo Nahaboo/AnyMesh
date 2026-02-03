@@ -130,6 +130,13 @@ pytorch3d/
 
 # Outils externes (optionnels, lourds)
 tools/TripoSR/
+tools/instant-meshes/Instant Meshes.exe
+tools/instant-meshes/datasets/
+InstantMesh/
+
+# Screenshots et images temporaires
+*.png
+!frontend/public/**/*.png
 
 # Fichiers pip
 pip-log.txt
