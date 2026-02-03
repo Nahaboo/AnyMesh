@@ -229,8 +229,56 @@ function TaskStatus({ task, onComplete, activeTool }) {
                 </div>
               )}
             </>
+          ) : task.taskType === 'segment' ? (
+            // Affichage pour la segmentation
+            <>
+              <div style={{
+                background: 'var(--v2-success-bg)',
+                borderRadius: 'var(--v2-radius-lg)',
+                padding: 'var(--v2-spacing-md)'
+              }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)', marginBottom: '8px' }}>Segmentation terminée</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                    <span style={{ color: 'var(--v2-success-text)' }}>Segments détectés:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                      {task.result.num_segments?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                    <span style={{ color: 'var(--v2-success-text)' }}>Méthode:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                      {task.result.method === 'connectivity' ? 'Connectivité' :
+                       task.result.method === 'sharp_edges' ? 'Arêtes vives' :
+                       task.result.method === 'curvature' ? 'Courbure' :
+                       task.result.method === 'planes' ? 'Plans' : task.result.method}
+                    </span>
+                  </div>
+                  {task.result.num_sharp_edges && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                      <span style={{ color: 'var(--v2-success-text)' }}>Arêtes vives:</span>
+                      <span style={{ fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                        {task.result.num_sharp_edges?.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {task.result.had_textures && (
+                <div style={{
+                  background: 'var(--v2-warning-bg)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  padding: 'var(--v2-spacing-md)'
+                }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--v2-warning-text)' }}>
+                    Les textures ont été remplacées par les couleurs de segments
+                  </p>
+                </div>
+              )}
+            </>
           ) : (
-            // Affichage pour la simplification/segmentation/retopologie
+            // Affichage pour la simplification/retopologie
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--v2-spacing-md)' }}>
                 <div style={{
@@ -253,8 +301,7 @@ function TaskStatus({ task, onComplete, activeTool }) {
                   padding: 'var(--v2-spacing-md)'
                 }}>
                   <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)', marginBottom: '4px' }}>
-                    {task.taskType === 'simplify' ? 'Simplifié' :
-                     task.taskType === 'retopology' ? 'Retopologisé' : 'Traité'}
+                    {task.taskType === 'simplify' ? 'Simplifié' : 'Retopologisé'}
                   </p>
                   <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-success-text)' }}>
                     {task.result.simplified?.vertices?.toLocaleString()} vertices
