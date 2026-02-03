@@ -175,7 +175,7 @@ function BottomToolbar({ meshInfo, onExport, onMeshSaved, axesWidget }) {
             }}>
               <span style={{ color: 'var(--v2-text-secondary)' }}>Faces</span>
               <span style={{ color: 'var(--v2-text-primary)', fontWeight: 500 }}>
-                {meshInfo.faces_count?.toLocaleString() || 0}
+                {(meshInfo.triangles_count || meshInfo.faces_count || 0).toLocaleString()}
               </span>
             </div>
             <div style={{
