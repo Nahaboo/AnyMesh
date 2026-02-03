@@ -3,9 +3,18 @@ Module pour la retopologie de meshes 3D en utilisant Instant Meshes.
 """
 
 import subprocess
+import platform
 import trimesh
 from pathlib import Path
 from typing import Dict, Any
+
+
+# Chemin Instant Meshes adaptatif selon l'OS
+if platform.system() == "Windows":
+    INSTANT_MESHES_PATH = Path("tools/instant-meshes/Instant Meshes.exe")
+else:
+    # Linux (Docker production)
+    INSTANT_MESHES_PATH = Path("/app/tools/instant-meshes/Instant Meshes")
 
 from .temp_utils import get_temp_path, safe_delete
 
@@ -58,13 +67,13 @@ def retopologize_mesh(
             "error": f"Failed to load original mesh: {str(e)}"
         }
 
-    # Construire la commande Instant Meshes
-    instant_meshes_exe = Path("tools/instant-meshes/Instant Meshes.exe")
+    # Utiliser le chemin Instant Meshes adaptatif (Windows/Linux)
+    instant_meshes_exe = INSTANT_MESHES_PATH
 
     if not instant_meshes_exe.exists():
         return {
             "success": False,
-            "error": "Instant Meshes executable not found at tools/instant-meshes/Instant Meshes.exe"
+            "error": f"Instant Meshes executable not found at {instant_meshes_exe}"
         }
 
     # Arguments de la commande

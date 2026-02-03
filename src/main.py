@@ -88,11 +88,16 @@ app = FastAPI(
     lifespan=lifespan  # Q1: Utilisation du nouveau système lifespan
 )
 
-# Configuration CORS - Permettre toutes les origines en développement
+# Configuration CORS - Lecture depuis variable d'environnement
+# En dev: ALLOWED_ORIGINS=* (défaut)
+# En prod: ALLOWED_ORIGINS=https://votre-frontend.vercel.app
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins = ["*"] if allowed_origins_env == "*" else [o.strip() for o in allowed_origins_env.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En production, spécifier les origines autorisées
-    allow_credentials=False,  # Doit être False si allow_origins=["*"]
+    allow_origins=allowed_origins,
+    allow_credentials=False,  # Doit être False si allow_origins contient "*"
     allow_methods=["*"],
     allow_headers=["*"],
 )

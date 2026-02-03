@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+frontend/
+tools/
+data/
+*.env
+.env*
+pytorch3d/
+tests/
+documents/
+*.md
+.vscode/
+.claude/
