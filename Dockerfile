@@ -13,11 +13,11 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Télécharger et installer Instant Meshes Linux
+# Télécharger Instant Meshes Linux (binaire officiel AWS S3)
 RUN mkdir -p /app/tools/instant-meshes && \
-    wget -q https://github.com/wjakob/instant-meshes/releases/download/v1.0/instant-meshes-linux.zip -O /tmp/im.zip && \
+    wget -q https://instant-meshes.s3.eu-central-1.amazonaws.com/instant-meshes-linux.zip -O /tmp/im.zip && \
     unzip -q /tmp/im.zip -d /app/tools/instant-meshes && \
-    chmod +x /app/tools/instant-meshes/Instant\ Meshes && \
+    chmod +x "/app/tools/instant-meshes/Instant Meshes" && \
     rm /tmp/im.zip
 
 COPY requirement.txt .
