@@ -1,92 +1,31 @@
-# MeshSimplifier
+# AnyMesh
 
-**Application web de simplification et reparation de maillages 3D**
+**Application web de visualisation et generation de maillage 3D**
 
-Backend Python (FastAPI + **Trimesh**) avec file d'attente de taches asynchrones + Frontend React Three Fiber.
+Backend Python (FastAPI + **Trimesh**) + Frontend React Three Fiber.
 
-**Note** : Trimesh est utilisé pour son excellente performance (`is_watertight` 5-10x plus rapide) et son support natif GLTF/GLB.
-
-## Statut du Projet
-
-### Backend (Option A - API REST avec File d'Attente)
-- [x] FastAPI server avec CORS configure
-- [x] Upload de fichiers 3D (OBJ, STL, PLY, OFF, GLTF, GLB)
-- [x] Analyse des proprietes geometriques et topologiques
-- [x] Systeme de file d'attente de taches avec workers threads
-- [x] Simplification de maillages (algorithme Quadric Error Metric)
-- [x] Suivi de progression des taches en temps reel
-- [x] Telechargement des fichiers traites
-- [x] API complete testee et fonctionnelle
-- [ ] Reparation de maillages (a venir)
-
-### Frontend
-- [x] Interface React avec Three.js / React Three Fiber
-- [x] Visualisation 3D interactive (OBJ, STL, PLY, GLTF, GLB)
-- [x] Upload avec drag & drop
-- [x] Controles de simplification
-- [x] Suivi de progression des taches en temps reel
-- [ ] Comparaison avant/apres
-- [ ] Telechargement des fichiers simplifies
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Frontend (React)                        │
-│                   React Three Fiber (3D)                     │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ HTTP REST API
-┌──────────────────────┴──────────────────────────────────────┐
-│                    Backend (FastAPI)                         │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │              Task Manager (Queue)                     │  │
-│  │  ┌─────────────┐  ┌─────────────┐                    │  │
-│  │  │  Worker 1   │  │  Worker 2   │                    │  │
-│  │  └─────────────┘  └─────────────┘                    │  │
-│  └──────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │            Open3D                                    │  │
-│  │                                                      │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                       │
-                  ┌────┴────┐
-                  │  Files  │
-            ┌─────┴─────────┴─────┐
-            │ data/input/         │
-            │ data/output/        │
-            └─────────────────────┘
-```
-
-## Technologies Utilisees
-
-### Backend
+Techno Utilisees
+Backend
 - **Python 3.12.10**
-- **FastAPI** - Framework web asynchrone
-- **Uvicorn** - Serveur ASGI
-- **Trimesh** - Traitement de maillages 3D (rapide, GLTF/GLB natif)
-- **Threading + Queue** - Gestion de taches asynchrones
+- **FastAPI** 
+- **Uvicorn**
+- **Trimesh** 
+- **Threading + Queue**
 
-### Frontend (a venir)
-- **React** - Framework UI
-- **Three.js / React Three Fiber** - Visualisation 3D
-- **Vite** - Build tool
+Frontend 
+- **React**
+- **Three.js / React Three Fiber**
+- **Vite**
 
-## Installation
 
-### Prerequis
-- Python 3.12.10 (exactement cette version, Open3D ne supporte pas 3.13+)
-- Git
-
-### Etapes
-
-1. **Cloner le repository**
+Etapes
+1. Cloner le repository
 ```bash
 git clone <repo-url>
-cd MeshSimplifier
+cd AnyMesh
 ```
 
-2. **Creer le virtual environment**
+2. Creer le virtual environment
 ```bash
 python -m venv venv
 ```
