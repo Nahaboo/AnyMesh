@@ -2,7 +2,7 @@ FROM python:3.12.10-slim
 
 WORKDIR /app
 
-# Dépendances système pour mesh processing + wget/unzip pour Instant Meshes
+# Dépendances système pour mesh processing + Instant Meshes
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libgomp1 \
     libopengl0 \
+    libxrandr2 \
+    libxinerama1 \
+    libxcursor1 \
+    libxi6 \
     wget \
     unzip \
     curl \
