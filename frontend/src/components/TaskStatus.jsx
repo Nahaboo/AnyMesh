@@ -229,6 +229,52 @@ function TaskStatus({ task, onComplete, activeTool }) {
                 </div>
               )}
             </>
+          ) : task.taskType === 'retopology' || task.taskType === 'retopologize' ? (
+            // Affichage pour la retopologie
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--v2-spacing-md)' }}>
+                <div style={{
+                  background: 'var(--v2-bg-tertiary)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  padding: 'var(--v2-spacing-md)'
+                }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)', marginBottom: '4px' }}>Original</p>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-text-primary)' }}>
+                    {task.result.original_vertices?.toLocaleString()} vertices
+                  </p>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-text-primary)' }}>
+                    {task.result.original_faces?.toLocaleString()} faces
+                  </p>
+                </div>
+
+                <div style={{
+                  background: 'var(--v2-success-bg)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  padding: 'var(--v2-spacing-md)'
+                }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)', marginBottom: '4px' }}>Retopologisé</p>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                    {task.result.retopo_vertices?.toLocaleString()} vertices
+                  </p>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                    {task.result.retopo_faces?.toLocaleString()} faces
+                  </p>
+                </div>
+              </div>
+
+              {task.result.had_textures && (
+                <div style={{
+                  background: 'var(--v2-warning-bg)',
+                  borderRadius: 'var(--v2-radius-lg)',
+                  padding: 'var(--v2-spacing-md)',
+                  marginTop: 'var(--v2-spacing-md)'
+                }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--v2-warning-text)' }}>
+                    Les textures ont été perdues lors de la retopologie
+                  </p>
+                </div>
+              )}
+            </>
           ) : task.taskType === 'segment' ? (
             // Affichage pour la segmentation
             <>
