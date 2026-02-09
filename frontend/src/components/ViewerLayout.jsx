@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { API_BASE_URL } from '../utils/api'
 import TopToolbar from './TopToolbar'
 import LeftToolbar from './LeftToolbar'
 import BottomToolbar from './BottomToolbar'
@@ -117,7 +118,7 @@ function ViewerLayout({
     const isSimplified = meshInfo.isSimplified || false
     const isRetopologized = meshInfo.isRetopologized || false
     const isSegmented = meshInfo.isSegmented || false
-    const exportUrl = `http://localhost:8000/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}&is_simplified=${isSimplified}&is_retopologized=${isRetopologized}&is_segmented=${isSegmented}`
+    const exportUrl = `${API_BASE_URL}/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}&is_simplified=${isSimplified}&is_retopologized=${isRetopologized}&is_segmented=${isSegmented}`
 
     console.log(`[ViewerLayout] Exporting ${meshInfo.filename} as ${format.label}`)
 
