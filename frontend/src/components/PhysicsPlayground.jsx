@@ -25,7 +25,7 @@ function subsampleVertices(positions, maxPoints) {
  * PhysicsMesh - Loads a mesh and wraps it in a dynamic RigidBody.
  * Uses a simplified ConvexHullCollider (max 256 vertices) for stable contacts.
  */
-function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dropHeight, boundingBox }) {
+function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dropHeight, boundingBox, materialPreset }) {
   const meshUrl = isGenerated
     ? `${API_BASE_URL}/mesh/generated/${filename}`
     : `${API_BASE_URL}/mesh/input/${filename}`
@@ -70,13 +70,23 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
             child.geometry.computeVertexNormals()
           }
         }
-        if (child.material) {
+        if (materialPreset?.visual) {
+          const v = materialPreset.visual
+          child.material = new THREE.MeshStandardMaterial({
+            color: v.color,
+            metalness: v.metalness,
+            roughness: v.roughness,
+            opacity: v.opacity,
+            transparent: v.transparent || false,
+            side: THREE.DoubleSide
+          })
+        } else if (child.material) {
           child.material = child.material.clone()
         }
       }
     })
     return clone
-  }, [model, boundingBox])
+  }, [model, boundingBox, materialPreset])
 
   // Extract and subsample vertices for a simplified convex hull collider
   const hullPoints = useMemo(() => {
@@ -138,7 +148,7 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
 /**
  * PhysicsPlayground - Physics scene with ground, mesh, and projectiles.
  */
-function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, projectiles }) {
+function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, projectiles, materialPreset }) {
   const bb = meshInfo.bounding_box
   const diagonal = bb?.diagonal || 2
 
@@ -177,6 +187,7 @@ function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, p
           damping={damping}
           dropHeight={dropHeight}
           boundingBox={bb}
+          materialPreset={materialPreset}
         />
       </Suspense>
 

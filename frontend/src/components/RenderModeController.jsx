@@ -15,7 +15,7 @@ import { API_BASE_URL } from '../utils/api'
  * RenderModeController - Handles different rendering modes for 3D models
  * Modes: solid, wireframe, normal (normal map visualization), smooth, textured, shader:*
  */
-function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, renderMode = 'solid', shaderParams = {}, uploadId }) {
+function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
 
   // Check if renderMode is a custom shader (format: "shader:toon")
@@ -115,6 +115,22 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
         if (child.geometry && !child.geometry.attributes.normal) {
           console.log('[RenderModeController] Computing normals on initial load')
           child.geometry.computeVertexNormals()
+        }
+
+        // Material preset override (PBR material from physics presets)
+        if (materialPreset?.visual) {
+          const v = materialPreset.visual
+          child.material = new THREE.MeshStandardMaterial({
+            color: v.color,
+            metalness: v.metalness,
+            roughness: v.roughness,
+            opacity: v.opacity,
+            transparent: v.transparent || false,
+            side: THREE.DoubleSide,
+            envMapIntensity: 1.0
+          })
+          child.material.needsUpdate = true
+          return
         }
 
         switch (renderMode) {
@@ -238,16 +254,16 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
     })
 
     return cloned
-  }, [loadedModel, renderMode, uploadId, needsUpdate])
+  }, [loadedModel, renderMode, uploadId, needsUpdate, materialPreset])
 
-  // Force re-render when render mode changes
+  // Force re-render when render mode or material preset changes
   useEffect(() => {
     console.log(`[RenderModeController] Render mode changed to: ${renderMode}`)
     setNeedsUpdate(prev => prev + 1)
-  }, [renderMode])
+  }, [renderMode, materialPreset])
 
   // If shader mode is active, delegate to ShaderMaterialController
-  if (isShaderMode && shaderConfig) {
+  if (isShaderMode && shaderConfig && !materialPreset) {
     // Only log once on shader change, not every frame
     // console.log(`[RenderModeController] Using custom shader: ${shaderConfig.name}`)
     return (

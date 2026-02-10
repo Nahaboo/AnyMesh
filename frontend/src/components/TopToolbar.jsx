@@ -5,7 +5,7 @@ import ThemeToggle from './ThemeToggle'
  * Includes: Solid, Wireframe, Normal Map, Flat, Textured modes + Custom Shaders
  * Plus Home button, theme toggle, app title, and debug toggle
  */
-function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, onDebugModeChange, isShaderMode }) {
+function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, onDebugModeChange, isShaderMode, disabled = false }) {
   const modes = [
     { id: 'solid', label: 'Solid' },
     { id: 'wireframe', label: 'Wireframe' },
@@ -52,8 +52,9 @@ function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, on
         {modes.map(mode => (
           <button
             key={mode.id}
-            onClick={() => onRenderModeChange(mode.id)}
-            className={`v2-toolbar-button ${renderMode === mode.id ? 'active' : ''}`}
+            onClick={() => !disabled && onRenderModeChange(mode.id)}
+            className={`v2-toolbar-button ${renderMode === mode.id && !disabled ? 'active' : ''}`}
+            style={disabled ? { opacity: 0.4, pointerEvents: 'none' } : undefined}
           >
             {mode.label}
           </button>

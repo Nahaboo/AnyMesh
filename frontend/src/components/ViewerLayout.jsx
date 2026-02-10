@@ -9,7 +9,7 @@ import SimplificationControls from './SimplificationControls'
 import SegmentationControls from './SegmentationControls'
 import MeshGenerationControls from './MeshGenerationControls'
 import RetopologyControls from './RetopologyControls'
-import PhysicsControls from './PhysicsControls'
+import PhysicsControls, { MATERIAL_PRESETS } from './PhysicsControls'
 import TaskStatus from './TaskStatus'
 import * as THREE from 'three'
 import { useShaderDebugGUI } from '../hooks/useShaderDebugGUI'
@@ -55,6 +55,8 @@ function ViewerLayout({
   const [physicsPreset, setPhysicsPreset] = useState(null)
   const [physicsProjectiles, setPhysicsProjectiles] = useState([])
   const [physicsResetKey, setPhysicsResetKey] = useState(0)
+
+  const activePresetObj = physicsPreset ? MATERIAL_PRESETS.find(p => p.id === physicsPreset) : null
 
   // Get active shader config
   const isShaderMode = renderMode.startsWith('shader:')
@@ -210,11 +212,12 @@ function ViewerLayout({
       {/* Top Toolbar */}
       <TopToolbar
         renderMode={renderMode}
-        onRenderModeChange={setRenderMode}
+        onRenderModeChange={(mode) => { setRenderMode(mode); setPhysicsPreset(null) }}
         onHomeClick={onHomeClick}
         debugMode={debugMode}
         onDebugModeChange={setDebugMode}
         isShaderMode={isShaderMode}
+        disabled={isPhysicsMode}
       />
 
       {/* Main Content Area */}
@@ -244,6 +247,7 @@ function ViewerLayout({
             onCameraUpdate={handleCameraUpdate}
             autoRotate={autoRotate}
             physicsMode={isPhysicsMode}
+            materialPreset={activePresetObj}
             physicsProps={isPhysicsMode ? {
               meshInfo,
               gravity: physicsGravity,
@@ -251,7 +255,8 @@ function ViewerLayout({
               restitution: physicsRestitution,
               damping: physicsDamping,
               projectiles: physicsProjectiles,
-              resetKey: physicsResetKey
+              resetKey: physicsResetKey,
+              materialPreset: activePresetObj
             } : null}
           />
 

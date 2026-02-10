@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { OrbitControls, Environment } from '@react-three/drei'
 import CameraController from './CameraController'
 import RenderModeController from './RenderModeController'
 import ModelErrorBoundary from './ModelErrorBoundary'
@@ -25,7 +25,7 @@ function CameraSync({ onCameraUpdate }) {
  * MeshViewer - 3D viewer with render mode support
  * Supports: solid, wireframe, normal, smooth rendering modes + custom shaders
  */
-function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, autoRotate = false, physicsMode = false, physicsProps = null }) {
+function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, autoRotate = false, physicsMode = false, physicsProps = null, materialPreset = null }) {
   if (!meshInfo) {
     return (
       <div className="v2-viewer-container" style={{
@@ -72,7 +72,8 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
         {meshInfo.bounding_box && <CameraController boundingBox={meshInfo.bounding_box} />}
 
         {/* Lighting */}
-        <ambientLight intensity={1.0} />
+        <ambientLight intensity={materialPreset ? 0.3 : 1.0} />
+        {materialPreset && <Environment preset="studio" />}
 
         {physicsMode && physicsProps ? (
           <Suspense fallback={
@@ -108,6 +109,7 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
                 renderMode={renderMode}
                 shaderParams={shaderParams}
                 uploadId={meshInfo.uploadId}
+                materialPreset={materialPreset}
               />
             </ModelErrorBoundary>
           </Suspense>

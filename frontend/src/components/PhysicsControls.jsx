@@ -1,10 +1,10 @@
-const MATERIAL_PRESETS = [
-  { id: 'rubber', label: 'Caoutchouc', mass: 1.0, restitution: 0.85, damping: 0.3, icon: 'circle' },
-  { id: 'wood', label: 'Bois', mass: 1.5, restitution: 0.3, damping: 0.6, icon: 'square' },
-  { id: 'metal', label: 'Metal', mass: 5.0, restitution: 0.15, damping: 0.2, icon: 'hexagon' },
-  { id: 'glass', label: 'Verre', mass: 2.5, restitution: 0.5, damping: 0.1, icon: 'diamond' },
-  { id: 'foam', label: 'Mousse', mass: 0.2, restitution: 0.05, damping: 0.9, icon: 'cloud' },
-  { id: 'stone', label: 'Pierre', mass: 4.0, restitution: 0.1, damping: 0.7, icon: 'triangle' }
+export const MATERIAL_PRESETS = [
+  { id: 'rubber', label: 'Caoutchouc', mass: 1.0, restitution: 0.85, damping: 0.3, icon: 'circle', visual: { color: '#2a2a2a', metalness: 0.0, roughness: 0.85, opacity: 1.0 } },
+  { id: 'wood', label: 'Bois', mass: 1.5, restitution: 0.3, damping: 0.6, icon: 'square', visual: { color: '#5C3A1E', metalness: 0.0, roughness: 0.9, opacity: 1.0 } },
+  { id: 'metal', label: 'Metal', mass: 5.0, restitution: 0.15, damping: 0.2, icon: 'hexagon', visual: { color: '#C0C0C0', metalness: 0.95, roughness: 0.15, opacity: 1.0 } },
+  { id: 'glass', label: 'Verre', mass: 2.5, restitution: 0.5, damping: 0.1, icon: 'diamond', visual: { color: '#E8F4FD', metalness: 0.1, roughness: 0.05, opacity: 0.4, transparent: true } },
+  { id: 'foam', label: 'Mousse', mass: 0.2, restitution: 0.05, damping: 0.9, icon: 'cloud', visual: { color: '#E8D44D', metalness: 0.0, roughness: 1.0, opacity: 1.0 } },
+  { id: 'stone', label: 'Pierre', mass: 4.0, restitution: 0.1, damping: 0.7, icon: 'triangle', visual: { color: '#4A4A4A', metalness: 0.25, roughness: 0.5, opacity: 1.0 } }
 ]
 
 function PresetIcon({ type, size = 14 }) {
