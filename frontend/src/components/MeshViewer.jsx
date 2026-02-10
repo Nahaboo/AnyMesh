@@ -4,16 +4,17 @@ import { OrbitControls } from '@react-three/drei'
 import CameraController from './CameraController'
 import RenderModeController from './RenderModeController'
 import ModelErrorBoundary from './ModelErrorBoundary'
+import PhysicsPlayground from './PhysicsPlayground'
 
 /**
- * CameraSync - Component that syncs camera rotation to parent
+ * CameraSync - Component that syncs camera rotation and position to parent
  */
 function CameraSync({ onCameraUpdate }) {
   const { camera } = useThree()
 
   useFrame(() => {
     if (onCameraUpdate && camera) {
-      onCameraUpdate(camera.quaternion)
+      onCameraUpdate(camera.quaternion, camera.position)
     }
   })
 
@@ -24,7 +25,7 @@ function CameraSync({ onCameraUpdate }) {
  * MeshViewer - 3D viewer with render mode support
  * Supports: solid, wireframe, normal, smooth rendering modes + custom shaders
  */
-function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate }) {
+function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, physicsMode = false, physicsProps = null }) {
   if (!meshInfo) {
     return (
       <div className="v2-viewer-container" style={{
@@ -70,36 +71,47 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
         {/* Camera auto-adjustment */}
         {meshInfo.bounding_box && <CameraController boundingBox={meshInfo.bounding_box} />}
 
-        {/* Lighting - Uniform ambient light for better performance */}
-        {/* Matcap materials (solid/flat) don't need directional lights */}
+        {/* Lighting */}
         <ambientLight intensity={1.0} />
 
-        {/* Q5: 3D Model with render mode + Error Boundary */}
-        <Suspense fallback={
-          <group>
-            <mesh>
-              <boxGeometry args={[2, 2, 2]} />
-              <meshStandardMaterial color="#6366f1" wireframe />
-            </mesh>
-            <mesh rotation={[0, Math.PI / 4, 0]}>
-              <boxGeometry args={[1.5, 1.5, 1.5]} />
-              <meshStandardMaterial color="#818cf8" wireframe />
-            </mesh>
-          </group>
-        }>
-          <ModelErrorBoundary>
-            <RenderModeController
-              filename={meshInfo.displayFilename || meshInfo.filename}
-              isGenerated={meshInfo.isGenerated || false}
-              isSimplified={meshInfo.isSimplified || false}
-              isRetopologized={meshInfo.isRetopologized || false}
-              isSegmented={meshInfo.isSegmented || false}
-              renderMode={renderMode}
-              shaderParams={shaderParams}
-              uploadId={meshInfo.uploadId}
-            />
-          </ModelErrorBoundary>
-        </Suspense>
+        {physicsMode && physicsProps ? (
+          <Suspense fallback={
+            <group>
+              <mesh>
+                <boxGeometry args={[2, 2, 2]} />
+                <meshStandardMaterial color="#6366f1" wireframe />
+              </mesh>
+            </group>
+          }>
+            <PhysicsPlayground key={physicsProps.resetKey} {...physicsProps} />
+          </Suspense>
+        ) : (
+          <Suspense fallback={
+            <group>
+              <mesh>
+                <boxGeometry args={[2, 2, 2]} />
+                <meshStandardMaterial color="#6366f1" wireframe />
+              </mesh>
+              <mesh rotation={[0, Math.PI / 4, 0]}>
+                <boxGeometry args={[1.5, 1.5, 1.5]} />
+                <meshStandardMaterial color="#818cf8" wireframe />
+              </mesh>
+            </group>
+          }>
+            <ModelErrorBoundary>
+              <RenderModeController
+                filename={meshInfo.displayFilename || meshInfo.filename}
+                isGenerated={meshInfo.isGenerated || false}
+                isSimplified={meshInfo.isSimplified || false}
+                isRetopologized={meshInfo.isRetopologized || false}
+                isSegmented={meshInfo.isSegmented || false}
+                renderMode={renderMode}
+                shaderParams={shaderParams}
+                uploadId={meshInfo.uploadId}
+              />
+            </ModelErrorBoundary>
+          </Suspense>
+        )}
 
         {/* Camera Controls */}
         <OrbitControls

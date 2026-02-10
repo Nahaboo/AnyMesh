@@ -48,6 +48,16 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
         </svg>
       ),
       enabled: true
+    },
+    {
+      id: 'physics',
+      label: 'Physics',
+      icon: (
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19V5m0 14l-4-4m4 4l4-4M5 12h14" />
+        </svg>
+      ),
+      enabled: true
     }
     /* DISABLED - Texturing & Rigging (not implemented yet)
     {

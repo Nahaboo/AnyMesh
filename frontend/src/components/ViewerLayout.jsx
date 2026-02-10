@@ -9,6 +9,7 @@ import SimplificationControls from './SimplificationControls'
 import SegmentationControls from './SegmentationControls'
 import MeshGenerationControls from './MeshGenerationControls'
 import RetopologyControls from './RetopologyControls'
+import PhysicsControls from './PhysicsControls'
 import TaskStatus from './TaskStatus'
 import * as THREE from 'three'
 import { useShaderDebugGUI } from '../hooks/useShaderDebugGUI'
@@ -41,22 +42,75 @@ function ViewerLayout({
   const [activeTool, setActiveTool] = useState('simplification')
   const [showRefinePanel, setShowRefinePanel] = useState(false)
   const [cameraQuaternion, setCameraQuaternion] = useState(new THREE.Quaternion())
+  const [cameraPosition, setCameraPosition] = useState(new THREE.Vector3(3, 3, 3))
   const [shaderParams, setShaderParams] = useState({})
   const [debugMode, setDebugMode] = useState(false)
+
+  // Physics state
+  const [physicsGravity, setPhysicsGravity] = useState(-9.81)
+  const [physicsMass, setPhysicsMass] = useState(1.0)
+  const [physicsRestitution, setPhysicsRestitution] = useState(0.1)
+  const [physicsProjectiles, setPhysicsProjectiles] = useState([])
+  const [physicsResetKey, setPhysicsResetKey] = useState(0)
 
   // Get active shader config
   const isShaderMode = renderMode.startsWith('shader:')
   const shaderId = isShaderMode ? renderMode.split(':')[1] : null
   const shaderConfig = shaderId ? getMaterialShader(shaderId) : null
 
-  const handleCameraUpdate = (quaternion) => {
+  const handleCameraUpdate = (quaternion, position) => {
     setCameraQuaternion(quaternion.clone())
+    if (position) setCameraPosition(position.clone())
   }
 
   const handleToolChange = (tool) => {
     setActiveTool(tool)
-    // Show refine panel when Simplification, Segmentation, or Retopoly is selected
-    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly')
+    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics')
+  }
+
+  const isPhysicsMode = activeTool === 'physics'
+
+  const handleThrowSphere = () => {
+    const bb = meshInfo?.bounding_box
+    if (!bb) return
+    const diagonal = bb.diagonal || 2
+    const speed = diagonal * 3
+
+    // Direction: camera → mesh center (origin after centering)
+    const camPos = cameraPosition
+    const dx = -camPos.x
+    const dy = -camPos.y
+    const dz = -camPos.z
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1
+
+    const velocity = [dx / dist * speed, dy / dist * speed, dz / dist * speed]
+
+    // Start slightly in front of camera
+    const startDist = diagonal * 0.3
+    const jitter = diagonal * 0.05
+    const position = [
+      camPos.x + (dx / dist) * startDist + (Math.random() - 0.5) * jitter,
+      camPos.y + (dy / dist) * startDist + (Math.random() - 0.5) * jitter,
+      camPos.z + (dz / dist) * startDist + (Math.random() - 0.5) * jitter
+    ]
+
+    setPhysicsProjectiles(prev => {
+      const updated = [...prev, { id: Date.now() + Math.random(), position, velocity }]
+      if (updated.length > 10) updated.shift()
+      return updated
+    })
+  }
+
+  const handlePhysicsReset = () => {
+    setPhysicsProjectiles([])
+    setPhysicsResetKey(prev => prev + 1)
+  }
+
+  const handlePhysicsExit = () => {
+    setPhysicsProjectiles([])
+    setPhysicsResetKey(0)
+    setActiveTool('simplification')
+    setShowRefinePanel(false)
   }
 
   // Auto-show refine panel when in images mode
@@ -174,6 +228,15 @@ function ViewerLayout({
             renderMode={renderMode}
             shaderParams={shaderParams}
             onCameraUpdate={handleCameraUpdate}
+            physicsMode={isPhysicsMode}
+            physicsProps={isPhysicsMode ? {
+              meshInfo,
+              gravity: physicsGravity,
+              density: physicsMass,
+              restitution: physicsRestitution,
+              projectiles: physicsProjectiles,
+              resetKey: physicsResetKey
+            } : null}
           />
 
           {/* Bottom Toolbar (overlaid) */}
@@ -215,6 +278,7 @@ function ViewerLayout({
                 {activeTool === 'simplification' ? 'Simplification' :
                  activeTool === 'segmentation' ? 'Segmentation' :
                  activeTool === 'retopoly' ? 'Retopology' :
+                 activeTool === 'physics' ? 'Physics Simulation' :
                  activeTool === 'generation' ? 'Generate 3D Mesh' : 'Tool'}
               </h3>
               <button
@@ -256,6 +320,19 @@ function ViewerLayout({
                   onLoadOriginal={onLoadParent}
                   currentTask={currentTask}
                   isProcessing={isProcessing}
+                />
+              ) : activeTool === 'physics' ? (
+                <PhysicsControls
+                  gravity={physicsGravity}
+                  onGravityChange={setPhysicsGravity}
+                  mass={physicsMass}
+                  onMassChange={setPhysicsMass}
+                  restitution={physicsRestitution}
+                  onRestitutionChange={setPhysicsRestitution}
+                  onThrowSphere={handleThrowSphere}
+                  onReset={handlePhysicsReset}
+                  onExit={handlePhysicsExit}
+                  projectileCount={physicsProjectiles.length}
                 />
               ) : null
             ) : configData?.type === 'images' && sessionInfo ? (
