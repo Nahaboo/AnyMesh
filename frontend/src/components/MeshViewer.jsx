@@ -25,7 +25,7 @@ function CameraSync({ onCameraUpdate }) {
  * MeshViewer - 3D viewer with render mode support
  * Supports: solid, wireframe, normal, smooth rendering modes + custom shaders
  */
-function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, physicsMode = false, physicsProps = null }) {
+function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, autoRotate = false, physicsMode = false, physicsProps = null }) {
   if (!meshInfo) {
     return (
       <div className="v2-viewer-container" style={{
@@ -119,6 +119,8 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
           dampingFactor={0.05}
           minDistance={0.1}
           maxDistance={200}
+          autoRotate={autoRotate}
+          autoRotateSpeed={0.5}
         />
       </Canvas>
     </div>

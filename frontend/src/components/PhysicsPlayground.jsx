@@ -25,7 +25,7 @@ function subsampleVertices(positions, maxPoints) {
  * PhysicsMesh - Loads a mesh and wraps it in a dynamic RigidBody.
  * Uses a simplified ConvexHullCollider (max 256 vertices) for stable contacts.
  */
-function PhysicsMesh({ filename, isGenerated, density, restitution, dropHeight, boundingBox }) {
+function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dropHeight, boundingBox }) {
   const meshUrl = isGenerated
     ? `${API_BASE_URL}/mesh/generated/${filename}`
     : `${API_BASE_URL}/mesh/input/${filename}`
@@ -110,13 +110,15 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, dropHeight, 
 
       const targetMass = baseMass * density
       rb.setAdditionalMass(targetMass, true)
+      rb.setLinearDamping(damping)
+      rb.setAngularDamping(damping)
       for (let i = 0; i < rb.numColliders(); i++) {
         rb.collider(i).setRestitution(restitution)
       }
       rb.wakeUp()
     }, 100)
     return () => clearTimeout(timer)
-  }, [density, restitution, baseMass])
+  }, [density, restitution, damping, baseMass])
 
   return (
     <RigidBody
@@ -124,8 +126,8 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, dropHeight, 
       type="dynamic"
       colliders={false}
       position={[0, dropHeight, 0]}
-      linearDamping={0.5}
-      angularDamping={0.5}
+      linearDamping={damping}
+      angularDamping={damping}
     >
       <ConvexHullCollider args={[hullPoints]} />
       <primitive object={clonedModel} />
@@ -136,7 +138,7 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, dropHeight, 
 /**
  * PhysicsPlayground - Physics scene with ground, mesh, and projectiles.
  */
-function PhysicsPlayground({ meshInfo, gravity, density, restitution, projectiles }) {
+function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, projectiles }) {
   const bb = meshInfo.bounding_box
   const diagonal = bb?.diagonal || 2
 
@@ -144,6 +146,9 @@ function PhysicsPlayground({ meshInfo, gravity, density, restitution, projectile
   const groundThickness = diagonal
   const dropHeight = diagonal * 0.5
   const sphereRadius = diagonal * 0.08
+  // Sphere mass = same as mesh base mass for strong impact
+  const baseMass = diagonal * diagonal * diagonal
+  const sphereMass = baseMass
 
   return (
     <Physics gravity={[0, gravity, 0]}>
@@ -169,6 +174,7 @@ function PhysicsPlayground({ meshInfo, gravity, density, restitution, projectile
           isGenerated={meshInfo.isGenerated || false}
           density={density}
           restitution={restitution}
+          damping={damping}
           dropHeight={dropHeight}
           boundingBox={bb}
         />
@@ -183,7 +189,7 @@ function PhysicsPlayground({ meshInfo, gravity, density, restitution, projectile
           position={p.position}
           linearVelocity={p.velocity}
         >
-          <BallCollider args={[sphereRadius]} mass={1} restitution={restitution} />
+          <BallCollider args={[sphereRadius]} mass={sphereMass} restitution={restitution} />
           <mesh>
             <sphereGeometry args={[sphereRadius, 16, 16]} />
             <meshStandardMaterial color="#ef4444" />

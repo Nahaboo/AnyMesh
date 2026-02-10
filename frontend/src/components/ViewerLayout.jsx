@@ -45,11 +45,14 @@ function ViewerLayout({
   const [cameraPosition, setCameraPosition] = useState(new THREE.Vector3(3, 3, 3))
   const [shaderParams, setShaderParams] = useState({})
   const [debugMode, setDebugMode] = useState(false)
+  const [autoRotate, setAutoRotate] = useState(false)
 
   // Physics state
   const [physicsGravity, setPhysicsGravity] = useState(-9.81)
   const [physicsMass, setPhysicsMass] = useState(1.0)
   const [physicsRestitution, setPhysicsRestitution] = useState(0.1)
+  const [physicsDamping, setPhysicsDamping] = useState(0.5)
+  const [physicsPreset, setPhysicsPreset] = useState(null)
   const [physicsProjectiles, setPhysicsProjectiles] = useState([])
   const [physicsResetKey, setPhysicsResetKey] = useState(0)
 
@@ -69,6 +72,17 @@ function ViewerLayout({
   }
 
   const isPhysicsMode = activeTool === 'physics'
+
+  const handlePhysicsPresetChange = (preset) => {
+    setPhysicsMass(preset.mass)
+    setPhysicsRestitution(preset.restitution)
+    setPhysicsDamping(preset.damping)
+    setPhysicsPreset(preset.id)
+  }
+
+  const handleMassChange = (v) => { setPhysicsMass(v); setPhysicsPreset(null) }
+  const handleRestitutionChange = (v) => { setPhysicsRestitution(v); setPhysicsPreset(null) }
+  const handleDampingChange = (v) => { setPhysicsDamping(v); setPhysicsPreset(null) }
 
   const handleThrowSphere = () => {
     const bb = meshInfo?.bounding_box
@@ -228,12 +242,14 @@ function ViewerLayout({
             renderMode={renderMode}
             shaderParams={shaderParams}
             onCameraUpdate={handleCameraUpdate}
+            autoRotate={autoRotate}
             physicsMode={isPhysicsMode}
             physicsProps={isPhysicsMode ? {
               meshInfo,
               gravity: physicsGravity,
               density: physicsMass,
               restitution: physicsRestitution,
+              damping: physicsDamping,
               projectiles: physicsProjectiles,
               resetKey: physicsResetKey
             } : null}
@@ -244,6 +260,8 @@ function ViewerLayout({
             meshInfo={meshInfo}
             onExport={handleExport}
             onMeshSaved={onMeshSaved}
+            autoRotate={autoRotate}
+            onAutoRotateToggle={() => setAutoRotate(prev => !prev)}
             axesWidget={<AxesWidget mainCameraQuaternion={cameraQuaternion} />}
           />
         </div>
@@ -326,9 +344,13 @@ function ViewerLayout({
                   gravity={physicsGravity}
                   onGravityChange={setPhysicsGravity}
                   mass={physicsMass}
-                  onMassChange={setPhysicsMass}
+                  onMassChange={handleMassChange}
                   restitution={physicsRestitution}
-                  onRestitutionChange={setPhysicsRestitution}
+                  onRestitutionChange={handleRestitutionChange}
+                  damping={physicsDamping}
+                  onDampingChange={handleDampingChange}
+                  activePreset={physicsPreset}
+                  onPresetChange={handlePhysicsPresetChange}
                   onThrowSphere={handleThrowSphere}
                   onReset={handlePhysicsReset}
                   onExit={handlePhysicsExit}

@@ -6,7 +6,7 @@ import SaveButton from './SaveButton'
  * Left side: Export button + Format dropdown + Save button
  * Right side: Mesh info (Faces, Vertices) + 3D axes widget
  */
-function BottomToolbar({ meshInfo, onExport, onMeshSaved, axesWidget }) {
+function BottomToolbar({ meshInfo, onExport, onMeshSaved, autoRotate, onAutoRotateToggle, axesWidget }) {
   const [selectedFormat, setSelectedFormat] = useState('obj')
   const [showFormatMenu, setShowFormatMenu] = useState(false)
 
@@ -56,6 +56,24 @@ function BottomToolbar({ meshInfo, onExport, onMeshSaved, axesWidget }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           Export
+        </button>
+
+        <button
+          onClick={onAutoRotateToggle}
+          className="v2-btn v2-btn-secondary"
+          title={autoRotate ? 'Stop rotation' : 'Turntable'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--v2-spacing-sm)',
+            background: autoRotate ? 'var(--v2-accent-primary)' : undefined,
+            color: autoRotate ? '#fff' : undefined,
+            borderColor: autoRotate ? 'var(--v2-accent-primary)' : undefined
+          }}
+        >
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
         </button>
 
         {/* GLB-First: Save Button */}
