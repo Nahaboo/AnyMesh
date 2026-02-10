@@ -8,8 +8,11 @@ import { Center } from '@react-three/drei'
 import * as THREE from 'three'
 import { TextureLoader } from 'three'
 import ShaderMaterialController from './ShaderMaterialController'
+import TriplanarMesh from './TriplanarMesh'
 import { getMaterialShader } from '../shaders/materials'
 import { API_BASE_URL } from '../utils/api'
+import glassVertexShader from '../shaders/materials/triplanar/vertex.glsl'
+import glassFragmentShader from '../shaders/materials/triplanar/glass.glsl'
 
 /**
  * RenderModeController - Handles different rendering modes for 3D models
@@ -120,15 +123,26 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
         // Material preset override (PBR material from physics presets)
         if (materialPreset?.visual) {
           const v = materialPreset.visual
-          child.material = new THREE.MeshStandardMaterial({
-            color: v.color,
-            metalness: v.metalness,
-            roughness: v.roughness,
-            opacity: v.opacity,
-            transparent: v.transparent || false,
-            side: THREE.DoubleSide,
-            envMapIntensity: 1.0
-          })
+          if (v.transparent) {
+            // Glass: custom shader for smooth rendering
+            child.material = new THREE.ShaderMaterial({
+              vertexShader: glassVertexShader,
+              fragmentShader: glassFragmentShader,
+              transparent: true,
+              depthWrite: false,
+              side: THREE.FrontSide,
+              lights: false
+            })
+          } else {
+            child.material = new THREE.MeshStandardMaterial({
+              color: v.color,
+              metalness: v.metalness,
+              roughness: v.roughness,
+              opacity: v.opacity,
+              side: THREE.DoubleSide,
+              envMapIntensity: 1.0
+            })
+          }
           child.material.needsUpdate = true
           return
         }
@@ -261,6 +275,19 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
     console.log(`[RenderModeController] Render mode changed to: ${renderMode}`)
     setNeedsUpdate(prev => prev + 1)
   }, [renderMode, materialPreset])
+
+  // If procedural material preset is active, use tri-planar shader
+  if (materialPreset?.procedural) {
+    return (
+      <TriplanarMesh
+        model={loadedModel}
+        presetId={materialPreset.id}
+        visualConfig={materialPreset.visual}
+        proceduralConfig={materialPreset.procedural}
+        uploadId={uploadId}
+      />
+    )
+  }
 
   // If shader mode is active, delegate to ShaderMaterialController
   if (isShaderMode && shaderConfig && !materialPreset) {

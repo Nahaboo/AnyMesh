@@ -7,6 +7,27 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader'
 import * as THREE from 'three'
 import { API_BASE_URL } from '../utils/api'
+import vertexShader from '../shaders/materials/triplanar/vertex.glsl'
+import fragmentShader from '../shaders/materials/triplanar/fragment.glsl'
+import glassFragmentShader from '../shaders/materials/triplanar/glass.glsl'
+
+const textureLoader = new THREE.TextureLoader()
+
+function loadTextures(type) {
+  const path = `/textures/${type}`
+  const colorMap = textureLoader.load(`${path}/color.jpg`)
+  const normalMap = textureLoader.load(`${path}/normal.jpg`)
+  const roughnessMap = textureLoader.load(`${path}/roughness.jpg`)
+
+  ;[colorMap, normalMap, roughnessMap].forEach(t => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping
+  })
+
+  normalMap.colorSpace = THREE.LinearSRGBColorSpace
+  roughnessMap.colorSpace = THREE.LinearSRGBColorSpace
+
+  return { colorMap, normalMap, roughnessMap }
+}
 
 /** Subsample vertices to at most maxPoints for a simpler convex hull */
 function subsampleVertices(positions, maxPoints) {
@@ -70,16 +91,46 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
             child.geometry.computeVertexNormals()
           }
         }
-        if (materialPreset?.visual) {
-          const v = materialPreset.visual
-          child.material = new THREE.MeshStandardMaterial({
-            color: v.color,
-            metalness: v.metalness,
-            roughness: v.roughness,
-            opacity: v.opacity,
-            transparent: v.transparent || false,
-            side: THREE.DoubleSide
+        if (materialPreset?.procedural) {
+          const pc = materialPreset.procedural
+          const diagonal = boundingBox?.diagonal || 1
+          const textureScale = (pc.scale || 3.0) / diagonal
+          const textures = loadTextures(pc.type)
+          child.material = new THREE.ShaderMaterial({
+            uniforms: {
+              uColorMap: { value: textures.colorMap },
+              uNormalMap: { value: textures.normalMap },
+              uRoughnessMap: { value: textures.roughnessMap },
+              uTextureScale: { value: textureScale },
+              uBlendSharpness: { value: pc.blendSharpness || 2.0 },
+              uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
+            },
+            vertexShader,
+            fragmentShader,
+            side: THREE.DoubleSide,
+            lights: false
           })
+        } else if (materialPreset?.visual) {
+          const v = materialPreset.visual
+          if (v.transparent) {
+            // Glass: custom shader for smooth rendering
+            child.material = new THREE.ShaderMaterial({
+              vertexShader,
+              fragmentShader: glassFragmentShader,
+              transparent: true,
+              depthWrite: false,
+              side: THREE.FrontSide,
+              lights: false
+            })
+          } else {
+            child.material = new THREE.MeshStandardMaterial({
+              color: v.color,
+              metalness: v.metalness,
+              roughness: v.roughness,
+              opacity: v.opacity,
+              side: THREE.DoubleSide
+            })
+          }
         } else if (child.material) {
           child.material = child.material.clone()
         }
