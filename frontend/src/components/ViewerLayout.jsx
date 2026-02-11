@@ -9,6 +9,7 @@ import SimplificationControls from './SimplificationControls'
 import SegmentationControls from './SegmentationControls'
 import MeshGenerationControls from './MeshGenerationControls'
 import RetopologyControls from './RetopologyControls'
+import PromptGenerationControls from './PromptGenerationControls'
 import PhysicsControls, { MATERIAL_PRESETS } from './PhysicsControls'
 import TaskStatus from './TaskStatus'
 import * as THREE from 'three'
@@ -129,11 +130,15 @@ function ViewerLayout({
     setShowRefinePanel(false)
   }
 
-  // Auto-show refine panel when in images mode
+  // Auto-show refine panel when in images or prompt mode
   React.useEffect(() => {
     if (configData?.type === 'images' && sessionInfo) {
       setShowRefinePanel(true)
       setActiveTool('generation')  // Set tool to 'generation' for images mode
+    }
+    if (configData?.type === 'prompt') {
+      setShowRefinePanel(true)
+      setActiveTool('prompt-generation')
     }
   }, [configData, sessionInfo])
 
@@ -302,7 +307,8 @@ function ViewerLayout({
                  activeTool === 'segmentation' ? 'Segmentation' :
                  activeTool === 'retopoly' ? 'Retopology' :
                  activeTool === 'physics' ? 'Physics Simulation' :
-                 activeTool === 'generation' ? 'Generate 3D Mesh' : 'Tool'}
+                 activeTool === 'generation' ? 'Generate 3D Mesh' :
+                 activeTool === 'prompt-generation' ? 'Generate from Prompt' : 'Tool'}
               </h3>
               <button
                 onClick={() => setShowRefinePanel(false)}
@@ -367,6 +373,12 @@ function ViewerLayout({
                 sessionInfo={sessionInfo}
                 onGenerate={onGenerate}
                 isProcessing={isProcessing}
+              />
+            ) : configData?.type === 'prompt' ? (
+              <PromptGenerationControls
+                onGenerate={onGenerate}
+                isProcessing={isProcessing}
+                currentTask={currentTask}
               />
             ) : (
               <div style={{

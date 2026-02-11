@@ -42,6 +42,12 @@ function App() {
       setMeshInfo(null)
       setOriginalMeshInfo(null)
       setInitialMeshInfo(null)
+    } else if (config.type === 'prompt') {
+      // Prompt mode - no mesh or session yet, will be created during generation
+      setSessionInfo(null)
+      setMeshInfo(null)
+      setOriginalMeshInfo(null)
+      setInitialMeshInfo(null)
     }
 
     // Switch to viewer

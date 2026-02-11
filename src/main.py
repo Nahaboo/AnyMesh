@@ -31,6 +31,7 @@ from .task_manager import task_manager, Task
 from .simplify import simplify_mesh, adaptive_simplify_mesh, simplify_mesh_glb
 from .converter import convert_mesh_format, convert_any_to_glb
 from .stability_client import generate_mesh_from_image_sf3d
+from .mamouth_client import generate_image_from_prompt
 from .retopology import retopologize_mesh, retopologize_mesh_glb
 from .segmentation import segment_mesh, segment_mesh_glb
 from .temp_utils import cleanup_temp_directory, safe_delete
@@ -59,12 +60,20 @@ async def lifespan(app: FastAPI):
     else:
         logger.info(f"Stability API key loaded: {api_key[:10]}...")
 
+    # Valider la cle API Mamouth
+    mamouth_key = os.getenv('MAMOUTH_API_KEY')
+    if mamouth_key:
+        logger.info(f"Mamouth API key loaded: {mamouth_key[:10]}...")
+    else:
+        logger.warning("MAMOUTH_API_KEY not set - prompt generation disabled")
+
     # Enregistrer les handlers de tâches
     task_manager.register_handler("simplify", simplify_task_handler)
     task_manager.register_handler("simplify_adaptive", adaptive_simplify_task_handler)
     task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
     task_manager.register_handler("retopologize", retopologize_task_handler)
     task_manager.register_handler("segment", segment_task_handler)
+    task_manager.register_handler("generate_image", generate_image_task_handler)
     task_manager.start()
 
     # GLB-First: Nettoyer les fichiers temporaires au démarrage
@@ -186,6 +195,11 @@ class GenerateMeshRequest(BaseModel):
     resolution: str = "medium"  # 'low', 'medium', 'high'
     remesh_option: str = "quad"  # 'none', 'triangle', 'quad' - Topologie du mesh généré (Stability only)
     provider: str = "stability"  # 'stability' (API cloud) ou 'triposr' (local, gratuit)
+
+class GenerateImageRequest(BaseModel):
+    """Parametres de generation d'image a partir d'un prompt textuel via Mamouth.ai"""
+    prompt: str
+    resolution: str = "medium"  # 'low', 'medium', 'high'
 
 class RetopologyRequest(BaseModel):
     """Paramètres de retopologie avec Instant Meshes"""
@@ -1253,6 +1267,38 @@ def generate_mesh_task_handler(task: Task):
 
     return result
 
+def generate_image_task_handler(task: Task):
+    """Handler qui genere une image a partir d'un prompt textuel via Mamouth.ai"""
+    params = task.params
+    prompt = params["prompt"]
+    resolution = params.get("resolution", "medium")
+
+    session_id = f"session_{int(time.time() * 1000)}"
+    session_path = DATA_INPUT_IMAGES / session_id
+    session_path.mkdir(parents=True, exist_ok=True)
+
+    output_path = session_path / "prompt_generated.png"
+    api_key = os.getenv('MAMOUTH_API_KEY')
+
+    logger.info(f"[GENERATE-IMAGE] Starting (session={session_id}, resolution={resolution})")
+
+    result = generate_image_from_prompt(
+        prompt=prompt,
+        output_path=output_path,
+        resolution=resolution,
+        api_key=api_key
+    )
+
+    if result.get('success'):
+        logger.info(f"[GENERATE-IMAGE] Success: {session_id}/prompt_generated.png")
+        result['session_id'] = session_id
+        result['image_url'] = f"/session-images/{session_id}/prompt_generated.png"
+    else:
+        logger.error(f"[GENERATE-IMAGE] Failed: {result.get('error')}")
+
+    return result
+
+
 def retopologize_task_handler(task: Task):
     """
     Handler qui exécute la retopologie avec Instant Meshes.
@@ -1625,6 +1671,56 @@ async def generate_mesh_async(request: GenerateMeshRequest):
         "session_id": request.session_id,
         "images_count": image_count
     }
+
+@app.post("/generate-image-from-prompt")
+async def generate_image_from_prompt_endpoint(request: GenerateImageRequest):
+    """
+    Lance une tache de generation d'image a partir d'un prompt textuel via Mamouth.ai
+    Retourne un task_id pour suivre la progression
+    """
+    if not os.getenv('MAMOUTH_API_KEY'):
+        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY non configuree dans .env")
+
+    if not request.prompt or not request.prompt.strip():
+        raise HTTPException(status_code=400, detail="Le prompt ne peut pas etre vide")
+
+    if len(request.prompt) > 1000:
+        raise HTTPException(status_code=400, detail="Prompt trop long (max 1000 caracteres)")
+
+    if request.resolution not in ['low', 'medium', 'high']:
+        raise HTTPException(status_code=400, detail="Resolution invalide. Valeurs acceptees: 'low', 'medium', 'high'")
+
+    task_id = task_manager.create_task(
+        task_type="generate_image",
+        params={
+            "prompt": request.prompt.strip(),
+            "resolution": request.resolution
+        }
+    )
+
+    logger.info(f"[API] Image generation task created: {task_id}")
+
+    return {
+        "task_id": task_id,
+        "status": "pending",
+        "message": "Generation d'image en cours"
+    }
+
+
+@app.get("/session-images/{session_id}/{filename}")
+async def get_session_image(session_id: str, filename: str):
+    """Sert une image generee depuis une session (pour preview dans le frontend)"""
+    image_path = DATA_INPUT_IMAGES / sanitize_filename(session_id) / sanitize_filename(filename)
+
+    if not image_path.exists():
+        raise HTTPException(status_code=404, detail="Image non trouvee")
+
+    suffix = image_path.suffix.lower()
+    if suffix not in SUPPORTED_IMAGE_FORMATS:
+        raise HTTPException(status_code=400, detail="Format d'image non supporte")
+
+    return FileResponse(str(image_path), media_type=f"image/{suffix[1:]}")
+
 
 @app.get("/mesh/generated/{filename}")
 async def get_generated_mesh(filename: str):

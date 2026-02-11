@@ -87,6 +87,20 @@ function ConfigSidebar({ onConfigComplete }) {
             </svg>
             Generate from images
           </button>
+
+          <button
+            onClick={() => { setMode('prompt'); setUploadedData({ type: 'prompt', data: {} }) }}
+            className={`v2-btn ${mode === 'prompt' ? 'v2-btn-primary' : 'v2-btn-secondary'}`}
+            style={{
+              width: '100%',
+              justifyContent: 'flex-start'
+            }}
+          >
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Generate from prompt
+          </button>
         </div>
       </div>
 
@@ -120,6 +134,17 @@ function ConfigSidebar({ onConfigComplete }) {
                 </div>
               </div>
             )}
+          </div>
+        ) : mode === 'prompt' ? (
+          <div style={{
+            padding: 'var(--v2-spacing-md)',
+            color: 'var(--v2-text-secondary)',
+            fontSize: '0.875rem'
+          }}>
+            <p>Decrivez votre image avec un prompt textuel.</p>
+            <p style={{ marginTop: 'var(--v2-spacing-sm)', fontSize: '0.75rem', color: 'var(--v2-text-muted)' }}>
+              L'image sera generee par IA puis convertie en modele 3D.
+            </p>
           </div>
         ) : (
           <div>

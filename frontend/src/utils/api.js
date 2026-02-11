@@ -234,6 +234,21 @@ export const generateMesh = async (params) => {
 }
 
 /**
+ * Lance une tache de generation d'image a partir d'un prompt textuel via Mamouth.ai
+ * @param {Object} params - Parametres de generation
+ * @param {string} params.prompt - Description textuelle de l'image
+ * @param {string} params.resolution - 'low', 'medium', 'high'
+ * @returns {Promise} task_id et status
+ */
+export const generateImageFromPrompt = async (params) => {
+  const response = await api.post('/generate-image-from-prompt', {
+    prompt: params.prompt,
+    resolution: params.resolution || 'medium'
+  })
+  return response.data
+}
+
+/**
  * Liste les images d'une session
  * @param {string} sessionId - ID de la session
  * @returns {Promise} Liste des images de la session
