@@ -57,7 +57,8 @@ def _translate_error(status_code: int, api_message: str) -> str:
 def _call_mamouth_api(
     prompt: str,
     model: str,
-    api_key: str
+    api_key: str,
+    suffix: str = ""
 ) -> bytes:
     """
     Appel API Mamouth de bas niveau - retourne les bytes de l'image
@@ -88,9 +89,8 @@ def _call_mamouth_api(
     }
 
     # Format OpenAI-compatible chat completions
-    # Append white background instruction directly in user prompt
-    # (system role may be ignored by some models)
-    full_prompt = f"{prompt}. Plain white background, subject centered and isolated, no environment, no shadows."
+    # Append suffix directly in user prompt (system role may be ignored by some models)
+    full_prompt = f"{prompt}. {suffix}" if suffix else prompt
     payload = {
         'model': model,
         'messages': [
@@ -118,6 +118,9 @@ def _call_mamouth_api(
             images = message.get('images', [])
 
             if not images:
+                # Debug: log what the model actually returned
+                content = message.get('content', '')
+                print(f"  [DEBUG] No images in response. Content: {content[:200]}")
                 raise MamouthAPIError(500, "Pas d'image dans la reponse API")
 
             image_url = images[0]['image_url']['url']
@@ -214,7 +217,8 @@ def generate_image_from_prompt(
         image_bytes = _call_mamouth_api(
             prompt=prompt,
             model=DEFAULT_MODEL,
-            api_key=api_key
+            api_key=api_key,
+            suffix="Plain white background, subject centered and isolated, no environment, no shadows."
         )
 
         # Sauvegarder sur disque
@@ -241,6 +245,102 @@ def generate_image_from_prompt(
             'image_height': img_height,
             'generation_time_ms': round(generation_time, 2),
             'method': 'mamouth_text2img'
+        }
+
+    except httpx.TimeoutException:
+        return {
+            'success': False,
+            'error': "Timeout: L'API Mamouth n'a pas repondu en 2 minutes"
+        }
+
+    except httpx.NetworkError as e:
+        return {
+            'success': False,
+            'error': f"Erreur reseau: {str(e)}"
+        }
+
+    except MamouthAPIError as e:
+        return {
+            'success': False,
+            'error': _translate_error(e.status_code, e.message)
+        }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Erreur inattendue: {str(e)}",
+            'error_type': type(e).__name__
+        }
+
+
+def generate_texture_from_prompt(
+    prompt: str,
+    output_path: Path,
+    resolution: str = "medium",
+    api_key: Optional[str] = None
+) -> Dict:
+    """
+    Genere une texture seamless a partir d'un prompt via Mamouth.ai
+    """
+    start_time = time.time()
+
+    if not api_key:
+        return {
+            'success': False,
+            'error': 'MAMOUTH_API_KEY manquante - Verifiez votre fichier .env'
+        }
+
+    if resolution not in RESOLUTION_PARAMS:
+        return {
+            'success': False,
+            'error': f"Resolution invalide: {resolution}. Utilisez 'low', 'medium', ou 'high'"
+        }
+
+    if not prompt or len(prompt.strip()) == 0:
+        return {
+            'success': False,
+            'error': 'Le prompt ne peut pas etre vide'
+        }
+
+    if len(prompt) > 1000:
+        return {
+            'success': False,
+            'error': 'Le prompt est trop long (max 1000 caracteres)'
+        }
+
+    print(f"\n[MAMOUTH-TEXTURE] Generating texture from prompt")
+    print(f"  Resolution: {resolution} ({RESOLUTION_PARAMS[resolution]}px)")
+
+    try:
+        texture_prompt = f"Generate an image of a seamless tileable texture of {prompt}. Top-down flat view, uniform lighting, no perspective, no 3D objects, suitable for repeating tile pattern."
+        image_bytes = _call_mamouth_api(
+            prompt=texture_prompt,
+            model=DEFAULT_MODEL,
+            api_key=api_key
+        )
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(image_bytes)
+
+        img = Image.open(output_path)
+        img_width, img_height = img.size
+
+        generation_time = (time.time() - start_time) * 1000
+
+        print(f"  [OK] Texture generated successfully")
+        print(f"    Size: {img_width}x{img_height}")
+        print(f"    Total time: {generation_time:.0f}ms")
+
+        return {
+            'success': True,
+            'output_file': str(output_path),
+            'output_filename': output_path.name,
+            'prompt': prompt,
+            'resolution': resolution,
+            'image_width': img_width,
+            'image_height': img_height,
+            'generation_time_ms': round(generation_time, 2),
+            'method': 'mamouth_texture'
         }
 
     except httpx.TimeoutException:

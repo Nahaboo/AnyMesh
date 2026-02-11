@@ -6,8 +6,29 @@ import fragmentShader from '../shaders/materials/triplanar/fragment.glsl'
 
 const textureLoader = new THREE.TextureLoader()
 
-function loadTextures(type) {
-  const path = `/textures/${type}`
+function loadTextures(proceduralConfig) {
+  if (proceduralConfig.customTextureUrls) {
+    // AI-generated texture: load color from URL, use flat defaults for normal/roughness
+    const colorMap = textureLoader.load(proceduralConfig.customTextureUrls.color)
+    colorMap.wrapS = colorMap.wrapT = THREE.RepeatWrapping
+
+    const normalData = new Uint8Array([128, 128, 255, 255])
+    const normalMap = new THREE.DataTexture(normalData, 1, 1, THREE.RGBAFormat)
+    normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping
+    normalMap.colorSpace = THREE.LinearSRGBColorSpace
+    normalMap.needsUpdate = true
+
+    const roughData = new Uint8Array([128, 128, 128, 255])
+    const roughnessMap = new THREE.DataTexture(roughData, 1, 1, THREE.RGBAFormat)
+    roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping
+    roughnessMap.colorSpace = THREE.LinearSRGBColorSpace
+    roughnessMap.needsUpdate = true
+
+    return { colorMap, normalMap, roughnessMap }
+  }
+
+  // Existing preset path
+  const path = `/textures/${proceduralConfig.type}`
   const colorMap = textureLoader.load(`${path}/color.jpg`)
   const normalMap = textureLoader.load(`${path}/normal.jpg`)
   const roughnessMap = textureLoader.load(`${path}/roughness.jpg`)
@@ -16,7 +37,6 @@ function loadTextures(type) {
     t.wrapS = t.wrapT = THREE.RepeatWrapping
   })
 
-  // Normal map should be linear, not sRGB
   normalMap.colorSpace = THREE.LinearSRGBColorSpace
   roughnessMap.colorSpace = THREE.LinearSRGBColorSpace
 
@@ -35,7 +55,7 @@ function TriplanarMesh({ model, presetId, visualConfig, proceduralConfig, upload
     const diagonal = Math.sqrt(size.x * size.x + size.y * size.y + size.z * size.z) || 1
 
     const textureScale = (proceduralConfig.scale || 3.0) / diagonal
-    const textures = loadTextures(proceduralConfig.type)
+    const textures = loadTextures(proceduralConfig)
 
     cloned.traverse((child) => {
       if (child.isMesh) {

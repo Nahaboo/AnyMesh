@@ -11,6 +11,7 @@ import MeshGenerationControls from './MeshGenerationControls'
 import RetopologyControls from './RetopologyControls'
 import PromptGenerationControls from './PromptGenerationControls'
 import PhysicsControls, { MATERIAL_PRESETS } from './PhysicsControls'
+import TexturingControls from './TexturingControls'
 import TaskStatus from './TaskStatus'
 import * as THREE from 'three'
 import { useShaderDebugGUI } from '../hooks/useShaderDebugGUI'
@@ -56,6 +57,7 @@ function ViewerLayout({
   const [physicsPreset, setPhysicsPreset] = useState(null)
   const [physicsProjectiles, setPhysicsProjectiles] = useState([])
   const [physicsResetKey, setPhysicsResetKey] = useState(0)
+  const [texturePreset, setTexturePreset] = useState(null)
 
   const activePresetObj = physicsPreset ? MATERIAL_PRESETS.find(p => p.id === physicsPreset) : null
 
@@ -71,7 +73,7 @@ function ViewerLayout({
 
   const handleToolChange = (tool) => {
     setActiveTool(tool)
-    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics')
+    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing')
   }
 
   const isPhysicsMode = activeTool === 'physics'
@@ -81,6 +83,7 @@ function ViewerLayout({
     setPhysicsRestitution(preset.restitution)
     setPhysicsDamping(preset.damping)
     setPhysicsPreset(preset.id)
+    setTexturePreset(null)
   }
 
   const handleMassChange = (v) => { setPhysicsMass(v); setPhysicsPreset(null) }
@@ -128,6 +131,20 @@ function ViewerLayout({
     setPhysicsResetKey(0)
     setActiveTool('simplification')
     setShowRefinePanel(false)
+  }
+
+  const handleTextureApply = ({ textureId, scale, blendSharpness }) => {
+    setPhysicsPreset(null)
+    setTexturePreset({
+      id: `ai-${textureId}`,
+      visual: { color: '#ffffff', metalness: 0.0, roughness: 0.5 },
+      procedural: {
+        type: 'ai-generated',
+        customTextureUrls: { color: `${API_BASE_URL}/texture/generated/${textureId}/color.png` },
+        scale: scale || 3.0,
+        blendSharpness: blendSharpness || 2.0
+      }
+    })
   }
 
   // Auto-show refine panel when in images or prompt mode
@@ -217,7 +234,7 @@ function ViewerLayout({
       {/* Top Toolbar */}
       <TopToolbar
         renderMode={renderMode}
-        onRenderModeChange={(mode) => { setRenderMode(mode); setPhysicsPreset(null) }}
+        onRenderModeChange={(mode) => { setRenderMode(mode); setPhysicsPreset(null); setTexturePreset(null) }}
         onHomeClick={onHomeClick}
         debugMode={debugMode}
         onDebugModeChange={setDebugMode}
@@ -252,7 +269,7 @@ function ViewerLayout({
             onCameraUpdate={handleCameraUpdate}
             autoRotate={autoRotate}
             physicsMode={isPhysicsMode}
-            materialPreset={activePresetObj}
+            materialPreset={activePresetObj || texturePreset}
             physicsProps={isPhysicsMode ? {
               meshInfo,
               gravity: physicsGravity,
@@ -307,6 +324,7 @@ function ViewerLayout({
                  activeTool === 'segmentation' ? 'Segmentation' :
                  activeTool === 'retopoly' ? 'Retopology' :
                  activeTool === 'physics' ? 'Physics Simulation' :
+                 activeTool === 'texturing' ? 'AI Texturing' :
                  activeTool === 'generation' ? 'Generate 3D Mesh' :
                  activeTool === 'prompt-generation' ? 'Generate from Prompt' : 'Tool'}
               </h3>
@@ -366,6 +384,12 @@ function ViewerLayout({
                   onReset={handlePhysicsReset}
                   onExit={handlePhysicsExit}
                   projectileCount={physicsProjectiles.length}
+                />
+              ) : activeTool === 'texturing' ? (
+                <TexturingControls
+                  meshInfo={meshInfo}
+                  onApplyTexture={handleTextureApply}
+                  isProcessing={isProcessing}
                 />
               ) : null
             ) : configData?.type === 'images' && sessionInfo ? (

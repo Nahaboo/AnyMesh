@@ -249,6 +249,21 @@ export const generateImageFromPrompt = async (params) => {
 }
 
 /**
+ * Lance une tache de generation de texture seamless via Mamouth.ai
+ * @param {Object} params - Parametres de generation
+ * @param {string} params.prompt - Description du materiau
+ * @param {string} params.resolution - 'low', 'medium', 'high'
+ * @returns {Promise} task_id et status
+ */
+export const generateTexture = async (params) => {
+  const response = await api.post('/generate-texture', {
+    prompt: params.prompt,
+    resolution: params.resolution || 'medium'
+  })
+  return response.data
+}
+
+/**
  * Liste les images d'une session
  * @param {string} sessionId - ID de la session
  * @returns {Promise} Liste des images de la session

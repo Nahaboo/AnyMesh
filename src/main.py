@@ -31,7 +31,7 @@ from .task_manager import task_manager, Task
 from .simplify import simplify_mesh, adaptive_simplify_mesh, simplify_mesh_glb
 from .converter import convert_mesh_format, convert_any_to_glb
 from .stability_client import generate_mesh_from_image_sf3d
-from .mamouth_client import generate_image_from_prompt
+from .mamouth_client import generate_image_from_prompt, generate_texture_from_prompt
 from .retopology import retopologize_mesh, retopologize_mesh_glb
 from .segmentation import segment_mesh, segment_mesh_glb
 from .temp_utils import cleanup_temp_directory, safe_delete
@@ -74,6 +74,7 @@ async def lifespan(app: FastAPI):
     task_manager.register_handler("retopologize", retopologize_task_handler)
     task_manager.register_handler("segment", segment_task_handler)
     task_manager.register_handler("generate_image", generate_image_task_handler)
+    task_manager.register_handler("generate_texture", generate_texture_task_handler)
     task_manager.start()
 
     # GLB-First: Nettoyer les fichiers temporaires au démarrage
@@ -118,6 +119,7 @@ DATA_INPUT_IMAGES = Path("data/input_images")
 DATA_GENERATED_MESHES = Path("data/generated_meshes")
 DATA_RETOPO = Path("data/retopo")
 DATA_SEGMENTED = Path("data/segmented")
+DATA_GENERATED_TEXTURES = Path("data/generated_textures")
 DATA_TEMP = Path("data/temp")  # GLB-First: Fichiers temporaires pour conversions
 DATA_SAVED = Path("data/saved")  # GLB-First: Meshes sauvegardés par l'utilisateur
 DATA_INPUT.mkdir(parents=True, exist_ok=True)
@@ -126,6 +128,7 @@ DATA_INPUT_IMAGES.mkdir(parents=True, exist_ok=True)
 DATA_GENERATED_MESHES.mkdir(parents=True, exist_ok=True)
 DATA_RETOPO.mkdir(parents=True, exist_ok=True)
 DATA_SEGMENTED.mkdir(parents=True, exist_ok=True)
+DATA_GENERATED_TEXTURES.mkdir(parents=True, exist_ok=True)
 DATA_TEMP.mkdir(parents=True, exist_ok=True)
 
 # Formats de fichiers supportés
@@ -198,6 +201,11 @@ class GenerateMeshRequest(BaseModel):
 
 class GenerateImageRequest(BaseModel):
     """Parametres de generation d'image a partir d'un prompt textuel via Mamouth.ai"""
+    prompt: str
+    resolution: str = "medium"  # 'low', 'medium', 'high'
+
+class GenerateTextureRequest(BaseModel):
+    """Parametres de generation de texture via Mamouth.ai"""
     prompt: str
     resolution: str = "medium"  # 'low', 'medium', 'high'
 
@@ -1299,6 +1307,38 @@ def generate_image_task_handler(task: Task):
     return result
 
 
+def generate_texture_task_handler(task: Task):
+    """Handler qui genere une texture seamless a partir d'un prompt via Mamouth.ai"""
+    params = task.params
+    prompt = params["prompt"]
+    resolution = params.get("resolution", "medium")
+
+    texture_id = f"tex_{int(time.time() * 1000)}"
+    texture_dir = DATA_GENERATED_TEXTURES / texture_id
+    texture_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = texture_dir / "color.png"
+    api_key = os.getenv('MAMOUTH_API_KEY')
+
+    logger.info(f"[GENERATE-TEXTURE] Starting (texture_id={texture_id}, resolution={resolution})")
+
+    result = generate_texture_from_prompt(
+        prompt=prompt,
+        output_path=output_path,
+        resolution=resolution,
+        api_key=api_key
+    )
+
+    if result.get('success'):
+        logger.info(f"[GENERATE-TEXTURE] Success: {texture_id}/color.png")
+        result['texture_id'] = texture_id
+        result['texture_url'] = f"/texture/generated/{texture_id}/color.png"
+    else:
+        logger.error(f"[GENERATE-TEXTURE] Failed: {result.get('error')}")
+
+    return result
+
+
 def retopologize_task_handler(task: Task):
     """
     Handler qui exécute la retopologie avec Instant Meshes.
@@ -1705,6 +1745,49 @@ async def generate_image_from_prompt_endpoint(request: GenerateImageRequest):
         "status": "pending",
         "message": "Generation d'image en cours"
     }
+
+
+@app.post("/generate-texture")
+async def generate_texture_endpoint(request: GenerateTextureRequest):
+    """Lance une tache de generation de texture seamless via Mamouth.ai"""
+    if not os.getenv('MAMOUTH_API_KEY'):
+        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY non configuree dans .env")
+
+    if not request.prompt or not request.prompt.strip():
+        raise HTTPException(status_code=400, detail="Le prompt ne peut pas etre vide")
+
+    if len(request.prompt) > 1000:
+        raise HTTPException(status_code=400, detail="Prompt trop long (max 1000 caracteres)")
+
+    if request.resolution not in ['low', 'medium', 'high']:
+        raise HTTPException(status_code=400, detail="Resolution invalide")
+
+    task_id = task_manager.create_task(
+        task_type="generate_texture",
+        params={
+            "prompt": request.prompt.strip(),
+            "resolution": request.resolution
+        }
+    )
+
+    logger.info(f"[API] Texture generation task created: {task_id}")
+
+    return {
+        "task_id": task_id,
+        "status": "pending",
+        "message": "Generation de texture en cours"
+    }
+
+
+@app.get("/texture/generated/{texture_id}/{filename}")
+async def get_generated_texture(texture_id: str, filename: str):
+    """Sert un fichier texture genere"""
+    texture_path = DATA_GENERATED_TEXTURES / sanitize_filename(texture_id) / sanitize_filename(filename)
+
+    if not texture_path.exists():
+        raise HTTPException(status_code=404, detail="Texture non trouvee")
+
+    return FileResponse(str(texture_path), media_type="image/png")
 
 
 @app.get("/session-images/{session_id}/{filename}")
