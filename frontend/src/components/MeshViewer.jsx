@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Environment } from '@react-three/drei'
 import CameraController from './CameraController'
@@ -64,16 +65,16 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
       height: '100%',
       position: 'relative'
     }}>
-      <Canvas shadows camera={{ position: [3, 3, 3], fov: 50 }}>
+      <Canvas shadows={{ type: THREE.PCFSoftShadowMap }} camera={{ position: [3, 3, 3], fov: 50 }}>
         {/* Camera sync for axes widget */}
         <CameraSync onCameraUpdate={onCameraUpdate} />
 
         {/* Camera auto-adjustment */}
         {meshInfo.bounding_box && <CameraController boundingBox={meshInfo.bounding_box} />}
 
-        {/* Lighting */}
-        <ambientLight intensity={materialPreset ? 0.3 : 1.0} />
-        {materialPreset && <Environment preset="studio" />}
+        {/* Lighting - physics mode has its own lights in PhysicsPlayground */}
+        {!physicsMode && <ambientLight intensity={materialPreset ? 0.3 : 1.0} />}
+        {!physicsMode && materialPreset && <Environment preset="studio" />}
 
         {physicsMode && physicsProps ? (
           <Suspense fallback={

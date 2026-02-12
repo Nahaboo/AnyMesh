@@ -7,8 +7,7 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader'
 import * as THREE from 'three'
 import { API_BASE_URL } from '../utils/api'
-import vertexShader from '../shaders/materials/triplanar/vertex.glsl'
-import fragmentShader from '../shaders/materials/triplanar/fragment.glsl'
+import glassVertexShader from '../shaders/materials/triplanar/vertex.glsl'
 import glassFragmentShader from '../shaders/materials/triplanar/glass.glsl'
 
 const textureLoader = new THREE.TextureLoader()
@@ -121,26 +120,74 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
           const textureScale = (pc.scale || 3.0) / diagonal
           const textures = loadTextures(pc)
           prevResourcesRef.current.push(textures.colorMap, textures.normalMap, textures.roughnessMap)
-          child.material = new THREE.ShaderMaterial({
-            uniforms: {
-              uColorMap: { value: textures.colorMap },
-              uNormalMap: { value: textures.normalMap },
-              uRoughnessMap: { value: textures.roughnessMap },
-              uTextureScale: { value: textureScale },
-              uBlendSharpness: { value: pc.blendSharpness || 2.0 },
-              uLightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
-            },
-            vertexShader,
-            fragmentShader,
-            side: THREE.DoubleSide,
-            lights: false
+          const mat = new THREE.MeshStandardMaterial({
+            roughness: 0.5,
+            metalness: 0.0,
+            side: THREE.DoubleSide
           })
+          mat.onBeforeCompile = (shader) => {
+            shader.uniforms.uColorMap = { value: textures.colorMap }
+            shader.uniforms.uRoughnessMap = { value: textures.roughnessMap }
+            shader.uniforms.uTextureScale = { value: textureScale }
+            shader.uniforms.uBlendSharpness = { value: pc.blendSharpness || 2.0 }
+
+            // Add varyings + uniforms to vertex shader
+            shader.vertexShader = shader.vertexShader.replace(
+              '#include <common>',
+              `#include <common>
+              varying vec3 vWorldPos;
+              varying vec3 vWorldNorm;`
+            )
+            shader.vertexShader = shader.vertexShader.replace(
+              '#include <worldpos_vertex>',
+              `#include <worldpos_vertex>
+              vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+              vWorldNorm = normalize((modelMatrix * vec4(normal, 0.0)).xyz);`
+            )
+
+            // Add tri-planar sampling to fragment shader
+            shader.fragmentShader = shader.fragmentShader.replace(
+              '#include <common>',
+              `#include <common>
+              uniform sampler2D uColorMap;
+              uniform sampler2D uRoughnessMap;
+              uniform float uTextureScale;
+              uniform float uBlendSharpness;
+              varying vec3 vWorldPos;
+              varying vec3 vWorldNorm;
+
+              vec3 triplanarBlend(vec3 normal) {
+                vec3 blend = pow(abs(normal), vec3(uBlendSharpness));
+                return blend / (blend.x + blend.y + blend.z);
+              }
+              vec4 triplanarSample(sampler2D tex, vec3 pos, vec3 blend) {
+                return texture2D(tex, pos.yz) * blend.x
+                     + texture2D(tex, pos.xz) * blend.y
+                     + texture2D(tex, pos.xy) * blend.z;
+              }`
+            )
+
+            // Replace diffuse color with tri-planar sampled color
+            shader.fragmentShader = shader.fragmentShader.replace(
+              '#include <map_fragment>',
+              `vec3 tpPos = vWorldPos * uTextureScale;
+              vec3 tpBlend = triplanarBlend(vWorldNorm);
+              diffuseColor.rgb = triplanarSample(uColorMap, tpPos, tpBlend).rgb;`
+            )
+
+            // Replace roughness with tri-planar sampled roughness
+            shader.fragmentShader = shader.fragmentShader.replace(
+              '#include <roughnessmap_fragment>',
+              `float roughnessFactor = triplanarSample(uRoughnessMap, tpPos, tpBlend).r;`
+            )
+          }
+          child.material = mat
         } else if (materialPreset?.visual) {
           const v = materialPreset.visual
           if (v.transparent) {
             // Glass: custom shader for smooth rendering
             child.material = new THREE.ShaderMaterial({
-              vertexShader,
+              vertexShader: glassVertexShader,
               fragmentShader: glassFragmentShader,
               transparent: true,
               depthWrite: false,
@@ -160,6 +207,7 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
           child.material = child.material.clone()
         }
         child.castShadow = true
+        child.receiveShadow = true
       }
     })
     return clone
@@ -226,6 +274,37 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
 /**
  * PhysicsPlayground - Physics scene with ground, mesh, and projectiles.
  */
+function ShadowLight({ diagonal }) {
+  const lightRef = useRef()
+
+  useEffect(() => {
+    const light = lightRef.current
+    if (!light) return
+    const cam = light.shadow.camera
+    cam.left = -diagonal * 2
+    cam.right = diagonal * 2
+    cam.top = diagonal * 2
+    cam.bottom = -diagonal * 2
+    cam.near = diagonal * 0.1
+    cam.far = diagonal * 10
+    cam.updateProjectionMatrix()
+    light.shadow.mapSize.width = 2048
+    light.shadow.mapSize.height = 2048
+    light.shadow.bias = 0
+    light.shadow.normalBias = diagonal * 0.005
+    light.shadow.needsUpdate = true
+  }, [diagonal])
+
+  return (
+    <directionalLight
+      ref={lightRef}
+      position={[diagonal * 2, diagonal * 4, diagonal * 2]}
+      intensity={2.0}
+      castShadow
+    />
+  )
+}
+
 function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, projectiles, materialPreset }) {
   const bb = meshInfo.bounding_box
   const diagonal = bb?.diagonal || 2
@@ -240,28 +319,16 @@ function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, p
 
   return (
     <Physics gravity={[0, gravity, 0]}>
-      {/* Lighting */}
-      <ambientLight intensity={0.4} />
-      <directionalLight
-        position={[5, 10, 5]}
-        intensity={1.0}
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-camera-left={-groundSize / 2}
-        shadow-camera-right={groundSize / 2}
-        shadow-camera-top={groundSize / 2}
-        shadow-camera-bottom={-groundSize / 2}
-        shadow-camera-near={0.1}
-        shadow-camera-far={groundSize * 3}
-      />
-      <directionalLight position={[-5, 5, -5]} intensity={0.3} />
+      {/* Lighting - positions scaled to mesh size for correct shadow resolution */}
+      <ambientLight intensity={0.35} />
+      <ShadowLight diagonal={diagonal} />
+      <directionalLight position={[-diagonal * 2, diagonal * 2, -diagonal * 2]} intensity={0.3} />
 
       {/* Ground - thick slab like official demos (thin slabs cause instabilities) */}
       <RigidBody type="fixed" colliders="cuboid">
         <mesh position={[0, -groundThickness / 2, 0]} receiveShadow>
           <boxGeometry args={[groundSize, groundThickness, groundSize]} />
-          <meshStandardMaterial color="#3a3a3a" />
+          <meshStandardMaterial color="#8a8a8a" />
         </mesh>
       </RigidBody>
 
