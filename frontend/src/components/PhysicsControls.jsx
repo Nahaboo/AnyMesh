@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { generateMaterial, pollTaskStatus } from '../utils/api'
+
 export const MATERIAL_PRESETS = [
   { id: 'rubber', label: 'Caoutchouc', mass: 1.0, restitution: 0.85, damping: 0.3, icon: 'circle', visual: { color: '#2a2a2a', metalness: 0.0, roughness: 0.85, opacity: 1.0 }, procedural: { type: 'leather', scale: 3.0, blendSharpness: 2.0 } },
   { id: 'wood', label: 'Bois', mass: 1.5, restitution: 0.3, damping: 0.6, icon: 'square', visual: { color: '#5C3A1E', metalness: 0.0, roughness: 0.9, opacity: 1.0 }, procedural: { type: 'wood', scale: 2.0, blendSharpness: 2.0 } },
@@ -45,6 +48,8 @@ function PresetIcon({ type, size = 14 }) {
 /**
  * PhysicsControls - Right panel for physics simulation parameters
  */
+const AI_MATERIAL_EXAMPLES = ['Marble', 'Carbon Fiber', 'Rubber', 'Oak Wood', 'Steel']
+
 function PhysicsControls({
   gravity,
   onGravityChange,
@@ -56,11 +61,38 @@ function PhysicsControls({
   onDampingChange,
   activePreset,
   onPresetChange,
+  onAIMaterialGenerated,
   onThrowSphere,
   onReset,
   onExit,
   projectileCount
 }) {
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [aiError, setAiError] = useState('')
+
+  const handleGenerateMaterial = async () => {
+    if (!aiPrompt.trim() || isGenerating) return
+    setIsGenerating(true)
+    setAiError('')
+    try {
+      const { task_id } = await generateMaterial({ prompt: aiPrompt.trim() })
+      const result = await pollTaskStatus(task_id, null, 1500, 120)
+      if (result.status === 'completed' && result.result?.success) {
+        onAIMaterialGenerated?.({
+          textureId: result.result.texture_id,
+          physics: result.result.physics
+        })
+      } else {
+        setAiError(result.result?.error || 'Echec de la generation')
+      }
+    } catch (e) {
+      setAiError(e.message || 'Erreur reseau')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
   return (
     <div style={{
       background: 'var(--v2-bg-secondary)',
@@ -137,6 +169,71 @@ function PhysicsControls({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* AI Material */}
+      <div style={{ marginBottom: 'var(--v2-spacing-lg)' }}>
+        <label style={{
+          fontSize: '0.875rem',
+          fontWeight: 500,
+          color: 'var(--v2-text-secondary)',
+          marginBottom: 'var(--v2-spacing-sm)',
+          display: 'block'
+        }}>
+          Materiau IA
+        </label>
+        <div style={{ display: 'flex', gap: 'var(--v2-spacing-xs)', marginBottom: 'var(--v2-spacing-xs)' }}>
+          <input
+            type="text"
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleGenerateMaterial()}
+            placeholder="Ex: marble, carbon fiber..."
+            disabled={isGenerating}
+            style={{
+              flex: 1,
+              padding: '6px 10px',
+              borderRadius: 'var(--v2-radius-md)',
+              border: '1px solid var(--v2-border-secondary)',
+              background: 'var(--v2-bg-primary)',
+              color: 'var(--v2-text-primary)',
+              fontSize: '0.8rem'
+            }}
+          />
+          <button
+            className="v2-btn v2-btn-primary"
+            onClick={handleGenerateMaterial}
+            disabled={!aiPrompt.trim() || isGenerating}
+            style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+          >
+            {isGenerating ? '...' : 'Generer'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          {AI_MATERIAL_EXAMPLES.map(ex => (
+            <button
+              key={ex}
+              onClick={() => setAiPrompt(ex)}
+              disabled={isGenerating}
+              style={{
+                padding: '2px 8px',
+                borderRadius: '12px',
+                border: '1px solid var(--v2-border-secondary)',
+                background: 'var(--v2-bg-primary)',
+                color: 'var(--v2-text-muted)',
+                fontSize: '0.65rem',
+                cursor: 'pointer'
+              }}
+            >
+              {ex}
+            </button>
+          ))}
+        </div>
+        {aiError && (
+          <div style={{ color: 'var(--v2-error, #ef4444)', fontSize: '0.75rem', marginTop: '4px' }}>
+            {aiError}
+          </div>
+        )}
       </div>
 
       {/* Gravity slider */}

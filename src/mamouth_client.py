@@ -13,6 +13,7 @@ from PIL import Image
 
 MAMOUTH_API_URL = "https://api.mammouth.ai/v1/chat/completions"
 DEFAULT_MODEL = "gemini-2.5-flash-image"
+PHYSICS_MODEL = "gemini-2.5-flash"  # Text-only, cheap
 
 # Mapping resolution vers taille d'image
 RESOLUTION_PARAMS = {
@@ -367,3 +368,72 @@ def generate_texture_from_prompt(
             'error': f"Erreur inattendue: {str(e)}",
             'error_type': type(e).__name__
         }
+
+
+def infer_physics_from_prompt(prompt: str, api_key: str) -> Dict:
+    """
+    Infere les proprietes physiques d'un materiau via LLM (text-only, cheap).
+    Retourne { mass, restitution, damping } ou des valeurs par defaut si echec.
+    """
+    import json
+
+    DEFAULTS = {'mass': 1.0, 'restitution': 0.3, 'damping': 0.5}
+
+    if not api_key:
+        return DEFAULTS
+
+    system_prompt = (
+        "You are a physics material expert. Given a material name, return ONLY a JSON object with these 3 properties:\n"
+        "- mass: relative density (0.1 = very light like foam, 1.0 = normal like wood, 5.0 = heavy like steel, 10.0 = very heavy like lead)\n"
+        "- restitution: bounciness (0.0 = no bounce like clay, 0.5 = moderate like wood, 0.85 = bouncy like rubber, 1.0 = perfectly bouncy)\n"
+        "- damping: energy absorption (0.0 = no damping like ice, 0.3 = low like metal, 0.6 = moderate like wood, 0.9 = high like foam)\n\n"
+        'Return ONLY valid JSON, no explanation. Example: {"mass": 1.5, "restitution": 0.3, "damping": 0.6}'
+    )
+
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json'
+    }
+
+    payload = {
+        'model': PHYSICS_MODEL,
+        'messages': [
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user', 'content': f'Material: {prompt}'}
+        ]
+    }
+
+    print(f"  [MAMOUTH-PHYSICS] Inferring physics for: {prompt}")
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(MAMOUTH_API_URL, json=payload, headers=headers)
+
+        if response.status_code != 200:
+            print(f"  [MAMOUTH-PHYSICS] API error {response.status_code}, using defaults")
+            return DEFAULTS
+
+        data = response.json()
+        content = data['choices'][0]['message']['content'].strip()
+
+        # Extraire le JSON du contenu (parfois entoure de ```json ... ```)
+        if '```' in content:
+            content = content.split('```')[1]
+            if content.startswith('json'):
+                content = content[4:]
+            content = content.strip()
+
+        physics = json.loads(content)
+
+        result = {
+            'mass': max(0.1, min(10.0, float(physics.get('mass', 1.0)))),
+            'restitution': max(0.0, min(1.0, float(physics.get('restitution', 0.3)))),
+            'damping': max(0.0, min(1.0, float(physics.get('damping', 0.5))))
+        }
+
+        print(f"  [OK] Physics inferred: mass={result['mass']}, restitution={result['restitution']}, damping={result['damping']}")
+        return result
+
+    except Exception as e:
+        print(f"  [MAMOUTH-PHYSICS] Error: {e}, using defaults")
+        return DEFAULTS

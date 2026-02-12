@@ -31,7 +31,7 @@ from .task_manager import task_manager, Task
 from .simplify import simplify_mesh, adaptive_simplify_mesh, simplify_mesh_glb
 from .converter import convert_mesh_format, convert_any_to_glb
 from .stability_client import generate_mesh_from_image_sf3d
-from .mamouth_client import generate_image_from_prompt, generate_texture_from_prompt
+from .mamouth_client import generate_image_from_prompt, generate_texture_from_prompt, infer_physics_from_prompt
 from .retopology import retopologize_mesh, retopologize_mesh_glb
 from .segmentation import segment_mesh, segment_mesh_glb
 from .temp_utils import cleanup_temp_directory, safe_delete
@@ -75,6 +75,7 @@ async def lifespan(app: FastAPI):
     task_manager.register_handler("segment", segment_task_handler)
     task_manager.register_handler("generate_image", generate_image_task_handler)
     task_manager.register_handler("generate_texture", generate_texture_task_handler)
+    task_manager.register_handler("generate_material", generate_material_task_handler)
     task_manager.start()
 
     # GLB-First: Nettoyer les fichiers temporaires au démarrage
@@ -208,6 +209,10 @@ class GenerateTextureRequest(BaseModel):
     """Parametres de generation de texture via Mamouth.ai"""
     prompt: str
     resolution: str = "medium"  # 'low', 'medium', 'high'
+
+class GenerateMaterialRequest(BaseModel):
+    """Parametres de generation de materiau IA (texture + physique)"""
+    prompt: str
 
 class RetopologyRequest(BaseModel):
     """Paramètres de retopologie avec Instant Meshes"""
@@ -1776,6 +1781,83 @@ async def generate_texture_endpoint(request: GenerateTextureRequest):
         "task_id": task_id,
         "status": "pending",
         "message": "Generation de texture en cours"
+    }
+
+
+def generate_material_task_handler(task: Task):
+    """Handler qui genere un materiau complet: texture + parametres physiques en parallele"""
+    from concurrent.futures import ThreadPoolExecutor
+    params = task.params
+    prompt = params["prompt"]
+
+    texture_id = f"tex_{int(time.time() * 1000)}"
+    texture_dir = DATA_GENERATED_TEXTURES / texture_id
+    texture_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = texture_dir / "color.png"
+    api_key = os.getenv('MAMOUTH_API_KEY')
+
+    logger.info(f"[GENERATE-MATERIAL] Starting (texture_id={texture_id})")
+
+    start_time = time.time()
+
+    # Lancer texture + physics en parallele
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        texture_future = executor.submit(
+            generate_texture_from_prompt,
+            prompt=prompt, output_path=output_path, resolution="medium", api_key=api_key
+        )
+        physics_future = executor.submit(
+            infer_physics_from_prompt,
+            prompt=prompt, api_key=api_key
+        )
+
+        texture_result = texture_future.result()
+        physics_result = physics_future.result()
+
+    generation_time = (time.time() - start_time) * 1000
+
+    if not texture_result.get('success'):
+        logger.error(f"[GENERATE-MATERIAL] Texture failed: {texture_result.get('error')}")
+        return texture_result
+
+    logger.info(f"[GENERATE-MATERIAL] Success in {generation_time:.0f}ms")
+
+    return {
+        'success': True,
+        'texture_id': texture_id,
+        'texture_url': f"/texture/generated/{texture_id}/color.png",
+        'physics': physics_result,
+        'prompt': prompt,
+        'image_width': texture_result.get('image_width'),
+        'image_height': texture_result.get('image_height'),
+        'generation_time_ms': round(generation_time, 2)
+    }
+
+
+@app.post("/generate-material")
+async def generate_material_endpoint(request: GenerateMaterialRequest):
+    """Lance une tache de generation de materiau IA (texture + physique) via Mamouth.ai"""
+    if not os.getenv('MAMOUTH_API_KEY'):
+        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY non configuree dans .env")
+
+    if not request.prompt or not request.prompt.strip():
+        raise HTTPException(status_code=400, detail="Le prompt ne peut pas etre vide")
+
+    if len(request.prompt) > 1000:
+        raise HTTPException(status_code=400, detail="Prompt trop long (max 1000 caracteres)")
+
+    task_id = task_manager.create_task(
+        task_type="generate_material",
+        params={"prompt": request.prompt.strip()}
+    )
+
+    logger.info(f"[API] Material generation task created: {task_id}")
+
+    return {
+        "task_id": task_id,
+        "status": "pending",
+        "message": "Generation de materiau en cours"
     }
 
 

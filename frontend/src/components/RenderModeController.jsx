@@ -270,11 +270,11 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
     return cloned
   }, [loadedModel, renderMode, uploadId, needsUpdate, materialPreset])
 
-  // Force re-render when render mode or material preset changes
+  // Force re-render when render mode changes
   useEffect(() => {
     console.log(`[RenderModeController] Render mode changed to: ${renderMode}`)
     setNeedsUpdate(prev => prev + 1)
-  }, [renderMode, materialPreset])
+  }, [renderMode])
 
   // If procedural material preset is active, use tri-planar shader
   if (materialPreset?.procedural) {

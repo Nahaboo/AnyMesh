@@ -147,6 +147,23 @@ function ViewerLayout({
     })
   }
 
+  const handleAIMaterialGenerated = ({ textureId, physics }) => {
+    setPhysicsMass(physics.mass)
+    setPhysicsRestitution(physics.restitution)
+    setPhysicsDamping(physics.damping)
+    setPhysicsPreset(null)
+    setTexturePreset({
+      id: `ai-${textureId}`,
+      visual: { color: '#ffffff', metalness: 0.0, roughness: 0.5 },
+      procedural: {
+        type: 'ai-generated',
+        customTextureUrls: { color: `${API_BASE_URL}/texture/generated/${textureId}/color.png` },
+        scale: 3.0,
+        blendSharpness: 2.0
+      }
+    })
+  }
+
   // Auto-show refine panel when in images or prompt mode
   React.useEffect(() => {
     if (configData?.type === 'images' && sessionInfo) {
@@ -278,7 +295,7 @@ function ViewerLayout({
               damping: physicsDamping,
               projectiles: physicsProjectiles,
               resetKey: physicsResetKey,
-              materialPreset: activePresetObj
+              materialPreset: activePresetObj || texturePreset
             } : null}
           />
 
@@ -380,6 +397,7 @@ function ViewerLayout({
                   onDampingChange={handleDampingChange}
                   activePreset={physicsPreset}
                   onPresetChange={handlePhysicsPresetChange}
+                  onAIMaterialGenerated={handleAIMaterialGenerated}
                   onThrowSphere={handleThrowSphere}
                   onReset={handlePhysicsReset}
                   onExit={handlePhysicsExit}

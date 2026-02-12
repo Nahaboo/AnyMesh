@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { Center } from '@react-three/drei'
 import * as THREE from 'three'
 import vertexShader from '../shaders/materials/triplanar/vertex.glsl'
@@ -44,8 +44,14 @@ function loadTextures(proceduralConfig) {
 }
 
 function TriplanarMesh({ model, presetId, visualConfig, proceduralConfig, uploadId }) {
+  const prevResourcesRef = useRef([])
+
   const processedModel = useMemo(() => {
     if (!model) return null
+
+    // Dispose previous textures/materials
+    prevResourcesRef.current.forEach(r => r.dispose?.())
+    prevResourcesRef.current = []
 
     const cloned = model.clone()
 
@@ -56,6 +62,7 @@ function TriplanarMesh({ model, presetId, visualConfig, proceduralConfig, upload
 
     const textureScale = (proceduralConfig.scale || 3.0) / diagonal
     const textures = loadTextures(proceduralConfig)
+    prevResourcesRef.current.push(textures.colorMap, textures.normalMap, textures.roughnessMap)
 
     cloned.traverse((child) => {
       if (child.isMesh) {
@@ -77,6 +84,7 @@ function TriplanarMesh({ model, presetId, visualConfig, proceduralConfig, upload
           side: THREE.DoubleSide,
           lights: false
         })
+        prevResourcesRef.current.push(child.material)
         child.material.needsUpdate = true
       }
     })

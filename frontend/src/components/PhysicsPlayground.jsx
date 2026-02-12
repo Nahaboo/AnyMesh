@@ -13,8 +13,27 @@ import glassFragmentShader from '../shaders/materials/triplanar/glass.glsl'
 
 const textureLoader = new THREE.TextureLoader()
 
-function loadTextures(type) {
-  const path = `/textures/${type}`
+function loadTextures(proceduralConfig) {
+  if (proceduralConfig.customTextureUrls) {
+    const colorMap = textureLoader.load(proceduralConfig.customTextureUrls.color)
+    colorMap.wrapS = colorMap.wrapT = THREE.RepeatWrapping
+
+    const normalData = new Uint8Array([128, 128, 255, 255])
+    const normalMap = new THREE.DataTexture(normalData, 1, 1, THREE.RGBAFormat)
+    normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping
+    normalMap.colorSpace = THREE.LinearSRGBColorSpace
+    normalMap.needsUpdate = true
+
+    const roughData = new Uint8Array([128, 128, 128, 255])
+    const roughnessMap = new THREE.DataTexture(roughData, 1, 1, THREE.RGBAFormat)
+    roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping
+    roughnessMap.colorSpace = THREE.LinearSRGBColorSpace
+    roughnessMap.needsUpdate = true
+
+    return { colorMap, normalMap, roughnessMap }
+  }
+
+  const path = `/textures/${proceduralConfig.type}`
   const colorMap = textureLoader.load(`${path}/color.jpg`)
   const normalMap = textureLoader.load(`${path}/normal.jpg`)
   const roughnessMap = textureLoader.load(`${path}/roughness.jpg`)
@@ -47,6 +66,7 @@ function subsampleVertices(positions, maxPoints) {
  * Uses a simplified ConvexHullCollider (max 256 vertices) for stable contacts.
  */
 function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dropHeight, boundingBox, materialPreset }) {
+  const prevResourcesRef = useRef([])
   const meshUrl = isGenerated
     ? `${API_BASE_URL}/mesh/generated/${filename}`
     : `${API_BASE_URL}/mesh/input/${filename}`
@@ -77,7 +97,11 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
 
   // Deep clone + center geometry + compute normals
   const clonedModel = useMemo(() => {
-    const clone = model.clone()
+    // Dispose previous resources to prevent memory leaks
+    prevResourcesRef.current.forEach(r => r.dispose?.())
+    prevResourcesRef.current = []
+
+    const clone = model.clone(true)
     const ox = boundingBox?.center ? -boundingBox.center[0] : 0
     const oy = boundingBox?.center ? -boundingBox.center[1] : 0
     const oz = boundingBox?.center ? -boundingBox.center[2] : 0
@@ -95,7 +119,8 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
           const pc = materialPreset.procedural
           const diagonal = boundingBox?.diagonal || 1
           const textureScale = (pc.scale || 3.0) / diagonal
-          const textures = loadTextures(pc.type)
+          const textures = loadTextures(pc)
+          prevResourcesRef.current.push(textures.colorMap, textures.normalMap, textures.roughnessMap)
           child.material = new THREE.ShaderMaterial({
             uniforms: {
               uColorMap: { value: textures.colorMap },

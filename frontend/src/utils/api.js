@@ -264,6 +264,19 @@ export const generateTexture = async (params) => {
 }
 
 /**
+ * Lance une tache de generation de materiau IA (texture + physique) via Mamouth.ai
+ * @param {Object} params - Parametres de generation
+ * @param {string} params.prompt - Description du materiau
+ * @returns {Promise} task_id et status
+ */
+export const generateMaterial = async (params) => {
+  const response = await api.post('/generate-material', {
+    prompt: params.prompt
+  })
+  return response.data
+}
+
+/**
  * Liste les images d'une session
  * @param {string} sessionId - ID de la session
  * @returns {Promise} Liste des images de la session
