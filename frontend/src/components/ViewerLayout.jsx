@@ -60,6 +60,8 @@ function ViewerLayout({
   const [texturePreset, setTexturePreset] = useState(null)
 
   const activePresetObj = physicsPreset ? MATERIAL_PRESETS.find(p => p.id === physicsPreset) : null
+  // Track last applied visual material (preset or AI) so sliders don't reset appearance
+  const [lastMaterialPreset, setLastMaterialPreset] = useState(null)
 
   // Get active shader config
   const isShaderMode = renderMode.startsWith('shader:')
@@ -84,6 +86,7 @@ function ViewerLayout({
     setPhysicsDamping(preset.damping)
     setPhysicsPreset(preset.id)
     setTexturePreset(null)
+    setLastMaterialPreset(preset)
   }
 
   const handleMassChange = (v) => { setPhysicsMass(v); setPhysicsPreset(null) }
@@ -152,7 +155,7 @@ function ViewerLayout({
     setPhysicsRestitution(physics.restitution)
     setPhysicsDamping(physics.damping)
     setPhysicsPreset(null)
-    setTexturePreset({
+    const aiPreset = {
       id: `ai-${textureId}`,
       visual: { color: '#ffffff', metalness: 0.0, roughness: 0.5 },
       procedural: {
@@ -161,7 +164,9 @@ function ViewerLayout({
         scale: 3.0,
         blendSharpness: 2.0
       }
-    })
+    }
+    setTexturePreset(aiPreset)
+    setLastMaterialPreset(aiPreset)
   }
 
   // Auto-show refine panel when in images or prompt mode
@@ -286,7 +291,7 @@ function ViewerLayout({
             onCameraUpdate={handleCameraUpdate}
             autoRotate={autoRotate}
             physicsMode={isPhysicsMode}
-            materialPreset={activePresetObj || texturePreset}
+            materialPreset={activePresetObj || texturePreset || lastMaterialPreset}
             physicsProps={isPhysicsMode ? {
               meshInfo,
               gravity: physicsGravity,
@@ -295,7 +300,7 @@ function ViewerLayout({
               damping: physicsDamping,
               projectiles: physicsProjectiles,
               resetKey: physicsResetKey,
-              materialPreset: activePresetObj || texturePreset
+              materialPreset: activePresetObj || texturePreset || lastMaterialPreset
             } : null}
           />
 

@@ -159,6 +159,7 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
         } else if (child.material) {
           child.material = child.material.clone()
         }
+        child.castShadow = true
       }
     })
     return clone
@@ -200,6 +201,7 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
       rb.setAngularDamping(damping)
       for (let i = 0; i < rb.numColliders(); i++) {
         rb.collider(i).setRestitution(restitution)
+        rb.collider(i).setFriction(damping * 2.0)
       }
       rb.wakeUp()
     }, 100)
@@ -230,7 +232,7 @@ function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, p
 
   const groundSize = diagonal * 3
   const groundThickness = diagonal
-  const dropHeight = diagonal * 0.5
+  const dropHeight = diagonal * 1.5
   const sphereRadius = diagonal * 0.08
   // Sphere mass = same as mesh base mass for strong impact
   const baseMass = diagonal * diagonal * diagonal
@@ -239,14 +241,27 @@ function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, p
   return (
     <Physics gravity={[0, gravity, 0]}>
       {/* Lighting */}
-      <directionalLight position={[5, 10, 5]} intensity={0.8} />
+      <ambientLight intensity={0.4} />
+      <directionalLight
+        position={[5, 10, 5]}
+        intensity={1.0}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-left={-groundSize / 2}
+        shadow-camera-right={groundSize / 2}
+        shadow-camera-top={groundSize / 2}
+        shadow-camera-bottom={-groundSize / 2}
+        shadow-camera-near={0.1}
+        shadow-camera-far={groundSize * 3}
+      />
       <directionalLight position={[-5, 5, -5]} intensity={0.3} />
 
       {/* Ground - thick slab like official demos (thin slabs cause instabilities) */}
       <RigidBody type="fixed" colliders="cuboid">
-        <mesh position={[0, -groundThickness / 2, 0]}>
+        <mesh position={[0, -groundThickness / 2, 0]} receiveShadow>
           <boxGeometry args={[groundSize, groundThickness, groundSize]} />
-          <meshStandardMaterial color="#2a2a2a" />
+          <meshStandardMaterial color="#3a3a3a" />
         </mesh>
       </RigidBody>
 

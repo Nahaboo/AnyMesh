@@ -64,7 +64,7 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
       height: '100%',
       position: 'relative'
     }}>
-      <Canvas camera={{ position: [3, 3, 3], fov: 50 }}>
+      <Canvas shadows camera={{ position: [3, 3, 3], fov: 50 }}>
         {/* Camera sync for axes widget */}
         <CameraSync onCameraUpdate={onCameraUpdate} />
 
