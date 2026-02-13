@@ -134,6 +134,10 @@ function ViewerLayout({
     setPhysicsResetKey(0)
     setActiveTool('simplification')
     setShowRefinePanel(false)
+    // If a material preset was active, switch to textured mode so it stays visible
+    if (activePresetObj || texturePreset || lastMaterialPreset) {
+      setRenderMode('textured')
+    }
   }
 
   const handleTextureApply = ({ textureId, scale, blendSharpness }) => {
@@ -210,13 +214,11 @@ function ViewerLayout({
       // Ctrl+D (or Cmd+D on Mac)
       if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
         e.preventDefault()
-        if (isShaderMode) {
-          setDebugMode(prev => {
-            const newValue = !prev
-            console.log(`[ViewerLayout] Debug mode ${newValue ? 'enabled' : 'disabled'}`)
-            return newValue
-          })
-        }
+        setDebugMode(prev => {
+          const newValue = !prev
+          console.log(`[ViewerLayout] Debug mode ${newValue ? 'enabled' : 'disabled'}`)
+          return newValue
+        })
       }
     }
 
@@ -256,7 +258,7 @@ function ViewerLayout({
       {/* Top Toolbar */}
       <TopToolbar
         renderMode={renderMode}
-        onRenderModeChange={(mode) => { setRenderMode(mode); setPhysicsPreset(null); setTexturePreset(null) }}
+        onRenderModeChange={(mode) => { setRenderMode(mode) }}
         onHomeClick={onHomeClick}
         debugMode={debugMode}
         onDebugModeChange={setDebugMode}
@@ -290,8 +292,9 @@ function ViewerLayout({
             shaderParams={shaderParams}
             onCameraUpdate={handleCameraUpdate}
             autoRotate={autoRotate}
+            debugMode={debugMode}
             physicsMode={isPhysicsMode}
-            materialPreset={activePresetObj || texturePreset || lastMaterialPreset}
+            materialPreset={renderMode === 'textured' ? (activePresetObj || texturePreset || lastMaterialPreset) : null}
             physicsProps={isPhysicsMode ? {
               meshInfo,
               gravity: physicsGravity,

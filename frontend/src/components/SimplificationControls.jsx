@@ -21,7 +21,9 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
   const isSimplifiedMesh = meshInfo?.isSimplified === true
 
   // Détection si le mesh est retopologisé (quads incompatibles avec simplification)
-  const isRetopologizedMesh = meshInfo?.isRetopologized || false
+  //const isRetopologizedMesh = meshInfo?.isRetopologized || false
+  //Aucun problème avec pvista
+  const isRetopologizedMesh = false
 
   const handleSubmit = (e) => {
     e.preventDefault()

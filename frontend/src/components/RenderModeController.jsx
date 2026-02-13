@@ -13,6 +13,7 @@ import { getMaterialShader } from '../shaders/materials'
 import { API_BASE_URL } from '../utils/api'
 import glassVertexShader from '../shaders/materials/triplanar/vertex.glsl'
 import glassFragmentShader from '../shaders/materials/triplanar/glass.glsl'
+import { disposeObject } from '../utils/dispose'
 
 /**
  * RenderModeController - Handles different rendering modes for 3D models
@@ -20,6 +21,7 @@ import glassFragmentShader from '../shaders/materials/triplanar/glass.glsl'
  */
 function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
+  const prevModelRef = useRef(null)
 
   // Check if renderMode is a custom shader (format: "shader:toon")
   const isShaderMode = renderMode.startsWith('shader:')
@@ -100,6 +102,12 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
   // Clone and process model based on render mode
   const processedModel = useMemo(() => {
     if (!loadedModel) return null
+
+    // Dispose le clone précédent avant d'en créer un nouveau
+    if (prevModelRef.current) {
+      disposeObject(prevModelRef.current)
+      prevModelRef.current = null
+    }
 
     console.log(`[RenderModeController] Processing model with mode: ${renderMode}`)
 
@@ -267,8 +275,19 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
       }
     })
 
+    prevModelRef.current = cloned
     return cloned
   }, [loadedModel, renderMode, uploadId, needsUpdate, materialPreset])
+
+  // Cleanup au démontage du composant
+  useEffect(() => {
+    return () => {
+      if (prevModelRef.current) {
+        disposeObject(prevModelRef.current)
+        prevModelRef.current = null
+      }
+    }
+  }, [])
 
   // Force re-render when render mode changes
   useEffect(() => {

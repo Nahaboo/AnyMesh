@@ -7,7 +7,21 @@ from typing import Dict, Any, Tuple
 import open3d as o3d
 import trimesh
 import numpy as np
+import pyvista as pv
 
+def simplify_mesh_pyvista(
+    pv_mesh: pv.PolyData,
+    reduction_ratio: float = 0.5,
+    preserve_topology: bool = True
+) -> pv.PolyData:
+    """
+    Décimation VTK pure. Reçoit un PolyData, retourne un PolyData.
+    Aucun I/O — juste de la géométrie.
+    """
+    return pv_mesh.decimate_pro(
+        reduction=reduction_ratio,
+        preserve_topology=preserve_topology
+    )
 
 def build_triangle_adjacency(triangles: np.ndarray) -> list:
     """

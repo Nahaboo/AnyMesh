@@ -76,6 +76,7 @@ async def lifespan(app: FastAPI):
     task_manager.register_handler("generate_image", generate_image_task_handler)
     task_manager.register_handler("generate_texture", generate_texture_task_handler)
     task_manager.register_handler("generate_material", generate_material_task_handler)
+    task_manager.register_handler("sanitize", sanitize_task_handler)
     task_manager.start()
 
     # GLB-First: Nettoyer les fichiers temporaires au démarrage
@@ -671,79 +672,72 @@ async def get_saved_mesh(filename: str):
 
 # Handler pour les tâches de simplification
 def simplify_task_handler(task: Task):
-    """
-    Handler qui exécute la simplification d'un maillage.
-
-    GLB-First: Utilise simplify_mesh_glb pour les fichiers GLB (pas de conversion).
-    """
     params = task.params
-    input_file = params["input_file"]
-    output_file = params["output_file"]
-    target_triangles = params.get("target_triangles")
-    reduction_ratio = params.get("reduction_ratio")
-    preserve_boundary = params.get("preserve_boundary", True)
+    input_path = Path(params["input_file"])
+    output_path = Path(params["output_file"])
+    reduction_ratio = params.get("reduction_ratio", 0.5)
 
-    input_path = Path(input_file)
-    output_path = Path(output_file)
+    try:
+        from .geometry_engine import to_pyvista, MeshSanitizer
+        from .simplify import simplify_mesh_pyvista
 
-    logger.info(f"[SIMPLIFY] Starting: {input_path.name} -> {output_path.name}")
+        # 1. Chargement universel (GLB, OBJ, STL, PLY -> PolyData)
+        pv_mesh = to_pyvista(input_path)
+        original_faces = pv_mesh.n_cells
+        original_vertices = pv_mesh.n_points
 
-    # GLB-First: Utiliser simplify_mesh_glb directement pour les GLB
-    if input_path.suffix.lower() == '.glb':
-        logger.debug("[GLB-First] Direct GLB simplification (no conversion)")
+        # 2. Sanitization si mesh IA (sorties non-manifold de TripoSR)
+        if params.get("is_generated", False):
+            sanitizer = MeshSanitizer()
+            cloud = sanitizer.sample_mesh_to_cloud(
+                trimesh.Trimesh(vertices=pv_mesh.points, faces=pv_mesh.faces.reshape(-1, 4)[:, 1:])
+            )
+            surface = sanitizer.reconstruct_surface(cloud)
+            pv_mesh = surface
 
-        # S'assurer que la sortie est aussi en GLB
-        if output_path.suffix.lower() != '.glb':
-            output_path = output_path.with_suffix('.glb')
+        # 3. Decimation VTK
+        simplified = simplify_mesh_pyvista(pv_mesh, reduction_ratio=reduction_ratio)
 
-        result = simplify_mesh_glb(
-            input_path=input_path,
-            output_path=output_path,
-            target_triangles=target_triangles,
-            reduction_ratio=reduction_ratio
-        )
-    else:
-        # Fallback pour autres formats (OBJ, PLY, etc.)
-        result = simplify_mesh(
-            input_path=input_path,
-            output_path=output_path,
-            target_triangles=target_triangles,
-            reduction_ratio=reduction_ratio,
-            preserve_boundary=preserve_boundary,
-            use_trimesh=True
-        )
+        # 4. Export GLB via Trimesh
+        faces_back = simplified.faces.reshape(-1, 4)[:, 1:]
+        final = trimesh.Trimesh(vertices=simplified.points, faces=faces_back)
+        final.export(str(output_path), file_type='glb')
 
-    if result.get('success'):
-        logger.info("[SIMPLIFY] Completed successfully")
+        simplified_faces = simplified.n_cells
+        simplified_vertices = simplified.n_points
 
-        # Warning si textures perdues
-        if result.get('textures_lost'):
-            logger.warning("Textures were lost during simplification")
-
+        # 5. Contrat API frontend
         return {
             'success': True,
             'output_filename': output_path.name,
             'output_file': str(output_path),
-            'output_size': result.get('output_size', 0),
-            'vertices_count': result.get('simplified_vertices', 0),
-            'faces_count': result.get('simplified_triangles', 0),
+            'output_size': output_path.stat().st_size,
+            'vertices_count': simplified_vertices,
+            'faces_count': simplified_faces,
             'original': {
-                'vertices': result.get('original_vertices', 0),
-                'triangles': result.get('original_triangles', 0)
+                'vertices': original_vertices,
+                'triangles': original_faces
             },
             'simplified': {
-                'vertices': result.get('simplified_vertices', 0),
-                'triangles': result.get('simplified_triangles', 0)
+                'vertices': simplified_vertices,
+                'triangles': simplified_faces
             },
             'reduction': {
-                'vertices_ratio': result.get('vertices_ratio', 0),
-                'triangles_ratio': result.get('triangles_ratio', 0)
-            },
-            'had_textures': result.get('had_textures', False),
-            'textures_lost': result.get('textures_lost', False)
+                'vertices_ratio': 1 - (simplified_vertices / original_vertices) if original_vertices > 0 else 0,
+                'triangles_ratio': 1 - (simplified_faces / original_faces) if original_faces > 0 else 0
+            }
         }
 
-    return result
+    except Exception as e:
+        logger.error(f"[SIMPLIFY] Failed: {e}")
+        return {
+            'success': False,
+            'error': str(e),
+            'output_filename': output_path.name,
+            'faces_count': 0,
+            'vertices_count': 0
+        }
+
 
 def adaptive_simplify_task_handler(task: Task):
     """Handler qui exécute la simplification adaptative d'un maillage"""
@@ -916,6 +910,15 @@ async def simplify_mesh_adaptive_async(request: AdaptiveSimplifyRequest):
         "message": "Tâche de simplification adaptative créée",
         "output_filename": output_filename
     }
+
+def sanitize_task_handler(task: Task):
+    params = task.params
+    input_path = Path(params["input_file"])
+    output_path = Path(params["output_file"])
+
+    from .geometry_engine import MeshSanitizer
+    sanitizer = MeshSanitizer()
+    return sanitizer.sanitize_pipeline(input_path, output_path)
 
 @app.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
@@ -1783,6 +1786,17 @@ async def generate_texture_endpoint(request: GenerateTextureRequest):
         "message": "Generation de texture en cours"
     }
 
+@app.post("/sanitize")
+async def sanitize_mesh_endpoint(filename: str):
+    input_path = DATA_INPUT / filename # Ou DATA_GENERATED_MESHES
+    output_filename = f"{Path(filename).stem}_clean.glb"
+    output_path = DATA_OUTPUT / output_filename
+
+    task_id = task_manager.create_task(
+        "sanitize", 
+        {"input_file": str(input_path), "output_file": str(output_path)}
+    )
+    return {"task_id": task_id, "output_filename": output_filename}
 
 def generate_material_task_handler(task: Task):
     """Handler qui genere un materiau complet: texture + parametres physiques en parallele"""
@@ -1833,7 +1847,6 @@ def generate_material_task_handler(task: Task):
         'image_height': texture_result.get('image_height'),
         'generation_time_ms': round(generation_time, 2)
     }
-
 
 @app.post("/generate-material")
 async def generate_material_endpoint(request: GenerateMaterialRequest):

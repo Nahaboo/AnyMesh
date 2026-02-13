@@ -1,4 +1,4 @@
-import { Suspense } from 'react'
+import { Suspense, useState, useCallback, useRef } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Environment } from '@react-three/drei'
@@ -23,10 +23,42 @@ function CameraSync({ onCameraUpdate }) {
 }
 
 /**
+ * GpuStatsBridge - Reads gl.info inside Canvas and pushes stats to parent via callback
+ */
+function GpuStatsBridge({ onStats }) {
+  const { gl } = useThree()
+
+  useFrame(() => {
+    const { memory, render } = gl.info
+    onStats({
+      geometries: memory.geometries,
+      textures: memory.textures,
+      calls: render.calls,
+      triangles: render.triangles
+    })
+  })
+
+  return null
+}
+
+/**
  * MeshViewer - 3D viewer with render mode support
  * Supports: solid, wireframe, normal, smooth rendering modes + custom shaders
  */
-function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, autoRotate = false, physicsMode = false, physicsProps = null, materialPreset = null }) {
+function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, autoRotate = false, physicsMode = false, physicsProps = null, materialPreset = null, debugMode = false }) {
+  const gpuStatsRef = useRef({ geometries: 0, textures: 0, calls: 0, triangles: 0 })
+  const [gpuStats, setGpuStats] = useState({ geometries: 0, textures: 0, calls: 0, triangles: 0 })
+
+  // Throttle GPU stats updates to avoid re-rendering every frame
+  const frameCountRef = useRef(0)
+  const handleGpuStats = useCallback((stats) => {
+    gpuStatsRef.current = stats
+    frameCountRef.current++
+    if (frameCountRef.current % 30 === 0) {
+      setGpuStats({ ...stats })
+    }
+  }, [])
+
   if (!meshInfo) {
     return (
       <div className="v2-viewer-container" style={{
@@ -65,9 +97,33 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
       height: '100%',
       position: 'relative'
     }}>
+      {/* GPU monitor overlay - rendered outside Canvas as plain HTML */}
+      {debugMode && (
+        <div style={{
+          position: 'absolute',
+          top: 8,
+          left: 8,
+          background: 'rgba(0,0,0,0.8)',
+          color: '#0f0',
+          fontFamily: 'monospace',
+          fontSize: 11,
+          padding: '6px 10px',
+          borderRadius: 4,
+          lineHeight: 1.5,
+          zIndex: 10,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none'
+        }}>
+          <div>GEO: {gpuStats.geometries} | TEX: {gpuStats.textures}</div>
+          <div>DRAW: {gpuStats.calls} | TRI: {gpuStats.triangles.toLocaleString()}</div>
+        </div>
+      )}
       <Canvas shadows={{ type: THREE.PCFSoftShadowMap }} camera={{ position: [3, 3, 3], fov: 50 }}>
         {/* Camera sync for axes widget */}
         <CameraSync onCameraUpdate={onCameraUpdate} />
+
+        {/* GPU stats bridge (reads gl.info and pushes to parent) */}
+        {debugMode && <GpuStatsBridge onStats={handleGpuStats} />}
 
         {/* Camera auto-adjustment */}
         {meshInfo.bounding_box && <CameraController boundingBox={meshInfo.bounding_box} />}

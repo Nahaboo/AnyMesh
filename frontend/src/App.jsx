@@ -115,6 +115,12 @@ function App() {
     }
 
     const result = currentTask.result
+    console.log('[App] Task result:', JSON.stringify(result, null, 2))
+
+    if (!result.output_filename) {
+      console.error('[App] output_filename missing in task result:', result)
+      return
+    }
 
     // Le backend convertit automatiquement en GLB
     // Remplacer l'extension par .glb pour charger le fichier converti

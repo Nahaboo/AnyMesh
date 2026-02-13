@@ -7,6 +7,7 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader'
 import * as THREE from 'three'
 import { API_BASE_URL } from '../utils/api'
+import { disposeObject } from '../utils/dispose'
 import glassVertexShader from '../shaders/materials/triplanar/vertex.glsl'
 import glassFragmentShader from '../shaders/materials/triplanar/glass.glsl'
 
@@ -64,11 +65,22 @@ function subsampleVertices(positions, maxPoints) {
  * PhysicsMesh - Loads a mesh and wraps it in a dynamic RigidBody.
  * Uses a simplified ConvexHullCollider (max 256 vertices) for stable contacts.
  */
-function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dropHeight, boundingBox, materialPreset }) {
-  const prevResourcesRef = useRef([])
-  const meshUrl = isGenerated
-    ? `${API_BASE_URL}/mesh/generated/${filename}`
-    : `${API_BASE_URL}/mesh/input/${filename}`
+function PhysicsMesh({ filename, isGenerated, isSimplified, isRetopologized, isSegmented, density, restitution, damping, dropHeight, boundingBox, materialPreset, resetKey }) {
+  const prevModelRef = useRef(null)
+  const prevTexturesRef = useRef([])
+  const rbRef = useRef(null)
+  let meshUrl
+  if (isSegmented) {
+    meshUrl = `${API_BASE_URL}/mesh/segmented/${filename}`
+  } else if (isRetopologized) {
+    meshUrl = `${API_BASE_URL}/mesh/retopo/${filename}`
+  } else if (isSimplified) {
+    meshUrl = `${API_BASE_URL}/mesh/output/${filename}`
+  } else if (isGenerated) {
+    meshUrl = `${API_BASE_URL}/mesh/generated/${filename}`
+  } else {
+    meshUrl = `${API_BASE_URL}/mesh/input/${filename}`
+  }
 
   const extension = filename.split('.').pop().toLowerCase()
 
@@ -96,9 +108,14 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
 
   // Deep clone + center geometry + compute normals
   const clonedModel = useMemo(() => {
-    // Dispose previous resources to prevent memory leaks
-    prevResourcesRef.current.forEach(r => r.dispose?.())
-    prevResourcesRef.current = []
+    // Dispose le clone précédent (géométries + matériaux + textures)
+    if (prevModelRef.current) {
+      disposeObject(prevModelRef.current)
+      prevModelRef.current = null
+    }
+    // Dispose les textures chargées par loadTextures() (onBeforeCompile ne les expose pas)
+    prevTexturesRef.current.forEach(t => t.dispose())
+    prevTexturesRef.current = []
 
     const clone = model.clone(true)
     const ox = boundingBox?.center ? -boundingBox.center[0] : 0
@@ -108,18 +125,23 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
     clone.traverse(child => {
       if (child.isMesh) {
         if (child.geometry) {
-          child.geometry = child.geometry.clone()
+          const oldGeo = child.geometry
+          child.geometry = oldGeo.clone()
+          oldGeo.dispose() // Dispose la géométrie du clone(true), remplacée par la version translatée
           child.geometry.translate(ox, oy, oz)
           if (!child.geometry.attributes.normal) {
             child.geometry.computeVertexNormals()
           }
         }
+        // Dispose le matériau du clone(true) avant remplacement
+        const clonedMat = child.material
+
         if (materialPreset?.procedural) {
           const pc = materialPreset.procedural
           const diagonal = boundingBox?.diagonal || 1
           const textureScale = (pc.scale || 3.0) / diagonal
           const textures = loadTextures(pc)
-          prevResourcesRef.current.push(textures.colorMap, textures.normalMap, textures.roughnessMap)
+          prevTexturesRef.current.push(textures.colorMap, textures.normalMap, textures.roughnessMap)
           const mat = new THREE.MeshStandardMaterial({
             roughness: 0.5,
             metalness: 0.0,
@@ -204,14 +226,31 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
             })
           }
         } else if (child.material) {
-          child.material = child.material.clone()
+          child.material = clonedMat.clone()
+        }
+        // Dispose le matériau orphelin du clone(true) remplacé ci-dessus
+        if (clonedMat && clonedMat !== child.material) {
+          clonedMat.dispose()
         }
         child.castShadow = true
         child.receiveShadow = true
       }
     })
+    prevModelRef.current = clone
     return clone
   }, [model, boundingBox, materialPreset])
+
+  // Cleanup au démontage
+  useEffect(() => {
+    return () => {
+      if (prevModelRef.current) {
+        disposeObject(prevModelRef.current)
+        prevModelRef.current = null
+      }
+      prevTexturesRef.current.forEach(t => t.dispose())
+      prevTexturesRef.current = []
+    }
+  }, [])
 
   // Extract and subsample vertices for a simplified convex hull collider
   const hullPoints = useMemo(() => {
@@ -227,7 +266,7 @@ function PhysicsMesh({ filename, isGenerated, density, restitution, damping, dro
     return subsampleVertices(allPositions, 256)
   }, [clonedModel])
 
-  const rbRef = useRef(null)
+  //const rbRef = useRef(null)
 
   // Compute a sensible base mass from bounding box diagonal
   // (auto-computed hull mass is ~0.001, far too small for visible effect)
@@ -340,6 +379,9 @@ function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, p
         <PhysicsMesh
           filename={meshInfo.displayFilename || meshInfo.filename}
           isGenerated={meshInfo.isGenerated || false}
+          isSimplified={meshInfo.isSimplified || false}
+          isRetopologized={meshInfo.isRetopologized || false}
+          isSegmented={meshInfo.isSegmented || false}
           density={density}
           restitution={restitution}
           damping={damping}
