@@ -1283,12 +1283,19 @@ def generate_mesh_task_handler(task: Task):
         )
 
     if result.get('success'):
-        # Mesh cleanup for TripoSR (skip TRELLIS to preserve GLB textures)
+        # Mesh cleanup for TripoSR (TRELLIS handles its own cleanup in trellis_client.py)
         if provider == "triposr":
             try:
                 import trimesh
                 mesh = trimesh.load(str(output_path), force='mesh')
                 before = len(mesh.faces)
+
+                # Floater removal: keep largest connected component
+                components = mesh.split()
+                if len(components) > 1:
+                    mesh = max(components, key=lambda m: len(m.faces))
+                    logger.info(f"[GENERATE-MESH] Removed {len(components)-1} floater(s)")
+
                 mesh.remove_degenerate_faces()
                 mesh.remove_duplicate_faces()
                 mesh.fix_normals()
@@ -1297,6 +1304,7 @@ def generate_mesh_task_handler(task: Task):
                 if before != after:
                     logger.info(f"[GENERATE-MESH] Cleanup: {before} -> {after} faces")
                     result['faces_count'] = after
+                    result['vertices_count'] = len(mesh.vertices)
             except Exception as e:
                 logger.warning(f"[GENERATE-MESH] Cleanup skipped: {e}")
 
