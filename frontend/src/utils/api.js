@@ -228,7 +228,7 @@ export const generateMesh = async (params) => {
     session_id: params.sessionId,
     resolution: params.resolution,
     remesh_option: params.remeshOption || 'quad',
-    provider: params.provider || 'stability'
+    provider: params.provider || 'triposr'
   })
   return response.data
 }

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect, Suspense } from 'react'
 import { useLoader } from '@react-three/fiber'
-import { Physics, RigidBody, BallCollider, ConvexHullCollider } from '@react-three/rapier'
+import { Physics, RigidBody, ConvexHullCollider } from '@react-three/rapier'
+import { Environment } from '@react-three/drei'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
@@ -263,10 +264,8 @@ function PhysicsMesh({ filename, isGenerated, isSimplified, isRetopologized, isS
         }
       }
     })
-    return subsampleVertices(allPositions, 256)
+    return subsampleVertices(allPositions, 128)
   }, [clonedModel])
-
-  //const rbRef = useRef(null)
 
   // Compute a sensible base mass from bounding box diagonal
   // (auto-computed hull mass is ~0.001, far too small for visible effect)
@@ -329,8 +328,9 @@ function ShadowLight({ diagonal }) {
     cam.updateProjectionMatrix()
     light.shadow.mapSize.width = 2048
     light.shadow.mapSize.height = 2048
-    light.shadow.bias = 0
-    light.shadow.normalBias = diagonal * 0.005
+    light.shadow.bias = -0.0001
+    light.shadow.normalBias = diagonal * 0.01
+    light.shadow.radius = 3
     light.shadow.needsUpdate = true
   }, [diagonal])
 
@@ -344,30 +344,28 @@ function ShadowLight({ diagonal }) {
   )
 }
 
-function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, projectiles, materialPreset }) {
+function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, hdriPreset = 'studio', materialPreset }) {
   const bb = meshInfo.bounding_box
   const diagonal = bb?.diagonal || 2
 
   const groundSize = diagonal * 3
   const groundThickness = diagonal
   const dropHeight = diagonal * 1.5
-  const sphereRadius = diagonal * 0.08
-  // Sphere mass = same as mesh base mass for strong impact
-  const baseMass = diagonal * diagonal * diagonal
-  const sphereMass = baseMass
 
   return (
     <Physics gravity={[0, gravity, 0]}>
-      {/* Lighting - positions scaled to mesh size for correct shadow resolution */}
-      <ambientLight intensity={0.35} />
+      {/* Lighting - 3-point setup + environment for PBR reflections */}
+      <ambientLight intensity={0.4} />
       <ShadowLight diagonal={diagonal} />
-      <directionalLight position={[-diagonal * 2, diagonal * 2, -diagonal * 2]} intensity={0.3} />
+      <directionalLight position={[-diagonal * 2, diagonal * 2, -diagonal * 2]} intensity={0.5} />
+      <directionalLight position={[diagonal * 0.5, diagonal * 0.5, -diagonal * 3]} intensity={0.2} />
+      <Environment preset={hdriPreset} environmentIntensity={0.4} />
 
       {/* Ground - thick slab like official demos (thin slabs cause instabilities) */}
       <RigidBody type="fixed" colliders="cuboid">
         <mesh position={[0, -groundThickness / 2, 0]} receiveShadow>
           <boxGeometry args={[groundSize, groundThickness, groundSize]} />
-          <meshStandardMaterial color="#8a8a8a" />
+          <meshStandardMaterial color="#9a9a9a" metalness={0.05} roughness={0.6} envMapIntensity={0.5} />
         </mesh>
       </RigidBody>
 
@@ -390,23 +388,6 @@ function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, p
           materialPreset={materialPreset}
         />
       </Suspense>
-
-      {/* Projectiles */}
-      {projectiles.map(p => (
-        <RigidBody
-          key={p.id}
-          type="dynamic"
-          colliders={false}
-          position={p.position}
-          linearVelocity={p.velocity}
-        >
-          <BallCollider args={[sphereRadius]} mass={sphereMass} restitution={restitution} />
-          <mesh>
-            <sphereGeometry args={[sphereRadius, 16, 16]} />
-            <meshStandardMaterial color="#ef4444" />
-          </mesh>
-        </RigidBody>
-      ))}
     </Physics>
   )
 }

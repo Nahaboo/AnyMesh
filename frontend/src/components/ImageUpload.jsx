@@ -10,7 +10,7 @@ function ImageUpload({ onUploadSuccess }) {
 
   // Formats supportés (images uniquement)
   const SUPPORTED_FORMATS = ['.jpg', '.jpeg', '.png']
-  const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5 MB par image
+  const MAX_IMAGE_SIZE = 20 * 1024 * 1024 // 20 MB par image (resize cote backend)
 
   const handleDragOver = (e) => {
     e.preventDefault()
@@ -52,7 +52,7 @@ function ImageUpload({ onUploadSuccess }) {
       }
 
       if (file.size > MAX_IMAGE_SIZE) {
-        errors.push(`${file.name}: taille trop grande (max 5 MB)`)
+        errors.push(`${file.name}: taille trop grande (max 20 MB)`)
         return
       }
 
@@ -182,7 +182,7 @@ function ImageUpload({ onUploadSuccess }) {
           {/* Formats supportés */}
           {!isUploading && (
             <div style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)' }}>
-              Formats: {SUPPORTED_FORMATS.join(', ')} • Max 5 MB par image
+              Formats: {SUPPORTED_FORMATS.join(', ')} • Max 20 MB par image
             </div>
           )}
         </div>

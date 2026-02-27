@@ -9,16 +9,15 @@ import { API_BASE_URL, generateImageFromPrompt, pollTaskStatus } from '../utils/
 function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
   const [prompt, setPrompt] = useState('')
   const [resolution, setResolution] = useState('medium')
-  const [provider, setProvider] = useState('triposr')
-  const [remeshOption, setRemeshOption] = useState('quad')
+  const [provider, setProvider] = useState('trellis')
   const [generatedImage, setGeneratedImage] = useState(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [error, setError] = useState('')
 
   const providerInfo = {
-    stability: {
-      name: 'Stability AI',
-      description: 'API cloud, haute qualite'
+    trellis: {
+      name: 'TRELLIS',
+      description: 'Meilleure qualite, RunPod GPU'
     },
     triposr: {
       name: 'TripoSR (Local)',
@@ -67,7 +66,6 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
     onGenerate({
       sessionId: generatedImage.session_id,
       resolution,
-      remeshOption,
       provider
     })
   }
@@ -134,7 +132,7 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
             Moteur 3D
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
-            {['stability', 'triposr'].map((p) => (
+            {['trellis', 'triposr'].map((p) => (
               <button
                 key={p}
                 onClick={() => setProvider(p)}
@@ -160,48 +158,6 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
             ))}
           </div>
         </div>
-
-        {/* Topology selector (Stability only) */}
-        {provider === 'stability' && (
-          <div>
-            <label style={{
-              display: 'block',
-              fontSize: '0.875rem',
-              fontWeight: 500,
-              color: 'var(--v2-text-secondary)',
-              marginBottom: 'var(--v2-spacing-xs)'
-            }}>
-              Topologie du mesh
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
-              {[
-                { value: 'none', label: 'Aucune' },
-                { value: 'triangle', label: 'Triangle' },
-                { value: 'quad', label: 'Quad' }
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setRemeshOption(option.value)}
-                  disabled={busy}
-                  style={{
-                    padding: 'var(--v2-spacing-xs) var(--v2-spacing-sm)',
-                    borderRadius: 'var(--v2-radius-lg)',
-                    fontSize: '0.875rem',
-                    fontWeight: 500,
-                    transition: 'all var(--v2-transition-base)',
-                    background: remeshOption === option.value ? 'var(--v2-accent-primary)' : 'var(--v2-bg-tertiary)',
-                    color: remeshOption === option.value ? '#ffffff' : 'var(--v2-text-secondary)',
-                    border: 'none',
-                    cursor: busy ? 'not-allowed' : 'pointer',
-                    opacity: busy ? 0.5 : 1
-                  }}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 'var(--v2-spacing-sm)' }}>

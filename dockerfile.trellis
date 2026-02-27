@@ -1,0 +1,135 @@
+# ============================================================
+# TRELLIS image-to-3D - RunPod Serverless Docker Image
+# Multi-stage build: compile CUDA extensions in builder,
+# then copy to lightweight runtime image.
+# ============================================================
+
+# === STAGE 1 : Builder (compile CUDA extensions) ===
+FROM nvidia/cuda:12.3.2-cudnn9-devel-ubuntu22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TORCH_CUDA_ARCH_LIST="7.0 7.5 8.0 8.6 8.9 9.0"
+
+# System build dependencies
+RUN apt-get update && apt-get install -y \
+    git curl wget build-essential cmake ninja-build \
+    libgl1-mesa-glx libglib2.0-0 libegl1-mesa libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Miniconda + Python 3.10
+RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o /tmp/miniconda.sh \
+    && bash /tmp/miniconda.sh -b -p /opt/conda \
+    && rm /tmp/miniconda.sh
+ENV PATH="/opt/conda/bin:$PATH"
+# Accept Anaconda ToS + use conda-forge to avoid licensing issues
+RUN conda config --set solver libmamba \
+    && conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main \
+    && conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r \
+    && conda create -n trellis python=3.10 -y
+SHELL ["conda", "run", "-n", "trellis", "/bin/bash", "-c"]
+
+# PyTorch 2.4.0 + CUDA 12.1 (compatible with CUDA 12.3 runtime)
+RUN pip install --no-cache-dir \
+    torch==2.4.0 torchvision==0.19.0 \
+    --index-url https://download.pytorch.org/whl/cu121
+
+# --- Pre-compiled wheels (avoid long compilation) ---
+
+# flash-attn (pre-compiled for CUDA 12.x + PyTorch 2.4)
+RUN pip install --no-cache-dir \
+    https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+
+# diff-gaussian-rasterization (pre-compiled wheel from TRELLIS HF space)
+RUN pip install --no-cache-dir \
+    https://huggingface.co/spaces/JeffreyXiang/TRELLIS/resolve/main/wheels/diff_gaussian_rasterization-0.0.0-cp310-cp310-linux_x86_64.whl
+
+# spconv (pre-built for CUDA 12.x)
+RUN pip install --no-cache-dir spconv-cu120
+
+# kaolin (pre-built for PyTorch 2.4.0)
+RUN pip install --no-cache-dir kaolin \
+    -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
+
+# xformers (pre-built)
+RUN pip install --no-cache-dir xformers==0.0.27.post2 \
+    --index-url https://download.pytorch.org/whl/cu121
+
+# --- Compiled from source (fast, ~2 min each) ---
+
+# nvdiffrast (NVIDIA differentiable rasterizer)
+RUN git clone https://github.com/NVlabs/nvdiffrast.git /tmp/nvdiffrast \
+    && pip install --no-cache-dir --no-build-isolation /tmp/nvdiffrast \
+    && rm -rf /tmp/nvdiffrast
+
+# diffoctreerast (custom octree renderer)
+RUN git clone --recurse-submodules https://github.com/JeffreyXiang/diffoctreerast.git /tmp/diffoctreerast \
+    && pip install --no-cache-dir --no-build-isolation /tmp/diffoctreerast \
+    && rm -rf /tmp/diffoctreerast
+
+# --- Clone TRELLIS repo ---
+RUN git clone --recurse-submodules https://github.com/microsoft/TRELLIS.git /workspace/TRELLIS
+
+# vox2seq extension: removed from main branch (commit e74d605) but still required at runtime.
+# Restore it from the commit just before deletion, then compile and install.
+RUN cd /workspace/TRELLIS \
+    && git checkout f17fdf1 -- extensions/vox2seq \
+    && pip install --no-cache-dir --no-build-isolation extensions/vox2seq
+
+# --- Python dependencies ---
+RUN pip install --no-cache-dir \
+    pillow imageio imageio-ffmpeg tqdm easydict \
+    opencv-python-headless scipy ninja rembg onnxruntime \
+    trimesh open3d xatlas pyvista pymeshfix igraph \
+    transformers huggingface-hub safetensors
+
+# utils3d (pinned commit from TRELLIS setup.sh)
+RUN pip install --no-cache-dir \
+    "git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8"
+
+
+# === STAGE 2 : Runtime (lightweight) ===
+FROM nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Runtime system libraries
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx libglib2.0-0 libegl1-mesa libgomp1 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy conda environment from builder
+COPY --from=builder /opt/conda /opt/conda
+ENV PATH="/opt/conda/bin:$PATH"
+
+# Copy TRELLIS source code
+COPY --from=builder /workspace/TRELLIS /workspace/TRELLIS
+
+# --- Pre-download all model weights into the image ---
+# TRELLIS model (3.3 GB from HuggingFace)
+RUN conda run -n trellis python -c "\
+from huggingface_hub import snapshot_download; \
+snapshot_download('microsoft/TRELLIS-image-large', cache_dir='/workspace/models')"
+
+# DINOv2 (image encoder, ~500 MB)
+RUN conda run -n trellis python -c "\
+import torch; \
+torch.hub.load('facebookresearch/dinov2', 'dinov2_vitl14_reg', pretrained=True)"
+
+# rembg u2net (background removal, ~170 MB)
+RUN conda run -n trellis python -c "\
+from rembg import new_session; \
+new_session('u2net')"
+
+# --- RunPod handler ---
+RUN conda run -n trellis pip install --no-cache-dir runpod
+COPY runpod_handler_trellis.py /workspace/runpod_handler_trellis.py
+
+# Environment variables
+ENV SPCONV_ALGO=native
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256
+ENV TORCH_USE_CUDA_DSA=1
+ENV PYTHONPATH="/workspace/TRELLIS"
+ENV HF_HOME=/workspace/models
+
+WORKDIR /workspace
+CMD ["conda", "run", "--no-capture-output", "-n", "trellis", "python", "runpod_handler_trellis.py"]

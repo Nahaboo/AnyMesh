@@ -105,27 +105,14 @@ def generate_mesh_from_image_triposr(
         # Charger le modele (cache)
         model = _get_model(device)
 
-        # Pretraitement de l'image
+        # Pretraitement de l'image (identique au pipeline officiel run.py)
         print(f"  Preprocessing image...")
-        image = Image.open(image_path)
-
-        # Convertir en RGB si necessaire
-        if image.mode == 'RGBA':
-            # Utiliser le canal alpha existant
-            pass
-        elif image.mode != 'RGB':
-            image = image.convert('RGB')
-
-        # Supprimer le fond et redimensionner
-        image = remove_background(image, force=True)
+        image = remove_background(Image.open(image_path), force=True)
         image = resize_foreground(image, foreground_ratio)
-
-        # Convertir en RGB pour le modele
-        if image.mode == 'RGBA':
-            # Creer un fond blanc pour la transparence
-            background = Image.new('RGBA', image.size, (255, 255, 255, 255))
-            image = Image.alpha_composite(background, image)
-        image = image.convert('RGB')
+        # Fond gris 50% via alpha compositing (comme le pipeline officiel)
+        image = np.array(image).astype(np.float32) / 255.0
+        image = image[:, :, :3] * image[:, :, 3:4] + (1 - image[:, :, 3:4]) * 0.5
+        image = Image.fromarray((image * 255.0).astype(np.uint8))
 
         # Generation
         print(f"  Generating 3D representation...")
@@ -136,8 +123,9 @@ def generate_mesh_from_image_triposr(
         print(f"  Extracting mesh (resolution={mc_res})...")
         meshes = model.extract_mesh(
             scene_codes,
+            has_vertex_color=True,
             resolution=mc_res,
-            threshold=0.0
+            threshold=25.0
         )
         mesh = meshes[0]
 

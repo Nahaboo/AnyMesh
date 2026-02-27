@@ -22,6 +22,7 @@ import { disposeObject } from '../utils/dispose'
 function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
   const prevModelRef = useRef(null)
+  const originalMaterialsRef = useRef(new Map())
 
   // Check if renderMode is a custom shader (format: "shader:toon")
   const isShaderMode = renderMode.startsWith('shader:')
@@ -61,6 +62,17 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
   } else if (extension === 'gltf' || extension === 'glb') {
     const gltf = useLoader(GLTFLoader, meshUrl)
     loadedModel = gltf.scene
+    // Store original materials on first load (keyed by mesh name or index)
+    if (originalMaterialsRef.current.size === 0) {
+      let meshIdx = 0
+      gltf.scene.traverse((child) => {
+        if (child.isMesh && child.material) {
+          const key = child.name || `mesh_${meshIdx}`
+          originalMaterialsRef.current.set(key, child.material.clone())
+          meshIdx++
+        }
+      })
+    }
   } else if (extension === 'stl') {
     const geometry = useLoader(STLLoader, meshUrl)
     const hasNormals = geometry.attributes.normal !== undefined
@@ -112,11 +124,20 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
     console.log(`[RenderModeController] Processing model with mode: ${renderMode}`)
 
     // Clone the model to avoid modifying the original
+    // For GLB: deep-clone materials so original textures are preserved
     const cloned = loadedModel.clone()
+    cloned.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.material = child.material.clone()
+      }
+    })
 
     // Apply render mode to all meshes
+    let cloneMeshIdx = 0
     cloned.traverse((child) => {
       if (child.isMesh) {
+        const meshKey = child.name || `mesh_${cloneMeshIdx}`
+        cloneMeshIdx++
         // Store original geometry for smooth mode
         if (!child.userData.originalGeometry) {
           child.userData.originalGeometry = child.geometry.clone()
@@ -247,11 +268,15 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
             console.log('[RenderModeController] Applied SMOOTH mode (normals recomputed)')
             break
 
-          case 'textured':
-            // Textured mode - preserve original materials and textures from GLB/GLTF
-            // Don't replace the material, just ensure it renders properly
-            if (!child.material.map && !child.material.normalMap) {
-              // If no texture, apply a default material
+          case 'textured': {
+            // Textured mode - restore original materials from GLB/GLTF
+            const originalMat = originalMaterialsRef.current.get(meshKey)
+            if (originalMat && (originalMat.map || originalMat.normalMap)) {
+              child.material = originalMat.clone()
+              child.material.side = THREE.DoubleSide
+              console.log('[RenderModeController] Applied TEXTURED mode (restored original material with textures)')
+            } else {
+              // No saved material or no texture — fallback
               child.material = new THREE.MeshStandardMaterial({
                 color: DEFAULT_COLOR,
                 side: THREE.DoubleSide,
@@ -260,12 +285,9 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
                 roughness: 0.8
               })
               console.log('[RenderModeController] Applied TEXTURED mode (no texture found, using default material)')
-            } else {
-              // Material has textures, keep it as is but ensure DoubleSide
-              child.material.side = THREE.DoubleSide
-              console.log('[RenderModeController] Applied TEXTURED mode (preserving original material with textures)')
             }
             break
+          }
 
           default:
             break
@@ -288,6 +310,11 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
       }
     }
   }, [])
+
+  // Reset original materials cache when file changes
+  useEffect(() => {
+    originalMaterialsRef.current = new Map()
+  }, [meshUrl])
 
   // Force re-render when render mode changes
   useEffect(() => {

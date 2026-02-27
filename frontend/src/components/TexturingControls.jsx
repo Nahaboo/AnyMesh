@@ -131,6 +131,16 @@ function TexturingControls({ meshInfo, onApplyTexture, isProcessing }) {
             onChange={(e) => setTextureScale(parseFloat(e.target.value))}
             style={{ width: '100%', accentColor: 'var(--v2-accent-primary)' }}
           />
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: '0.75rem',
+            color: 'var(--v2-text-muted)',
+            marginTop: 'var(--v2-spacing-xs)'
+          }}>
+            <span>1 (gros motifs)</span>
+            <span>10 (motifs fins)</span>
+          </div>
         </div>
 
         {/* Action buttons */}

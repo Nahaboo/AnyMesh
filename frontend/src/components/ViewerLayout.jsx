@@ -48,6 +48,7 @@ function ViewerLayout({
   const [shaderParams, setShaderParams] = useState({})
   const [debugMode, setDebugMode] = useState(false)
   const [autoRotate, setAutoRotate] = useState(false)
+  const [hdriPreset, setHdriPreset] = useState('studio')
 
   // Physics state
   const [physicsGravity, setPhysicsGravity] = useState(-9.81)
@@ -55,7 +56,7 @@ function ViewerLayout({
   const [physicsRestitution, setPhysicsRestitution] = useState(0.1)
   const [physicsDamping, setPhysicsDamping] = useState(0.5)
   const [physicsPreset, setPhysicsPreset] = useState(null)
-  const [physicsProjectiles, setPhysicsProjectiles] = useState([])
+
   const [physicsResetKey, setPhysicsResetKey] = useState(0)
   const [texturePreset, setTexturePreset] = useState(null)
 
@@ -93,44 +94,17 @@ function ViewerLayout({
   const handleRestitutionChange = (v) => { setPhysicsRestitution(v); setPhysicsPreset(null) }
   const handleDampingChange = (v) => { setPhysicsDamping(v); setPhysicsPreset(null) }
 
-  const handleThrowSphere = () => {
-    const bb = meshInfo?.bounding_box
-    if (!bb) return
-    const diagonal = bb.diagonal || 2
-    const speed = diagonal * 3
-
-    // Direction: camera → mesh center (origin after centering)
-    const camPos = cameraPosition
-    const dx = -camPos.x
-    const dy = -camPos.y
-    const dz = -camPos.z
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1
-
-    const velocity = [dx / dist * speed, dy / dist * speed, dz / dist * speed]
-
-    // Start slightly in front of camera
-    const startDist = diagonal * 0.3
-    const jitter = diagonal * 0.05
-    const position = [
-      camPos.x + (dx / dist) * startDist + (Math.random() - 0.5) * jitter,
-      camPos.y + (dy / dist) * startDist + (Math.random() - 0.5) * jitter,
-      camPos.z + (dz / dist) * startDist + (Math.random() - 0.5) * jitter
-    ]
-
-    setPhysicsProjectiles(prev => {
-      const updated = [...prev, { id: Date.now() + Math.random(), position, velocity }]
-      if (updated.length > 10) updated.shift()
-      return updated
-    })
+  const handleResetMaterial = () => {
+    setPhysicsPreset(null)
+    setTexturePreset(null)
+    setLastMaterialPreset(null)
   }
 
   const handlePhysicsReset = () => {
-    setPhysicsProjectiles([])
     setPhysicsResetKey(prev => prev + 1)
   }
 
   const handlePhysicsExit = () => {
-    setPhysicsProjectiles([])
     setPhysicsResetKey(0)
     setActiveTool('simplification')
     setShowRefinePanel(false)
@@ -294,6 +268,7 @@ function ViewerLayout({
             autoRotate={autoRotate}
             debugMode={debugMode}
             physicsMode={isPhysicsMode}
+            hdriPreset={hdriPreset}
             materialPreset={renderMode === 'textured' ? (activePresetObj || texturePreset || lastMaterialPreset) : null}
             physicsProps={isPhysicsMode ? {
               meshInfo,
@@ -301,7 +276,7 @@ function ViewerLayout({
               density: physicsMass,
               restitution: physicsRestitution,
               damping: physicsDamping,
-              projectiles: physicsProjectiles,
+              hdriPreset,
               resetKey: physicsResetKey,
               materialPreset: activePresetObj || texturePreset || lastMaterialPreset
             } : null}
@@ -314,6 +289,8 @@ function ViewerLayout({
             onMeshSaved={onMeshSaved}
             autoRotate={autoRotate}
             onAutoRotateToggle={() => setAutoRotate(prev => !prev)}
+            hdriPreset={hdriPreset}
+            onHdriChange={setHdriPreset}
             axesWidget={<AxesWidget mainCameraQuaternion={cameraQuaternion} />}
           />
         </div>
@@ -405,11 +382,10 @@ function ViewerLayout({
                   onDampingChange={handleDampingChange}
                   activePreset={physicsPreset}
                   onPresetChange={handlePhysicsPresetChange}
+                  onResetMaterial={handleResetMaterial}
                   onAIMaterialGenerated={handleAIMaterialGenerated}
-                  onThrowSphere={handleThrowSphere}
                   onReset={handlePhysicsReset}
                   onExit={handlePhysicsExit}
-                  projectileCount={physicsProjectiles.length}
                 />
               ) : activeTool === 'texturing' ? (
                 <TexturingControls

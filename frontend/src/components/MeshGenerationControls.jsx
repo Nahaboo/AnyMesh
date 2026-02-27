@@ -2,15 +2,13 @@ import { useState } from 'react'
 
 function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
   const [resolution, setResolution] = useState('medium')
-  const [remeshOption, setRemeshOption] = useState('quad')
-  const [provider, setProvider] = useState('stability')
+  const [provider, setProvider] = useState('trellis')
 
   const handleGenerate = () => {
     if (onGenerate) {
       onGenerate({
         sessionId: sessionInfo.sessionId,
         resolution,
-        remeshOption,
         provider
       })
     }
@@ -18,10 +16,10 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
 
   // Informations des providers
   const providerInfo = {
-    stability: {
-      name: 'Stability AI',
-      description: 'API cloud, haute qualite',
-      time: { low: '10-30 sec', medium: '30-60 sec', high: '1-3 min' }
+    trellis: {
+      name: 'TRELLIS',
+      description: 'Meilleure qualite, RunPod GPU',
+      time: { low: '15-25 sec', medium: '20-35 sec', high: '30-60 sec' }
     },
     triposr: {
       name: 'TripoSR (Local)',
@@ -127,7 +125,7 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
             Moteur de generation
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
-            {['stability', 'triposr'].map((p) => (
+            {['trellis', 'triposr'].map((p) => (
               <button
                 key={p}
                 onClick={() => setProvider(p)}
@@ -153,53 +151,6 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
             ))}
           </div>
         </div>
-
-        {/* Topologie du mesh (Remesh Option) - Stability AI uniquement */}
-        {provider === 'stability' && (
-          <div>
-            <label style={{
-              display: 'block',
-              fontSize: '0.875rem',
-              fontWeight: 500,
-              color: 'var(--v2-text-secondary)',
-              marginBottom: 'var(--v2-spacing-xs)'
-            }}>
-              Topologie du mesh
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
-              {[
-                { value: 'none', label: 'Aucune' },
-                { value: 'triangle', label: 'Triangle' },
-                { value: 'quad', label: 'Quad' }
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setRemeshOption(option.value)}
-                  disabled={isProcessing}
-                  style={{
-                    padding: 'var(--v2-spacing-xs) var(--v2-spacing-sm)',
-                    borderRadius: 'var(--v2-radius-lg)',
-                    fontSize: '0.875rem',
-                    fontWeight: 500,
-                    transition: 'all var(--v2-transition-base)',
-                    background: remeshOption === option.value ? 'var(--v2-accent-primary)' : 'var(--v2-bg-tertiary)',
-                    color: remeshOption === option.value ? '#ffffff' : 'var(--v2-text-secondary)',
-                    border: 'none',
-                    cursor: isProcessing ? 'not-allowed' : 'pointer',
-                    opacity: isProcessing ? 0.5 : 1
-                  }}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--v2-text-muted)', marginTop: 'var(--v2-spacing-xs)' }}>
-              {remeshOption === 'none' && 'Pas de remaillage (plus rapide, topologie basique)'}
-              {remeshOption === 'triangle' && 'Triangles optimises (bonne qualite)'}
-              {remeshOption === 'quad' && 'Quadrilateres (meilleure qualite, recommande)'}
-            </p>
-          </div>
-        )}
 
         {/* Bouton de génération */}
         <button

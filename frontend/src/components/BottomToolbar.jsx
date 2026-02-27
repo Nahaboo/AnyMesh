@@ -6,9 +6,23 @@ import SaveButton from './SaveButton'
  * Left side: Export button + Format dropdown + Save button
  * Right side: Mesh info (Faces, Vertices) + 3D axes widget
  */
-function BottomToolbar({ meshInfo, onExport, onMeshSaved, autoRotate, onAutoRotateToggle, axesWidget }) {
+const HDRI_PRESETS = [
+  { id: 'studio', label: 'Studio' },
+  { id: 'sunset', label: 'Sunset' },
+  { id: 'dawn', label: 'Dawn' },
+  { id: 'city', label: 'City' },
+  { id: 'forest', label: 'Forest' },
+  { id: 'night', label: 'Night' },
+  { id: 'warehouse', label: 'Warehouse' },
+  { id: 'apartment', label: 'Apartment' },
+  { id: 'lobby', label: 'Lobby' },
+  { id: 'park', label: 'Park' }
+]
+
+function BottomToolbar({ meshInfo, onExport, onMeshSaved, autoRotate, onAutoRotateToggle, hdriPreset, onHdriChange, axesWidget }) {
   const [selectedFormat, setSelectedFormat] = useState('obj')
   const [showFormatMenu, setShowFormatMenu] = useState(false)
+  const [showHdriMenu, setShowHdriMenu] = useState(false)
 
   const formats = [
     { id: 'obj', label: 'OBJ', extension: '.obj' },
@@ -75,6 +89,75 @@ function BottomToolbar({ meshInfo, onExport, onMeshSaved, autoRotate, onAutoRota
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
+
+        {/* HDRI Preset Selector */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowHdriMenu(!showHdriMenu)}
+            className="v2-btn v2-btn-secondary"
+            title="Environnement HDRI"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--v2-spacing-sm)'
+            }}
+          >
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="5" strokeWidth={2} />
+              <path strokeLinecap="round" strokeWidth={2} d="M12 1v2m0 18v2m11-11h-2M3 12H1m18.07-7.07l-1.41 1.41M6.34 17.66l-1.41 1.41m14.14 0l-1.41-1.41M6.34 6.34L4.93 4.93" />
+            </svg>
+          </button>
+
+          {showHdriMenu && (
+            <>
+              <div
+                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}
+                onClick={() => setShowHdriMenu(false)}
+              />
+              <div style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: 0,
+                marginBottom: 'var(--v2-spacing-xs)',
+                background: 'var(--v2-bg-secondary)',
+                border: '1px solid var(--v2-border-secondary)',
+                borderRadius: 'var(--v2-radius-md)',
+                boxShadow: 'var(--v2-shadow-lg)',
+                minWidth: '140px',
+                zIndex: 20,
+                overflow: 'hidden'
+              }}>
+                {HDRI_PRESETS.map(preset => (
+                  <button
+                    key={preset.id}
+                    onClick={() => {
+                      onHdriChange(preset.id)
+                      setShowHdriMenu(false)
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: 'var(--v2-spacing-sm) var(--v2-spacing-md)',
+                      background: hdriPreset === preset.id ? 'var(--v2-bg-hover)' : 'transparent',
+                      border: 'none',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      color: hdriPreset === preset.id ? 'var(--v2-accent-primary)' : 'var(--v2-text-primary)',
+                      fontWeight: hdriPreset === preset.id ? 600 : 400,
+                      transition: 'background var(--v2-transition-fast)'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = 'var(--v2-bg-hover)'}
+                    onMouseLeave={(e) => {
+                      if (hdriPreset !== preset.id) e.target.style.background = 'transparent'
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
 
         {/* GLB-First: Save Button */}
         <SaveButton

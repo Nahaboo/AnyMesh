@@ -380,8 +380,8 @@ function App() {
           console.log('[App] Task update:', task)
           setCurrentTask({ ...task, taskType: 'generate' })
 
-          // If task is completed, switch to file mode with generated GLB
-          if (task.status === 'completed' && task.result) {
+          // If task is completed successfully, switch to file mode with generated GLB
+          if (task.status === 'completed' && task.result?.success && task.result?.output_filename) {
             const generatedMeshInfo = {
               filename: task.result.output_filename,
               displayFilename: task.result.output_filename,

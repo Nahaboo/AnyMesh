@@ -30,7 +30,6 @@ import trimesh
 from .task_manager import task_manager, Task
 from .simplify import simplify_mesh, adaptive_simplify_mesh, simplify_mesh_glb
 from .converter import convert_mesh_format, convert_any_to_glb
-from .stability_client import generate_mesh_from_image_sf3d
 from .mamouth_client import generate_image_from_prompt, generate_texture_from_prompt, infer_physics_from_prompt
 from .retopology import retopologize_mesh, retopologize_mesh_glb
 from .segmentation import segment_mesh, segment_mesh_glb
@@ -198,8 +197,8 @@ class GenerateMeshRequest(BaseModel):
     """
     session_id: str
     resolution: str = "medium"  # 'low', 'medium', 'high'
-    remesh_option: str = "quad"  # 'none', 'triangle', 'quad' - Topologie du mesh généré (Stability only)
-    provider: str = "stability"  # 'stability' (API cloud) ou 'triposr' (local, gratuit)
+    remesh_option: str = "quad"  # 'none', 'triangle', 'quad' (Stability AI only)
+    provider: str = "unique3d"  # 'unique3d' (Docker GPU), 'triposr' (local GPU), 'stability' (API cloud)
 
 class GenerateImageRequest(BaseModel):
     """Parametres de generation d'image a partir d'un prompt textuel via Mamouth.ai"""
@@ -1201,20 +1200,16 @@ async def list_session_images(session_id: str):
 
 # Handler pour les tâches de génération de maillages
 def generate_mesh_task_handler(task: Task):
-    """Handler qui exécute la génération de maillage avec Stability AI ou TripoSR
-    GLB-First: Sauvegarde toujours en GLB
-    Providers: 'stability' (API cloud) ou 'triposr' (local, gratuit)
-    """
+    """Handler de generation 3D - route vers le bon provider (unique3d, triposr, stability)"""
     params = task.params
     session_id = params["session_id"]
     resolution = params.get("resolution", "medium")
-    remesh_option = params.get("remesh_option", "quad")
-    provider = params.get("provider", "stability")
+    provider = params.get("provider", "unique3d")
 
     # [DEV/TEST] Si c'est une tâche fake, elle est déjà complétée, ne rien faire
     if params.get("fake", False):
         logger.debug("[GENERATE-MESH] Fake task detected, skipping API call")
-        return task.result  # Le résultat a déjà été défini dans l'endpoint
+        return task.result
 
     session_path = DATA_INPUT_IMAGES / session_id
 
@@ -1224,7 +1219,7 @@ def generate_mesh_task_handler(task: Task):
             'error': 'Session non trouvée'
         }
 
-    logger.info(f"[GENERATE-MESH] Starting with {provider} (session={session_id}, resolution={resolution})")
+    logger.info(f"[GENERATE-MESH] Starting {provider} (session={session_id}, resolution={resolution})")
 
     # Récupérer toutes les images de la session
     image_paths = sorted([
@@ -1238,9 +1233,8 @@ def generate_mesh_task_handler(task: Task):
             'error': 'Aucune image trouvée dans la session'
         }
 
-    # Les deux providers utilisent uniquement la première image
+    # Tous les providers utilisent uniquement la première image (single-view)
     first_image = image_paths[0]
-    logger.debug(f"Images in session: {len(image_paths)}")
     if len(image_paths) > 1:
         logger.info(f"Using first image: {first_image.name} (single-view only)")
 
@@ -1248,33 +1242,64 @@ def generate_mesh_task_handler(task: Task):
     output_filename = f"{session_id}_generated.glb"
     output_path = DATA_GENERATED_MESHES / output_filename
 
-    # Router vers le bon provider
     if provider == "triposr":
-        # TripoSR: génération locale, gratuite
         from .triposr_client import generate_mesh_from_image_triposr
         result = generate_mesh_from_image_triposr(
             image_path=first_image,
             output_path=output_path,
             resolution=resolution
         )
-    else:
-        # Stability AI: API cloud (défaut)
+    elif provider == "stability":
+        from .stability_client import generate_mesh_from_image_sf3d
         api_key = os.getenv('STABILITY_API_KEY')
         if not api_key:
             return {
                 'success': False,
-                'error': 'STABILITY_API_KEY non configurée dans .env'
+                'error': 'STABILITY_API_KEY non configuree dans .env'
             }
-
         result = generate_mesh_from_image_sf3d(
             image_path=first_image,
             output_path=output_path,
             resolution=resolution,
-            remesh_option=remesh_option,
+            remesh_option=params.get("remesh_option", "quad"),
             api_key=api_key
+        )
+    elif provider == "trellis":
+        from .trellis_client import generate_mesh_from_image_trellis
+        extra = image_paths[1:] if len(image_paths) > 1 else None
+        result = generate_mesh_from_image_trellis(
+            image_path=first_image,
+            output_path=output_path,
+            resolution=resolution,
+            extra_images=extra,
+        )
+    else:
+        # unique3d (defaut)
+        from .unique3d_client import generate_mesh_from_image_unique3d
+        result = generate_mesh_from_image_unique3d(
+            image_path=first_image,
+            output_path=output_path,
+            resolution=resolution
         )
 
     if result.get('success'):
+        # Mesh cleanup for TripoSR (skip TRELLIS to preserve GLB textures)
+        if provider == "triposr":
+            try:
+                import trimesh
+                mesh = trimesh.load(str(output_path), force='mesh')
+                before = len(mesh.faces)
+                mesh.remove_degenerate_faces()
+                mesh.remove_duplicate_faces()
+                mesh.fix_normals()
+                after = len(mesh.faces)
+                mesh.export(str(output_path))
+                if before != after:
+                    logger.info(f"[GENERATE-MESH] Cleanup: {before} -> {after} faces")
+                    result['faces_count'] = after
+            except Exception as e:
+                logger.warning(f"[GENERATE-MESH] Cleanup skipped: {e}")
+
         logger.info(f"[GENERATE-MESH] Success: {output_filename}")
         result['output_filename'] = output_filename
         result['session_id'] = session_id
@@ -1701,14 +1726,13 @@ async def generate_mesh_async(request: GenerateMeshRequest):
             detail="Résolution invalide. Valeurs acceptées: 'low', 'medium', 'high'"
         )
 
-    # GLB-First: Le format de sortie est toujours GLB (natif de l'API Stability)
-
     # Création de la tâche
     task_id = task_manager.create_task(
         task_type="generate_mesh",
         params={
             "session_id": request.session_id,
             "resolution": request.resolution,
+            "provider": request.provider,
             "remesh_option": request.remesh_option
         }
     )
@@ -1717,8 +1741,19 @@ async def generate_mesh_async(request: GenerateMeshRequest):
         "task_id": task_id,
         "message": "Tâche de génération créée",
         "session_id": request.session_id,
-        "images_count": image_count
+        "images_count": image_count,
+        "provider": request.provider
     }
+
+@app.post("/process")
+async def process_worker_task(payload: dict):
+    # Ce code ne sera exécuté QUE par le conteneur unique3d-worker
+    from src.unique3d_client import generate_mesh_from_image_unique3d
+    return generate_mesh_from_image_unique3d(
+        image_path=Path(payload["image_path"]),
+        output_path=Path(payload["output_path"]),
+        resolution=payload.get("resolution", "medium")
+    )
 
 @app.post("/generate-image-from-prompt")
 async def generate_image_from_prompt_endpoint(request: GenerateImageRequest):

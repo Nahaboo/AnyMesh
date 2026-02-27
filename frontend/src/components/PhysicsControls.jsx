@@ -61,11 +61,10 @@ function PhysicsControls({
   onDampingChange,
   activePreset,
   onPresetChange,
+  onResetMaterial,
   onAIMaterialGenerated,
-  onThrowSphere,
   onReset,
-  onExit,
-  projectileCount
+  onExit
 }) {
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -169,6 +168,37 @@ function PhysicsControls({
             </button>
           ))}
         </div>
+        <button
+          onClick={onResetMaterial}
+          style={{
+            width: '100%',
+            marginTop: 'var(--v2-spacing-xs)',
+            padding: '6px var(--v2-spacing-sm)',
+            borderRadius: 'var(--v2-radius-md)',
+            border: !activePreset
+              ? '2px solid var(--v2-accent-primary)'
+              : '1px solid var(--v2-border-secondary)',
+            background: !activePreset
+              ? 'var(--v2-accent-primary-alpha, rgba(99, 102, 241, 0.1))'
+              : 'var(--v2-bg-primary)',
+            color: !activePreset
+              ? 'var(--v2-accent-primary)'
+              : 'var(--v2-text-secondary)',
+            cursor: 'pointer',
+            fontSize: '0.7rem',
+            fontWeight: !activePreset ? 600 : 400,
+            transition: 'all 0.15s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}
+        >
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a5 5 0 010 10H9M3 10l4-4M3 10l4 4" />
+          </svg>
+          Texture originale
+        </button>
       </div>
 
       {/* AI Material */}
@@ -414,24 +444,6 @@ function PhysicsControls({
         flexDirection: 'column',
         gap: 'var(--v2-spacing-sm)'
       }}>
-        <button
-          className="v2-btn v2-btn-primary"
-          onClick={onThrowSphere}
-          style={{
-            width: '100%',
-            padding: 'var(--v2-spacing-sm) var(--v2-spacing-md)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 'var(--v2-spacing-sm)'
-          }}
-        >
-          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10" strokeWidth={2} />
-          </svg>
-          Lancer une sphere ({projectileCount}/10)
-        </button>
-
         <button
           className="v2-btn v2-btn-secondary"
           onClick={onReset}

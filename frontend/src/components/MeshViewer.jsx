@@ -1,7 +1,7 @@
 import { Suspense, useState, useCallback, useRef } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, Environment } from '@react-three/drei'
+import { OrbitControls, Environment, ContactShadows } from '@react-three/drei'
 import CameraController from './CameraController'
 import RenderModeController from './RenderModeController'
 import ModelErrorBoundary from './ModelErrorBoundary'
@@ -45,7 +45,7 @@ function GpuStatsBridge({ onStats }) {
  * MeshViewer - 3D viewer with render mode support
  * Supports: solid, wireframe, normal, smooth rendering modes + custom shaders
  */
-function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, autoRotate = false, physicsMode = false, physicsProps = null, materialPreset = null, debugMode = false }) {
+function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, autoRotate = false, physicsMode = false, physicsProps = null, materialPreset = null, hdriPreset = 'studio', debugMode = false }) {
   const gpuStatsRef = useRef({ geometries: 0, textures: 0, calls: 0, triangles: 0 })
   const [gpuStats, setGpuStats] = useState({ geometries: 0, textures: 0, calls: 0, triangles: 0 })
 
@@ -129,8 +129,11 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
         {meshInfo.bounding_box && <CameraController boundingBox={meshInfo.bounding_box} />}
 
         {/* Lighting - physics mode has its own lights in PhysicsPlayground */}
-        {!physicsMode && <ambientLight intensity={materialPreset ? 0.3 : 1.0} />}
-        {!physicsMode && materialPreset && <Environment preset="studio" />}
+        {!physicsMode && <ambientLight intensity={materialPreset ? 0.3 : renderMode === 'textured' ? 1.5 : 1.0} />}
+        {!physicsMode && <Environment preset={hdriPreset} background environmentIntensity={(materialPreset || renderMode === 'textured') ? (renderMode === 'textured' && !materialPreset ? 1.2 : 0.4) : 0.3} />}
+        {!physicsMode && (materialPreset || renderMode === 'textured') && meshInfo.bounding_box && (
+          <ContactShadows position={[0, -(meshInfo.bounding_box.diagonal * 0.5), 0]} scale={meshInfo.bounding_box.diagonal * 2} blur={2} opacity={0.4} far={meshInfo.bounding_box.diagonal * 2} />
+        )}
 
         {physicsMode && physicsProps ? (
           <Suspense fallback={

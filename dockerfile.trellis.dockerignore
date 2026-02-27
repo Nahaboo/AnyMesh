@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+frontend/
+data/
+*.env
+tests/
+documents/
+*.md
+.vscode/
+.claude/
+tools/
+pytorch3d/
+node_modules/
