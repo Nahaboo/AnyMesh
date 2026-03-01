@@ -16,10 +16,37 @@ import glassFragmentShader from '../shaders/materials/triplanar/glass.glsl'
 import { disposeObject } from '../utils/dispose'
 
 /**
+ * QualityEdgeOverlay - Renders edge lines as a LineSegments overlay.
+ */
+function QualityEdgeOverlay({ positions, color }) {
+  const posArray = useMemo(() => new Float32Array(positions), [positions])
+  return (
+    <lineSegments>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          args={[posArray, 3]}
+        />
+      </bufferGeometry>
+      <lineBasicMaterial
+        color={color}
+        linewidth={2}
+        depthTest
+        transparent
+        opacity={0.9}
+        polygonOffset
+        polygonOffsetFactor={-1}
+        polygonOffsetUnits={-1}
+      />
+    </lineSegments>
+  )
+}
+
+/**
  * RenderModeController - Handles different rendering modes for 3D models
  * Modes: solid, wireframe, normal (normal map visualization), smooth, textured, shader:*
  */
-function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null }) {
+function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, isCompared = false, isQuality = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null, qualityOverlays = null }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
   const prevModelRef = useRef(null)
   const originalMaterialsRef = useRef(new Map())
@@ -32,7 +59,11 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
   // Q4: Build URL - handle different mesh sources (utilise API_BASE_URL configurable)
   // Add uploadId as cache-busting parameter to force browser to reload file
   let meshUrl
-  if (isSegmented) {
+  if (isQuality) {
+    meshUrl = `${API_BASE_URL}/mesh/quality/${filename}?v=${uploadId || Date.now()}`
+  } else if (isCompared) {
+    meshUrl = `${API_BASE_URL}/mesh/compared/${filename}?v=${uploadId || Date.now()}`
+  } else if (isSegmented) {
     meshUrl = `${API_BASE_URL}/mesh/segmented/${filename}?v=${uploadId || Date.now()}`
   } else if (isRetopologized) {
     meshUrl = `${API_BASE_URL}/mesh/retopo/${filename}?v=${uploadId || Date.now()}`
@@ -354,7 +385,19 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
 
   return (
     <Center>
-      <primitive object={processedModel} />
+      <group>
+        <primitive object={processedModel} />
+        {/* Quality edge overlays rendered inside same group to match mesh transform */}
+        {qualityOverlays && qualityOverlays.length > 0 && qualityOverlays.map((overlay, i) => (
+          overlay.positions && overlay.positions.length > 0 ? (
+            <QualityEdgeOverlay
+              key={`${overlay.type}-${i}`}
+              positions={overlay.positions}
+              color={overlay.color}
+            />
+          ) : null
+        ))}
+      </group>
     </Center>
   )
 }

@@ -131,17 +131,25 @@ def convert_any_to_glb(input_path: Path, output_path: Path) -> dict:
         # Si deja GLB, copier simplement
         if original_format == '.glb':
             shutil.copy2(input_path, output_path)
-            mesh = trimesh.load(str(output_path))
+            loaded = trimesh.load(str(output_path))
 
-            # Verifier si textures presentes
-            has_textures = _mesh_has_textures(mesh)
+            # Verifier si textures presentes sur la scene ou ses geometries
+            has_textures = _scene_has_textures(loaded)
+
+            if hasattr(loaded, 'geometry'):
+                meshes = list(loaded.geometry.values())
+                n_verts = sum(len(m.vertices) for m in meshes if hasattr(m, 'vertices'))
+                n_faces = sum(len(m.faces) for m in meshes if hasattr(m, 'faces'))
+            else:
+                n_verts = len(loaded.vertices) if hasattr(loaded, 'vertices') else 0
+                n_faces = len(loaded.faces) if hasattr(loaded, 'faces') else 0
 
             return {
                 'success': True,
                 'has_textures': has_textures,
                 'original_format': '.glb',
-                'vertices': len(mesh.vertices) if hasattr(mesh, 'vertices') else 0,
-                'triangles': len(mesh.faces) if hasattr(mesh, 'faces') else 0
+                'vertices': n_verts,
+                'triangles': n_faces
             }
 
         # Charger le mesh
@@ -188,6 +196,14 @@ def convert_any_to_glb(input_path: Path, output_path: Path) -> dict:
             'error': f"Conversion error: {str(e)}",
             'original_format': input_path.suffix.lower() if input_path else 'unknown'
         }
+
+
+def _scene_has_textures(loaded) -> bool:
+    """Verifie si une Scene ou un Mesh trimesh a des textures."""
+    if hasattr(loaded, 'geometry'):
+        # Scene: tester chaque geometry
+        return any(_mesh_has_textures(m) for m in loaded.geometry.values())
+    return _mesh_has_textures(loaded)
 
 
 def _mesh_has_textures(mesh) -> bool:

@@ -76,6 +76,8 @@ async def lifespan(app: FastAPI):
     task_manager.register_handler("generate_texture", generate_texture_task_handler)
     task_manager.register_handler("generate_material", generate_material_task_handler)
     task_manager.register_handler("sanitize", sanitize_task_handler)
+    task_manager.register_handler("compare", compare_task_handler)
+    task_manager.register_handler("quality_visualize", quality_visualize_task_handler)
     task_manager.start()
 
     # GLB-First: Nettoyer les fichiers temporaires au démarrage
@@ -123,6 +125,8 @@ DATA_SEGMENTED = Path("data/segmented")
 DATA_GENERATED_TEXTURES = Path("data/generated_textures")
 DATA_TEMP = Path("data/temp")  # GLB-First: Fichiers temporaires pour conversions
 DATA_SAVED = Path("data/saved")  # GLB-First: Meshes sauvegardés par l'utilisateur
+DATA_COMPARED = Path("data/compared")
+DATA_QUALITY = Path("data/quality")
 DATA_INPUT.mkdir(parents=True, exist_ok=True)
 DATA_OUTPUT.mkdir(parents=True, exist_ok=True)
 DATA_INPUT_IMAGES.mkdir(parents=True, exist_ok=True)
@@ -131,6 +135,8 @@ DATA_RETOPO.mkdir(parents=True, exist_ok=True)
 DATA_SEGMENTED.mkdir(parents=True, exist_ok=True)
 DATA_GENERATED_TEXTURES.mkdir(parents=True, exist_ok=True)
 DATA_TEMP.mkdir(parents=True, exist_ok=True)
+DATA_COMPARED.mkdir(parents=True, exist_ok=True)
+DATA_QUALITY.mkdir(parents=True, exist_ok=True)
 
 # Formats de fichiers supportés
 SUPPORTED_FORMATS = {".obj", ".stl", ".ply", ".off", ".gltf", ".glb"}
@@ -234,6 +240,27 @@ class SegmentRequest(BaseModel):
     is_generated: bool = False  # Si True, cherche dans data/generated_meshes
     is_simplified: bool = False  # Si True, cherche dans data/output
     is_retopo: bool = False  # Si True, cherche dans data/retopo
+
+
+class CompareRequest(BaseModel):
+    """Parametres de comparaison de meshes"""
+    filename_ref: str
+    filename_comp: str
+    is_generated_ref: bool = False
+    is_simplified_ref: bool = False
+    is_retopo_ref: bool = False
+    is_generated_comp: bool = False
+    is_simplified_comp: bool = False
+    is_retopo_comp: bool = False
+
+
+class QualityVisualizeRequest(BaseModel):
+    """Parametres de visualisation de qualite de mesh"""
+    filename: str
+    diagnostic_type: str  # "boundary" | "non_manifold" | "face_quality"
+    is_generated: bool = False
+    is_simplified: bool = False
+    is_retopologized: bool = False
 
 
 class SaveMeshRequest(BaseModel):
@@ -1624,6 +1651,82 @@ def segment_task_handler(task: Task):
             "error": f"Segmentation error: {str(e)}"
         }
 
+def compare_task_handler(task: Task):
+    """Handler pour la comparaison de meshes avec heatmap."""
+    from .compare import compare_meshes
+
+    params = task.params
+
+    def _resolve_path(filename, is_generated, is_simplified, is_retopo):
+        if is_generated:
+            return DATA_GENERATED_MESHES / filename
+        elif is_simplified:
+            return DATA_OUTPUT / filename
+        elif is_retopo:
+            return DATA_RETOPO / filename
+        return DATA_INPUT / filename
+
+    ref_path = _resolve_path(
+        params["filename_ref"],
+        params.get("is_generated_ref", False),
+        params.get("is_simplified_ref", False),
+        params.get("is_retopo_ref", False)
+    )
+    comp_path = _resolve_path(
+        params["filename_comp"],
+        params.get("is_generated_comp", False),
+        params.get("is_simplified_comp", False),
+        params.get("is_retopo_comp", False)
+    )
+
+    base_name = Path(params["filename_comp"]).stem
+    output_filename = f"{base_name}_compared.glb"
+    output_path = DATA_COMPARED / output_filename
+
+    logger.info(f"[COMPARE] Ref={ref_path.name} vs Comp={comp_path.name}")
+
+    result = compare_meshes(ref_path, comp_path, output_path)
+    if result.get("success"):
+        result["output_filename"] = output_filename
+    return result
+
+
+def quality_visualize_task_handler(task: Task):
+    """Handler pour la visualisation de qualite de mesh."""
+    from .mesh_quality import generate_quality_visualization
+
+    params = task.params
+    mesh_path = _resolve_mesh_path(
+        params["filename"],
+        params.get("is_generated", False),
+        params.get("is_simplified", False),
+        params.get("is_retopologized", False)
+    )
+
+    diagnostic_type = params["diagnostic_type"]
+    base_name = Path(params["filename"]).stem
+    output_filename = f"{base_name}_quality_{diagnostic_type}.glb"
+    output_path = DATA_QUALITY / output_filename
+
+    logger.info(f"[QUALITY] Visualizing {diagnostic_type} for {mesh_path.name}")
+
+    result = generate_quality_visualization(mesh_path, output_path, diagnostic_type)
+    if result.get("success"):
+        result["output_filename"] = output_filename
+    return result
+
+
+def _resolve_mesh_path(filename, is_generated, is_simplified, is_retopologized):
+    """Resolve mesh file path based on flags."""
+    if is_generated:
+        return DATA_GENERATED_MESHES / filename
+    elif is_simplified:
+        return DATA_OUTPUT / filename
+    elif is_retopologized:
+        return DATA_RETOPO / filename
+    return DATA_INPUT / filename
+
+
 @app.post("/generate-mesh-fake")
 async def generate_mesh_fake(request: GenerateMeshRequest):
     """
@@ -2143,6 +2246,108 @@ async def get_segmented_mesh(filename: str):
         media_type="application/octet-stream",
         filename=filename
     )
+
+@app.post("/compare")
+async def compare_meshes_endpoint(request: CompareRequest):
+    """Compare deux meshes et genere une heatmap de distance."""
+
+    def _resolve(filename, is_gen, is_simp, is_retopo):
+        if is_gen:
+            return DATA_GENERATED_MESHES / filename
+        elif is_simp:
+            return DATA_OUTPUT / filename
+        elif is_retopo:
+            return DATA_RETOPO / filename
+        return DATA_INPUT / filename
+
+    ref_path = _resolve(request.filename_ref, request.is_generated_ref,
+                        request.is_simplified_ref, request.is_retopo_ref)
+    comp_path = _resolve(request.filename_comp, request.is_generated_comp,
+                         request.is_simplified_comp, request.is_retopo_comp)
+
+    if not ref_path.exists():
+        raise HTTPException(status_code=404, detail=f"Fichier reference introuvable: {request.filename_ref}")
+    if not comp_path.exists():
+        raise HTTPException(status_code=404, detail=f"Fichier comparaison introuvable: {request.filename_comp}")
+
+    task_id = task_manager.create_task(
+        task_type="compare",
+        params={
+            "filename_ref": request.filename_ref,
+            "filename_comp": request.filename_comp,
+            "is_generated_ref": request.is_generated_ref,
+            "is_simplified_ref": request.is_simplified_ref,
+            "is_retopo_ref": request.is_retopo_ref,
+            "is_generated_comp": request.is_generated_comp,
+            "is_simplified_comp": request.is_simplified_comp,
+            "is_retopo_comp": request.is_retopo_comp,
+        }
+    )
+
+    return {"task_id": task_id, "message": "Comparaison lancee"}
+
+
+@app.get("/mesh/compared/{filename}")
+async def get_compared_mesh(filename: str):
+    """Telecharge un mesh de comparaison (heatmap) depuis data/compared/"""
+    file_path = DATA_COMPARED / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier de comparaison introuvable")
+    return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
+
+
+@app.get("/quality-stats/{filename}")
+async def get_quality_stats(
+    filename: str,
+    is_generated: bool = False,
+    is_simplified: bool = False,
+    is_retopologized: bool = False
+):
+    """Compute mesh quality stats (synchronous, fast)."""
+    from .mesh_quality import compute_quality_stats
+
+    mesh_path = _resolve_mesh_path(filename, is_generated, is_simplified, is_retopologized)
+    if not mesh_path.exists():
+        raise HTTPException(status_code=404, detail=f"Fichier introuvable: {filename}")
+
+    return compute_quality_stats(mesh_path)
+
+
+@app.post("/quality-visualize")
+async def quality_visualize_endpoint(request: QualityVisualizeRequest):
+    """Generate a quality visualization GLB (async task)."""
+    mesh_path = _resolve_mesh_path(
+        request.filename, request.is_generated,
+        request.is_simplified, request.is_retopologized
+    )
+    if not mesh_path.exists():
+        raise HTTPException(status_code=404, detail=f"Fichier introuvable: {request.filename}")
+
+    if request.diagnostic_type not in ("boundary", "non_manifold", "face_quality"):
+        raise HTTPException(status_code=400, detail=f"Type invalide: {request.diagnostic_type}")
+
+    task_id = task_manager.create_task(
+        task_type="quality_visualize",
+        params={
+            "filename": request.filename,
+            "diagnostic_type": request.diagnostic_type,
+            "is_generated": request.is_generated,
+            "is_simplified": request.is_simplified,
+            "is_retopologized": request.is_retopologized,
+        }
+    )
+
+    return {"task_id": task_id, "message": "Analyse qualite lancee"}
+
+
+@app.get("/mesh/quality/{filename}")
+async def get_quality_mesh(filename: str):
+    """Serve a quality visualization GLB from data/quality/"""
+    file_path = DATA_QUALITY / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier qualite introuvable")
+    return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
+
 
 # NOTE: Les @app.on_event("startup") et @app.on_event("shutdown")
 # ont été migrés vers le système lifespan (voir ligne ~33)

@@ -5,6 +5,9 @@
 function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
   // Vérifier si on visualise un mesh retopologisé
   const isRetopologizedMesh = meshInfo?.isRetopologized === true
+  // Visualization meshes are view-only — lock other tools
+  const isComparedMesh = meshInfo?.isCompared === true
+  const isQualityMesh = meshInfo?.isQuality === true
 
   const tools = [
     {
@@ -60,11 +63,31 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
       enabled: true
     },
     {
+      id: 'compare',
+      label: 'Compare',
+      icon: (
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      ),
+      enabled: true
+    },
+    {
       id: 'texturing',
       label: 'Texturing',
       icon: (
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+        </svg>
+      ),
+      enabled: true
+    },
+    {
+      id: 'quality',
+      label: 'Quality',
+      icon: (
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
       ),
       enabled: true
@@ -94,13 +117,18 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
       paddingTop: 'var(--v2-spacing-md)',
       gap: 'var(--v2-spacing-xs)'
     }}>
-      {tools.map(tool => (
+      {tools.map(tool => {
+        // When viewing visualization, only the active tool tab is accessible
+        const lockedByVisu = (isComparedMesh && tool.id !== 'compare') ||
+                             (isQualityMesh && tool.id !== 'quality')
+        const isEnabled = tool.enabled && !lockedByVisu
+        return (
         <button
           key={tool.id}
-          onClick={() => tool.enabled && onToolChange(tool.id)}
-          disabled={!tool.enabled}
+          onClick={() => isEnabled && onToolChange(tool.id)}
+          disabled={!isEnabled}
           className={`v2-tool-button ${activeTool === tool.id ? 'active' : ''}`}
-          title={tool.enabled ? tool.label : (tool.disabledReason || `${tool.label} (Coming soon)`)}
+          title={lockedByVisu ? 'Retournez au mesh pour utiliser cet outil' : (tool.enabled ? tool.label : (tool.disabledReason || `${tool.label} (Coming soon)`))}
         >
           {tool.icon}
           <span>{tool.label}</span>
@@ -114,7 +142,7 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
             </span>
           )}
         </button>
-      ))}
+      )})}
     </div>
   )
 }

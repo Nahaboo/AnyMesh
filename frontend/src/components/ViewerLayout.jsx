@@ -12,6 +12,8 @@ import RetopologyControls from './RetopologyControls'
 import PromptGenerationControls from './PromptGenerationControls'
 import PhysicsControls, { MATERIAL_PRESETS } from './PhysicsControls'
 import TexturingControls from './TexturingControls'
+import CompareControls from './CompareControls'
+import QualityControls from './QualityControls'
 import TaskStatus from './TaskStatus'
 import * as THREE from 'three'
 import { useShaderDebugGUI } from '../hooks/useShaderDebugGUI'
@@ -35,18 +37,24 @@ function ViewerLayout({
   onLoadRetopologized,
   onLoadOriginal,
   onLoadParent,
+  onCompare,
+  onLoadCompared,
+  onVisualizeQuality,
+  onLoadQuality,
   onMeshSaved,
   currentTask,
-  isProcessing
+  isProcessing,
+  initialMeshInfo
 }) {
 
-  const [renderMode, setRenderMode] = useState('solid')
+  const [renderMode, setRenderMode] = useState(meshInfo?.has_textures ? 'textured' : 'solid')
   const [activeTool, setActiveTool] = useState('simplification')
   const [showRefinePanel, setShowRefinePanel] = useState(false)
   const [cameraQuaternion, setCameraQuaternion] = useState(new THREE.Quaternion())
   const [cameraPosition, setCameraPosition] = useState(new THREE.Vector3(3, 3, 3))
   const [shaderParams, setShaderParams] = useState({})
   const [debugMode, setDebugMode] = useState(false)
+  const [qualityOverlays, setQualityOverlays] = useState([]) // [{ positions: [...], color: '#ff3333', type: 'boundary' }, ...]
   const [autoRotate, setAutoRotate] = useState(false)
   const [hdriPreset, setHdriPreset] = useState('studio')
 
@@ -69,6 +77,15 @@ function ViewerLayout({
   const shaderId = isShaderMode ? renderMode.split(':')[1] : null
   const shaderConfig = shaderId ? getMaterialShader(shaderId) : null
 
+  // Switch to textured mode automatically when mesh has textures
+  React.useEffect(() => {
+    if (meshInfo?.has_textures) {
+      setRenderMode('textured')
+    } else if (meshInfo) {
+      setRenderMode('solid')
+    }
+  }, [meshInfo?.filename, meshInfo?.uploadId])
+
   const handleCameraUpdate = (quaternion, position) => {
     setCameraQuaternion(quaternion.clone())
     if (position) setCameraPosition(position.clone())
@@ -76,7 +93,7 @@ function ViewerLayout({
 
   const handleToolChange = (tool) => {
     setActiveTool(tool)
-    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing')
+    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing' || tool === 'compare' || tool === 'quality')
   }
 
   const isPhysicsMode = activeTool === 'physics'
@@ -268,6 +285,7 @@ function ViewerLayout({
             autoRotate={autoRotate}
             debugMode={debugMode}
             physicsMode={isPhysicsMode}
+            qualityOverlays={qualityOverlays}
             hdriPreset={hdriPreset}
             materialPreset={renderMode === 'textured' ? (activePresetObj || texturePreset || lastMaterialPreset) : null}
             physicsProps={isPhysicsMode ? {
@@ -327,6 +345,8 @@ function ViewerLayout({
                  activeTool === 'retopoly' ? 'Retopology' :
                  activeTool === 'physics' ? 'Physics Simulation' :
                  activeTool === 'texturing' ? 'AI Texturing' :
+                 activeTool === 'compare' ? 'Mesh Comparison' :
+                 activeTool === 'quality' ? 'Quality Analysis' :
                  activeTool === 'generation' ? 'Generate 3D Mesh' :
                  activeTool === 'prompt-generation' ? 'Generate from Prompt' : 'Tool'}
               </h3>
@@ -391,6 +411,26 @@ function ViewerLayout({
                 <TexturingControls
                   meshInfo={meshInfo}
                   onApplyTexture={handleTextureApply}
+                  isProcessing={isProcessing}
+                />
+              ) : activeTool === 'compare' ? (
+                <CompareControls
+                  meshInfo={meshInfo}
+                  initialMeshInfo={initialMeshInfo}
+                  onCompare={onCompare}
+                  onLoadCompared={onLoadCompared}
+                  onLoadOriginal={onLoadParent}
+                  currentTask={currentTask}
+                  isProcessing={isProcessing}
+                />
+              ) : activeTool === 'quality' ? (
+                <QualityControls
+                  meshInfo={meshInfo}
+                  onVisualize={onVisualizeQuality}
+                  onLoadQuality={onLoadQuality}
+                  onLoadOriginal={onLoadParent}
+                  onOverlayChange={setQualityOverlays}
+                  currentTask={currentTask}
                   isProcessing={isProcessing}
                 />
               ) : null

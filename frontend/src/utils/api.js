@@ -386,4 +386,62 @@ export const getSavedMeshUrl = (filename) => {
   return `${API_BASE_URL}/mesh/saved/${filename}`
 }
 
+// ===== MESH COMPARISON =====
+
+/**
+ * Lance une tache de comparaison de meshes (heatmap de distance)
+ * @param {Object} params - Parametres de comparaison
+ * @param {string} params.filenameRef - Fichier de reference
+ * @param {string} params.filenameComp - Fichier a comparer
+ * @param {boolean} params.isGeneratedRef - Reference depuis generated_meshes
+ * @param {boolean} params.isSimplifiedRef - Reference depuis output
+ * @param {boolean} params.isGeneratedComp - Comparaison depuis generated_meshes
+ * @param {boolean} params.isSimplifiedComp - Comparaison depuis output
+ * @returns {Promise} task_id
+ */
+export const compareMeshes = async (params) => {
+  const response = await api.post('/compare', {
+    filename_ref: params.filenameRef,
+    filename_comp: params.filenameComp,
+    is_generated_ref: params.isGeneratedRef || false,
+    is_simplified_ref: params.isSimplifiedRef || false,
+    is_retopo_ref: params.isRetopolRef || false,
+    is_generated_comp: params.isGeneratedComp || false,
+    is_simplified_comp: params.isSimplifiedComp || false,
+    is_retopo_comp: params.isRetopolComp || false,
+  })
+  return response.data
+}
+
+export const getComparedMeshUrl = (filename) => {
+  return `${API_BASE_URL}/mesh/compared/${filename}`
+}
+
+// ===== MESH QUALITY DIAGNOSTICS =====
+
+export const getQualityStats = async (filename, flags = {}) => {
+  const params = new URLSearchParams({
+    is_generated: flags.isGenerated || false,
+    is_simplified: flags.isSimplified || false,
+    is_retopologized: flags.isRetopologized || false,
+  })
+  const response = await api.get(`/quality-stats/${filename}?${params}`)
+  return response.data
+}
+
+export const visualizeQuality = async (params) => {
+  const response = await api.post('/quality-visualize', {
+    filename: params.filename,
+    diagnostic_type: params.diagnosticType,
+    is_generated: params.isGenerated || false,
+    is_simplified: params.isSimplified || false,
+    is_retopologized: params.isRetopologized || false,
+  })
+  return response.data
+}
+
+export const getQualityMeshUrl = (filename) => {
+  return `${API_BASE_URL}/mesh/quality/${filename}`
+}
+
 export default api

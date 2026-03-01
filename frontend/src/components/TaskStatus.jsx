@@ -17,7 +17,8 @@ function TaskStatus({ task, onComplete, activeTool }) {
     'simplify': 'simplification',
     'segment': 'segmentation',
     'retopology': 'retopoly',
-    'generate': 'generation'
+    'generate': 'generation',
+    'quality_visualize': 'quality'
   }
 
   // N'afficher que si le taskType correspond à l'outil actif
@@ -323,6 +324,21 @@ function TaskStatus({ task, onComplete, activeTool }) {
                 </div>
               )}
             </>
+          ) : task.taskType === 'quality_visualize' ? (
+            // Affichage pour la visualisation qualité
+            <div style={{
+              background: 'var(--v2-success-bg)',
+              borderRadius: 'var(--v2-radius-lg)',
+              padding: 'var(--v2-spacing-md)'
+            }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)', marginBottom: '8px' }}>Heatmap générée</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                <span style={{ color: 'var(--v2-success-text)' }}>Vertices colorisés:</span>
+                <span style={{ fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                  {task.result.total_vertices?.toLocaleString()}
+                </span>
+              </div>
+            </div>
           ) : (
             // Affichage pour la simplification/retopologie
             <>

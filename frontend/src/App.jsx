@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ConfigSidebar from './components/ConfigSidebar'
 import ViewerLayout from './components/ViewerLayout'
-import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, pollTaskStatus } from './utils/api'
+import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, compareMeshes, visualizeQuality, pollTaskStatus } from './utils/api'
 import './styles/v2-theme.css'
 
 /**
@@ -420,6 +420,120 @@ function App() {
     }
   }
 
+  // Handler for mesh comparison
+  const handleCompare = async (params) => {
+    console.log('[App] Starting comparison:', params)
+    setIsProcessing(true)
+
+    try {
+      const response = await compareMeshes(params)
+      const taskId = response.task_id
+
+      await pollTaskStatus(
+        taskId,
+        (task) => {
+          setCurrentTask({ ...task, taskType: 'compare' })
+          if (task.status === 'completed' && task.result?.success) {
+            console.log('[App] Comparison completed:', task.result)
+          }
+        },
+        1000
+      )
+
+      setIsProcessing(false)
+    } catch (error) {
+      console.error('[App] Comparison error:', error)
+      setIsProcessing(false)
+      setCurrentTask({
+        id: 'error',
+        status: 'failed',
+        error: error.message || 'An error occurred',
+        taskType: 'compare'
+      })
+    }
+  }
+
+  // Handler to load the compared mesh heatmap
+  const handleLoadCompared = () => {
+    if (!currentTask || currentTask.status !== 'completed' || !currentTask.result) return
+
+    const result = currentTask.result
+    if (!result.output_filename) return
+
+    const comparedMeshInfo = {
+      filename: result.output_filename,
+      file_size: 0,
+      format: '.glb',
+      vertices_count: result.vertices_count || result.comp_vertices || 0,
+      faces_count: result.faces_count || result.comp_faces || 0,
+      triangles_count: result.faces_count || result.comp_faces || 0,
+      bounding_box: meshInfo?.bounding_box,
+      uploadId: Date.now(),
+      isCompared: true,
+      compareStats: result.stats
+    }
+
+    console.log('[App] Loading compared mesh heatmap:', comparedMeshInfo)
+    setMeshInfo(comparedMeshInfo)
+  }
+
+  // Handler for mesh quality visualization
+  const handleVisualizeQuality = async (params) => {
+    console.log('[App] Starting quality visualization:', params)
+    setIsProcessing(true)
+
+    try {
+      const response = await visualizeQuality(params)
+      const taskId = response.task_id
+
+      await pollTaskStatus(
+        taskId,
+        (task) => {
+          setCurrentTask({ ...task, taskType: 'quality_visualize' })
+          if (task.status === 'completed' && task.result?.success) {
+            console.log('[App] Quality visualization completed:', task.result)
+          }
+        },
+        1000
+      )
+
+      setIsProcessing(false)
+    } catch (error) {
+      console.error('[App] Quality visualization error:', error)
+      setIsProcessing(false)
+      setCurrentTask({
+        id: 'error',
+        status: 'failed',
+        error: error.message || 'An error occurred',
+        taskType: 'quality_visualize'
+      })
+    }
+  }
+
+  // Handler to load the quality visualization GLB
+  const handleLoadQuality = () => {
+    if (!currentTask || currentTask.status !== 'completed' || !currentTask.result) return
+
+    const result = currentTask.result
+    if (!result.output_filename) return
+
+    const qualityMeshInfo = {
+      filename: result.output_filename,
+      file_size: 0,
+      format: '.glb',
+      vertices_count: result.total_vertices || 0,
+      faces_count: meshInfo?.faces_count || 0,
+      triangles_count: meshInfo?.faces_count || 0,
+      bounding_box: meshInfo?.bounding_box,
+      uploadId: Date.now(),
+      isQuality: true,
+      diagnosticType: result.diagnostic_type
+    }
+
+    console.log('[App] Loading quality visualization:', qualityMeshInfo)
+    setMeshInfo(qualityMeshInfo)
+  }
+
   return (
     <div className="v2-app">
       {currentView === 'config' ? (
@@ -439,9 +553,14 @@ function App() {
           onLoadRetopologized={handleLoadRetopologized}
           onLoadOriginal={handleLoadOriginal}
           onLoadParent={handleLoadParent}
+          onCompare={handleCompare}
+          onLoadCompared={handleLoadCompared}
+          onVisualizeQuality={handleVisualizeQuality}
+          onLoadQuality={handleLoadQuality}
           onMeshSaved={(result) => console.log('[App] Mesh saved:', result)}
           currentTask={currentTask}
           isProcessing={isProcessing}
+          initialMeshInfo={initialMeshInfo}
         />
       )}
     </div>
