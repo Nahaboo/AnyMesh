@@ -411,6 +411,7 @@ function ViewerLayout({
                 <TexturingControls
                   meshInfo={meshInfo}
                   onApplyTexture={handleTextureApply}
+                  onResetTexture={meshInfo?.has_textures ? handleResetMaterial : null}
                   isProcessing={isProcessing}
                 />
               ) : activeTool === 'compare' ? (

@@ -9,7 +9,7 @@ const EXAMPLE_PROMPTS = [
   'Woven Fabric'
 ]
 
-function TexturingControls({ meshInfo, onApplyTexture, isProcessing }) {
+function TexturingControls({ meshInfo, onApplyTexture, onResetTexture, isProcessing }) {
   const [prompt, setPrompt] = useState('')
   const [generatedTexture, setGeneratedTexture] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -291,6 +291,32 @@ function TexturingControls({ meshInfo, onApplyTexture, isProcessing }) {
           style={{ width: '100%', accentColor: 'var(--v2-accent-primary)' }}
         />
       </div>
+
+      {/* Reset to original texture */}
+      {onResetTexture && (
+        <button
+          onClick={onResetTexture}
+          disabled={busy}
+          className="v2-btn v2-btn-secondary"
+          style={{
+            width: '100%',
+            padding: 'var(--v2-spacing-sm)',
+            borderRadius: 'var(--v2-radius-lg)',
+            fontWeight: 500,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 'var(--v2-spacing-xs)',
+            cursor: busy ? 'not-allowed' : 'pointer',
+            opacity: busy ? 0.5 : 1
+          }}
+        >
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>Texture originale</span>
+        </button>
+      )}
 
       {/* Generate button */}
       <button
