@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 .git/
 frontend/
-tools/
 data/
 *.env
 .env*
@@ -13,3 +12,6 @@ documents/
 *.md
 .vscode/
 .claude/
+tools/Unique3D/ckpt/
+tools/instant-meshes/
+tools/TripoSR/

@@ -1,12 +1,11 @@
-version: '3.8'
-
 services:
   backend:
     build: .
     ports:
       - "8000:8000"
     volumes:
-      - mesh_data:/app/data
+      - ./data:/workspace/data
+      - ./src:/app/src:ro
     env_file:
       - .env
     environment:
@@ -29,5 +28,26 @@ services:
       - backend
     restart: unless-stopped
 
-volumes:
-  mesh_data:
+  unique3d-worker:
+    build:
+      context: .
+      dockerfile: dockerfile.unique3d
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./data:/workspace/data
+      - ./src:/workspace/src:ro
+      - ./tools/Unique3D/ckpt:/workspace/Unique3D/ckpt:ro
+      - ./tools/Unique3D/scripts:/workspace/Unique3D/scripts:ro
+      - ./tools/Unique3D/app:/workspace/Unique3D/app:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - MESH_GENERATION_PROVIDER=unique3d
+      - CUDA_VISIBLE_DEVICES=0
+    env_file: .env
