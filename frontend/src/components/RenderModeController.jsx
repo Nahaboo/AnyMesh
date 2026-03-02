@@ -46,7 +46,26 @@ function QualityEdgeOverlay({ positions, color }) {
  * RenderModeController - Handles different rendering modes for 3D models
  * Modes: solid, wireframe, normal (normal map visualization), smooth, textured, shader:*
  */
-function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, isCompared = false, isQuality = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null, qualityOverlays = null }) {
+function makeCheckerTexture() {
+  const size = 512
+  const tileCount = 16
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  const tileSize = size / tileCount
+  for (let y = 0; y < tileCount; y++) {
+    for (let x = 0; x < tileCount; x++) {
+      ctx.fillStyle = (x + y) % 2 === 0 ? '#e8e8e8' : '#222222'
+      ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize)
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  return tex
+}
+
+function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, isCompared = false, isQuality = false, isUVUnwrapped = false, uvCheckerMode = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null, qualityOverlays = null }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
   const prevModelRef = useRef(null)
   const originalMaterialsRef = useRef(new Map())
@@ -59,7 +78,9 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
   // Q4: Build URL - handle different mesh sources (utilise API_BASE_URL configurable)
   // Add uploadId as cache-busting parameter to force browser to reload file
   let meshUrl
-  if (isQuality) {
+  if (isUVUnwrapped) {
+    meshUrl = `${API_BASE_URL}/mesh/unwrapped/${filename}?v=${uploadId || Date.now()}`
+  } else if (isQuality) {
     meshUrl = `${API_BASE_URL}/mesh/quality/${filename}?v=${uploadId || Date.now()}`
   } else if (isCompared) {
     meshUrl = `${API_BASE_URL}/mesh/compared/${filename}?v=${uploadId || Date.now()}`
@@ -328,9 +349,25 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
       }
     })
 
+    // UV Checker override: apply checker texture on top of everything
+    if (uvCheckerMode) {
+      const checkerTex = makeCheckerTexture()
+      cloned.traverse((child) => {
+        if (child.isMesh) {
+          child.material = new THREE.MeshStandardMaterial({
+            map: checkerTex,
+            side: THREE.DoubleSide,
+            metalness: 0.0,
+            roughness: 1.0,
+          })
+          child.material.needsUpdate = true
+        }
+      })
+    }
+
     prevModelRef.current = cloned
     return cloned
-  }, [loadedModel, renderMode, uploadId, needsUpdate, materialPreset])
+  }, [loadedModel, renderMode, uploadId, needsUpdate, materialPreset, uvCheckerMode])
 
   // Cleanup au démontage du composant
   useEffect(() => {

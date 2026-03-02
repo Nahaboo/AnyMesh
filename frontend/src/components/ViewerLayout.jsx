@@ -14,6 +14,7 @@ import PhysicsControls, { MATERIAL_PRESETS } from './PhysicsControls'
 import TexturingControls from './TexturingControls'
 import CompareControls from './CompareControls'
 import QualityControls from './QualityControls'
+import UVUnwrapControls from './UVUnwrapControls'
 import TaskStatus from './TaskStatus'
 import * as THREE from 'three'
 import { useShaderDebugGUI } from '../hooks/useShaderDebugGUI'
@@ -41,6 +42,8 @@ function ViewerLayout({
   onLoadCompared,
   onVisualizeQuality,
   onLoadQuality,
+  onUnwrapUV,
+  onLoadUnwrapped,
   onMeshSaved,
   currentTask,
   isProcessing,
@@ -57,6 +60,7 @@ function ViewerLayout({
   const [qualityOverlays, setQualityOverlays] = useState([]) // [{ positions: [...], color: '#ff3333', type: 'boundary' }, ...]
   const [autoRotate, setAutoRotate] = useState(false)
   const [hdriPreset, setHdriPreset] = useState('studio')
+  const [uvCheckerMode, setUVCheckerMode] = useState(false)
 
   // Physics state
   const [physicsGravity, setPhysicsGravity] = useState(-9.81)
@@ -93,7 +97,7 @@ function ViewerLayout({
 
   const handleToolChange = (tool) => {
     setActiveTool(tool)
-    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing' || tool === 'compare' || tool === 'quality')
+    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing' || tool === 'compare' || tool === 'quality' || tool === 'uv_unwrap')
   }
 
   const isPhysicsMode = activeTool === 'physics'
@@ -287,6 +291,7 @@ function ViewerLayout({
             physicsMode={isPhysicsMode}
             qualityOverlays={qualityOverlays}
             hdriPreset={hdriPreset}
+            uvCheckerMode={uvCheckerMode}
             materialPreset={renderMode === 'textured' ? (activePresetObj || texturePreset || lastMaterialPreset) : null}
             physicsProps={isPhysicsMode ? {
               meshInfo,
@@ -347,6 +352,7 @@ function ViewerLayout({
                  activeTool === 'texturing' ? 'AI Texturing' :
                  activeTool === 'compare' ? 'Mesh Comparison' :
                  activeTool === 'quality' ? 'Quality Analysis' :
+                 activeTool === 'uv_unwrap' ? 'UV Unwrapping' :
                  activeTool === 'generation' ? 'Generate 3D Mesh' :
                  activeTool === 'prompt-generation' ? 'Generate from Prompt' : 'Tool'}
               </h3>
@@ -431,6 +437,16 @@ function ViewerLayout({
                   onLoadQuality={onLoadQuality}
                   onLoadOriginal={onLoadParent}
                   onOverlayChange={setQualityOverlays}
+                  currentTask={currentTask}
+                  isProcessing={isProcessing}
+                />
+              ) : activeTool === 'uv_unwrap' ? (
+                <UVUnwrapControls
+                  meshInfo={meshInfo}
+                  onUnwrapUV={onUnwrapUV}
+                  onLoadUnwrapped={onLoadUnwrapped}
+                  onLoadOriginal={onLoadParent}
+                  onUVCheckerChange={setUVCheckerMode}
                   currentTask={currentTask}
                   isProcessing={isProcessing}
                 />
