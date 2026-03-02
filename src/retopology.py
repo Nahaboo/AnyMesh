@@ -149,26 +149,20 @@ def retopologize_mesh(
             "error": "Output file was not created by Instant Meshes"
         }
 
-    # Charger le mesh résultant pour les statistiques
-    try:
-        # Trimesh peut avoir des problèmes avec certains PLY générés par Instant Meshes
-        # On essaie d'abord avec trimesh, puis avec open3d si ça échoue
-        try:
-            retopo_mesh = trimesh.load(str(output_path), process=False)
-            retopo_vertices = len(retopo_mesh.vertices)
-            retopo_faces = len(retopo_mesh.faces)
-        except Exception as trimesh_error:
-            print(f"  [WARNING] Trimesh failed to load PLY: {trimesh_error}")
-            print(f"  [INFO] Trying with Open3D instead...")
-            import open3d as o3d
-            retopo_mesh_o3d = o3d.io.read_triangle_mesh(str(output_path))
-            retopo_vertices = len(retopo_mesh_o3d.vertices)
-            retopo_faces = len(retopo_mesh_o3d.triangles)
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"Failed to load retopologized mesh: {str(e)}"
-        }
+    # Lire les stats depuis le log stdout d'Instant Meshes
+    # (le PLY généré contient des N-gons que Trimesh ne peut pas lire)
+    retopo_vertices = 0
+    retopo_faces = 0
+    for line in result.stdout.splitlines():
+        if line.startswith("Writing ") and "(V=" in line:
+            # Ex: Writing "..." (V=22541, F=23872) .. done.
+            try:
+                v_part = line.split("(V=")[1].split(",")[0]
+                f_part = line.split("F=")[1].split(")")[0]
+                retopo_vertices = int(v_part)
+                retopo_faces = int(f_part)
+            except Exception:
+                pass
 
     # Retourner les statistiques
     return {
@@ -187,12 +181,14 @@ def retopologize_mesh_glb(
     target_face_count: int = 10000,
     deterministic: bool = True,
     preserve_boundaries: bool = True,
-    temp_dir: Path = None
+    temp_dir: Path = None,
+    sanitize: bool = False,
+    bake_textures: bool = False
 ) -> Dict[str, Any]:
     """
     GLB-First: Retopologise un GLB via conversion temporaire PLY.
 
-    Pipeline: GLB → PLY (temp) → Instant Meshes → PLY (temp) → GLB
+    Pipeline: GLB → PLY (temp) → [Sanitize watertight?] → Instant Meshes → PLY (temp) → GLB
 
     Args:
         input_glb: Chemin du fichier GLB d'entrée
@@ -201,6 +197,11 @@ def retopologize_mesh_glb(
         deterministic: Mode déterministe (reproductible)
         preserve_boundaries: Préserver les bordures
         temp_dir: Répertoire pour fichiers temporaires (défaut: data/temp)
+        sanitize: Si True, tente de rendre le mesh watertight via pymeshfix.
+                  Désactivé par défaut car les meshes TRELLIS sont multi-composantes
+                  par design (>700 composantes pour un vaisseau) — pymeshfix bouche
+                  chaque bord séparément ce qui détruit la forme. N'activer que pour
+                  des meshes avec peu de composantes (scans, meshes manuels).
 
     Returns:
         Dict avec résultat et statistiques
@@ -210,6 +211,7 @@ def retopologize_mesh_glb(
 
     temp_in = None
     temp_out = None
+    temp_sanitized = None
 
     try:
         # 1. Vérifier l'entrée
@@ -245,11 +247,56 @@ def retopologize_mesh_glb(
         mesh.export(str(temp_in), file_type='ply')
         print(f"[RETOPOLOGY-GLB] Temp PLY created: {temp_in.name}")
 
+        # 3b. Sanitize : réparer la topologie avec pymeshfix (préserve la forme)
+        # Auto-détection : désactiver si trop de composantes (mesh multi-composantes TRELLIS)
+        san_result = {"success": False}
+        sanitized_glb = None  # Chemin GLB du mesh sanitizé (pour visualisation)
+        if sanitize:
+            components = len(mesh.split(only_watertight=False))
+            if components > 10:
+                print(f"[RETOPOLOGY-GLB] Sanitization skipped: {components} components detected (multi-component mesh, pymeshfix would destroy shape)")
+                sanitize = False
+            try:
+                import pymeshfix
+                import numpy as np
+                meshfix = pymeshfix.MeshFix(
+                    np.array(mesh.vertices),
+                    np.array(mesh.faces)
+                )
+                meshfix.repair()
+                san_mesh = trimesh.Trimesh(
+                    vertices=meshfix.points,
+                    faces=meshfix.faces,
+                    process=False
+                )
+                san_result = {
+                    "success": True,
+                    "is_watertight": san_mesh.is_watertight,
+                    "faces": len(san_mesh.faces)
+                }
+                print(f"[RETOPOLOGY-GLB] Sanitized: watertight={san_mesh.is_watertight}, faces={len(san_mesh.faces)}")
+
+                # Exporter le mesh réparé en PLY temporaire pour Instant Meshes
+                temp_sanitized = get_temp_path("retopo_sanitized", ".ply", temp_dir)
+                san_mesh.export(str(temp_sanitized), file_type='ply')
+                actual_input = temp_sanitized
+
+                # Sauvegarder une copie GLB pour visualisation
+                sanitized_glb = output_glb.parent / (output_glb.stem.replace("_retopo", "") + "_sanitized.glb")
+                san_mesh.export(str(sanitized_glb), file_type='glb')
+                print(f"[RETOPOLOGY-GLB] Sanitized mesh saved: {sanitized_glb.name}")
+
+            except Exception as e:
+                print(f"[RETOPOLOGY-GLB] Sanitization failed ({e}), using original PLY")
+                actual_input = temp_in
+        else:
+            actual_input = temp_in
+
         # 4. Appeler Instant Meshes
         temp_out = get_temp_path("retopo_out", ".ply", temp_dir)
 
         result = retopologize_mesh(
-            input_path=temp_in,
+            input_path=actual_input,
             output_path=temp_out,
             target_face_count=target_face_count,
             deterministic=deterministic,
@@ -260,27 +307,44 @@ def retopologize_mesh_glb(
             return result
 
         # 5. Charger le PLY résultat et exporter en GLB
-        # Note: Instant Meshes génère des quads mixtes, Trimesh peut échouer
-        # On utilise Open3D comme fallback si nécessaire
+        # Instant Meshes génère des polygones mixtes (quads, N-gons) → pymeshlab pour triangulation
         print(f"[RETOPOLOGY-GLB] Converting result to GLB")
 
-        try:
-            retopo_mesh = trimesh.load(str(temp_out), process=False)
-            retopo_vertices = len(retopo_mesh.vertices)
-            retopo_faces = len(retopo_mesh.faces)
-        except Exception as trimesh_err:
-            print(f"  [WARN] Trimesh failed to load PLY: {trimesh_err}")
-            print(f"  [INFO] Using Open3D fallback...")
-            import open3d as o3d
-            o3d_mesh = o3d.io.read_triangle_mesh(str(temp_out))
-            retopo_vertices = len(o3d_mesh.vertices)
-            retopo_faces = len(o3d_mesh.triangles)
+        import pymeshlab
+        import numpy as np
 
-            # Convertir Open3D → Trimesh pour export GLB
-            import numpy as np
-            vertices = np.asarray(o3d_mesh.vertices)
-            faces = np.asarray(o3d_mesh.triangles)
-            retopo_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+        ms = pymeshlab.MeshSet()
+        ms.load_new_mesh(str(temp_out))
+        ms.apply_filter('meshing_poly_to_tri')  # Triangule les N-gons
+        m = ms.current_mesh()
+        retopo_vertices = m.vertex_number()
+        retopo_faces = m.face_number()
+
+        if retopo_faces == 0:
+            return {"success": False, "error": "Instant Meshes produced an empty mesh after triangulation"}
+
+        retopo_mesh = trimesh.Trimesh(
+            vertices=m.vertex_matrix(),
+            faces=m.face_matrix(),
+            process=False
+        )
+
+        # 5b. Baking optionnel : transférer la texture high poly → low poly
+        bake_result = {"success": False}
+        if bake_textures and had_textures:
+            from .texture_baker import bake_texture
+            tex_output = output_glb.parent / (output_glb.stem + "_diffuse.png")
+            bake_result = bake_texture(
+                high_poly_glb=input_glb,
+                low_poly_mesh=retopo_mesh,
+                output_texture_path=tex_output,
+                texture_size=1024
+            )
+            if bake_result["success"]:
+                retopo_mesh = bake_result["textured_mesh"]
+                print(f"[RETOPOLOGY-GLB] Texture baked: {tex_output.name}")
+            else:
+                print(f"[RETOPOLOGY-GLB] Baking failed: {bake_result.get('error')}")
 
         retopo_mesh.export(str(output_glb), file_type='glb')
 
@@ -295,7 +359,11 @@ def retopologize_mesh_glb(
             "retopo_vertices": retopo_vertices,
             "retopo_faces": retopo_faces,
             "had_textures": had_textures,
-            "textures_lost": had_textures  # Toujours perdues après retopo
+            "textures_lost": had_textures and not bake_result.get("success", False),
+            "sanitized": san_result.get("is_watertight", False) if sanitize and san_result.get("success") else False,
+            "sanitized_filename": sanitized_glb.name if sanitized_glb else None,
+            "texture_baked": bake_result.get("success", False),
+            "baked_texture_filename": bake_result.get("texture_filename", None)
         }
 
     except Exception as e:
@@ -306,5 +374,6 @@ def retopologize_mesh_glb(
     finally:
         # 6. Nettoyer les fichiers temporaires
         safe_delete(temp_in)
+        safe_delete(temp_sanitized)
         safe_delete(temp_out)
         print(f"[RETOPOLOGY-GLB] Temp files cleaned up")

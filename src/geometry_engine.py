@@ -73,8 +73,8 @@ class MeshSanitizer:
         
         # Retour vers Trimesh pour la compatibilité avec le reste de l'app
         fixed_mesh = trimesh.Trimesh(
-            vertices=meshfix.v, 
-            faces=meshfix.f, 
+            vertices=meshfix.points,
+            faces=meshfix.faces,
             process=True
         )
         return fixed_mesh

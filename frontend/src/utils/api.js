@@ -444,4 +444,18 @@ export const getQualityMeshUrl = (filename) => {
   return `${API_BASE_URL}/mesh/quality/${filename}`
 }
 
+export const unwrapMeshUV = async (params) => {
+  const response = await api.post('/unwrap-uv', {
+    filename: params.filename,
+    is_generated: params.isGenerated || false,
+    is_simplified: params.isSimplified || false,
+    is_retopologized: params.isRetopologized || false,
+  })
+  return response.data
+}
+
+export const getUnwrappedMeshUrl = (filename) => {
+  return `${API_BASE_URL}/mesh/unwrapped/${filename}`
+}
+
 export default api

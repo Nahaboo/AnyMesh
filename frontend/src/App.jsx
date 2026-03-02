@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ConfigSidebar from './components/ConfigSidebar'
 import ViewerLayout from './components/ViewerLayout'
-import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, compareMeshes, visualizeQuality, pollTaskStatus } from './utils/api'
+import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, compareMeshes, visualizeQuality, unwrapMeshUV, pollTaskStatus } from './utils/api'
 import './styles/v2-theme.css'
 
 /**
@@ -353,6 +353,24 @@ function App() {
     setMeshInfo(retopologizedMeshInfo)
   }
 
+  // Handler to load the sanitized mesh (intermediate step before retopology)
+  const handleLoadSanitized = () => {
+    if (!currentTask?.result?.sanitized_filename) return
+    const sanitizedMeshInfo = {
+      filename: currentTask.result.sanitized_filename,
+      displayFilename: currentTask.result.sanitized_filename,
+      vertices_count: currentTask.result.original_vertices,
+      faces_count: currentTask.result.original_faces,
+      triangles_count: currentTask.result.original_faces,
+      bounding_box: meshInfo.bounding_box,
+      uploadId: Date.now(),
+      isRetopologized: true,  // Servi depuis /mesh/retopo/
+      originalFilename: currentTask.result.sanitized_filename
+    }
+    console.log('[App] Loading sanitized mesh:', sanitizedMeshInfo)
+    setMeshInfo(sanitizedMeshInfo)
+  }
+
   // Handler for mesh generation
   const handleGenerate = async (params) => {
     console.log('[App] Starting generation:', params)
@@ -510,6 +528,44 @@ function App() {
     }
   }
 
+  // Handler for UV unwrapping
+  const handleUnwrapUV = async (params) => {
+    setIsProcessing(true)
+    try {
+      const response = await unwrapMeshUV(params)
+      const taskId = response.task_id
+      await pollTaskStatus(
+        taskId,
+        (task) => {
+          setCurrentTask({ ...task, taskType: 'unwrap_uv' })
+        },
+        1000
+      )
+      setIsProcessing(false)
+    } catch (error) {
+      console.error('[App] UV unwrap error:', error)
+      setIsProcessing(false)
+      setCurrentTask({ id: 'error', status: 'failed', error: error.message || 'An error occurred', taskType: 'unwrap_uv' })
+    }
+  }
+
+  const handleLoadUnwrapped = () => {
+    if (!currentTask || currentTask.status !== 'completed' || !currentTask.result) return
+    const result = currentTask.result
+    if (!result.output_filename) return
+    setMeshInfo({
+      filename: result.output_filename,
+      file_size: 0,
+      format: '.glb',
+      vertices_count: result.vertices_count || 0,
+      faces_count: result.faces_count || 0,
+      triangles_count: result.faces_count || 0,
+      bounding_box: meshInfo?.bounding_box,
+      uploadId: Date.now(),
+      isUVUnwrapped: true,
+    })
+  }
+
   // Handler to load the quality visualization GLB
   const handleLoadQuality = () => {
     if (!currentTask || currentTask.status !== 'completed' || !currentTask.result) return
@@ -551,10 +607,13 @@ function App() {
           onLoadSimplified={handleLoadSimplified}
           onLoadSegmented={handleLoadSegmented}
           onLoadRetopologized={handleLoadRetopologized}
+          onLoadSanitized={handleLoadSanitized}
           onLoadOriginal={handleLoadOriginal}
           onLoadParent={handleLoadParent}
           onCompare={handleCompare}
           onLoadCompared={handleLoadCompared}
+          onUnwrapUV={handleUnwrapUV}
+          onLoadUnwrapped={handleLoadUnwrapped}
           onVisualizeQuality={handleVisualizeQuality}
           onLoadQuality={handleLoadQuality}
           onMeshSaved={(result) => console.log('[App] Mesh saved:', result)}

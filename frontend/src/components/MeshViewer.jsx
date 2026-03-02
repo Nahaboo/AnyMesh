@@ -45,7 +45,7 @@ function GpuStatsBridge({ onStats }) {
  * MeshViewer - 3D viewer with render mode support
  * Supports: solid, wireframe, normal, smooth rendering modes + custom shaders
  */
-function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, autoRotate = false, physicsMode = false, qualityOverlays = null, physicsProps = null, materialPreset = null, hdriPreset = 'studio', debugMode = false }) {
+function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCameraUpdate, autoRotate = false, physicsMode = false, qualityOverlays = null, physicsProps = null, materialPreset = null, hdriPreset = 'studio', debugMode = false, uvCheckerMode = false }) {
   const gpuStatsRef = useRef({ geometries: 0, textures: 0, calls: 0, triangles: 0 })
   const [gpuStats, setGpuStats] = useState({ geometries: 0, textures: 0, calls: 0, triangles: 0 })
 
@@ -168,6 +168,8 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
                 isSegmented={meshInfo.isSegmented || false}
                 isCompared={meshInfo.isCompared || false}
                 isQuality={meshInfo.isQuality || false}
+                isUVUnwrapped={meshInfo.isUVUnwrapped || false}
+                uvCheckerMode={uvCheckerMode}
                 renderMode={renderMode}
                 shaderParams={shaderParams}
                 uploadId={meshInfo.uploadId}

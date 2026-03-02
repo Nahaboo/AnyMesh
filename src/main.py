@@ -78,6 +78,7 @@ async def lifespan(app: FastAPI):
     task_manager.register_handler("sanitize", sanitize_task_handler)
     task_manager.register_handler("compare", compare_task_handler)
     task_manager.register_handler("quality_visualize", quality_visualize_task_handler)
+    task_manager.register_handler("unwrap_uv", unwrap_uv_task_handler)
     task_manager.start()
 
     # GLB-First: Nettoyer les fichiers temporaires au démarrage
@@ -127,6 +128,7 @@ DATA_TEMP = Path("data/temp")  # GLB-First: Fichiers temporaires pour conversion
 DATA_SAVED = Path("data/saved")  # GLB-First: Meshes sauvegardés par l'utilisateur
 DATA_COMPARED = Path("data/compared")
 DATA_QUALITY = Path("data/quality")
+DATA_UNWRAPPED = Path("data/unwrapped")
 DATA_INPUT.mkdir(parents=True, exist_ok=True)
 DATA_OUTPUT.mkdir(parents=True, exist_ok=True)
 DATA_INPUT_IMAGES.mkdir(parents=True, exist_ok=True)
@@ -137,6 +139,7 @@ DATA_GENERATED_TEXTURES.mkdir(parents=True, exist_ok=True)
 DATA_TEMP.mkdir(parents=True, exist_ok=True)
 DATA_COMPARED.mkdir(parents=True, exist_ok=True)
 DATA_QUALITY.mkdir(parents=True, exist_ok=True)
+DATA_UNWRAPPED.mkdir(parents=True, exist_ok=True)
 
 # Formats de fichiers supportés
 SUPPORTED_FORMATS = {".obj", ".stl", ".ply", ".off", ".gltf", ".glb"}
@@ -229,6 +232,7 @@ class RetopologyRequest(BaseModel):
     preserve_boundaries: bool = True
     is_generated: bool = False  # Si True, cherche dans data/generated_meshes
     is_simplified: bool = False  # Si True, cherche dans data/output
+    bake_textures: bool = False  # Si True, bake la texture high→low après retopo
 
 class SegmentRequest(BaseModel):
     """Paramètres de segmentation de mesh"""
@@ -258,6 +262,14 @@ class QualityVisualizeRequest(BaseModel):
     """Parametres de visualisation de qualite de mesh"""
     filename: str
     diagnostic_type: str  # "boundary" | "non_manifold" | "face_quality"
+    is_generated: bool = False
+    is_simplified: bool = False
+    is_retopologized: bool = False
+
+
+class UnwrapUVRequest(BaseModel):
+    """Parametres pour UV unwrapping LSCM"""
+    filename: str
     is_generated: bool = False
     is_simplified: bool = False
     is_retopologized: bool = False
@@ -1435,7 +1447,9 @@ def retopologize_task_handler(task: Task):
             'error': f'Fichier source non trouve: {filename}'
         }
 
-    logger.info(f"[RETOPOLOGIZE] Starting: {filename} (target={target_face_count} faces)")
+    bake_textures = params.get("bake_textures", False)
+
+    logger.info(f"[RETOPOLOGIZE] Starting: {filename} (target={target_face_count} faces, bake={bake_textures})")
 
     # GLB-First: Utiliser retopologize_mesh_glb directement pour les GLB
     if input_file.suffix.lower() == '.glb':
@@ -1455,7 +1469,8 @@ def retopologize_task_handler(task: Task):
             target_face_count=target_face_count,
             deterministic=deterministic,
             preserve_boundaries=preserve_boundaries,
-            temp_dir=DATA_TEMP
+            temp_dir=DATA_TEMP,
+            bake_textures=bake_textures
         )
 
         if result.get('success'):
@@ -1475,7 +1490,11 @@ def retopologize_task_handler(task: Task):
                 'retopo_vertices': result.get('retopo_vertices', 0),
                 'retopo_faces': result.get('retopo_faces', 0),
                 'had_textures': result.get('had_textures', False),
-                'textures_lost': result.get('textures_lost', False)
+                'textures_lost': result.get('textures_lost', False),
+                'sanitized': result.get('sanitized', False),
+                'sanitized_filename': result.get('sanitized_filename', None),
+                'texture_baked': result.get('texture_baked', False),
+                'baked_texture_filename': result.get('baked_texture_filename', None)
             }
         return result
 
@@ -1713,6 +1732,32 @@ def quality_visualize_task_handler(task: Task):
     result = generate_quality_visualization(mesh_path, output_path, diagnostic_type)
     if result.get("success"):
         result["output_filename"] = output_filename
+    return result
+
+
+def unwrap_uv_task_handler(task: Task):
+    """Handler pour UV unwrapping LSCM."""
+    from .uv_unwrap import unwrap_uv
+
+    params = task.params
+    mesh_path = _resolve_mesh_path(
+        params["filename"],
+        params.get("is_generated", False),
+        params.get("is_simplified", False),
+        params.get("is_retopologized", False)
+    )
+
+    if not mesh_path.exists():
+        return {'success': False, 'error': f'Fichier non trouve: {params["filename"]}'}
+
+    output_filename = f"{mesh_path.stem}_unwrapped.glb"
+    output_path = DATA_UNWRAPPED / output_filename
+
+    logger.info(f"[UV_UNWRAP] Starting: {mesh_path.name}")
+
+    result = unwrap_uv(mesh_path, output_path)
+    if result.get('success'):
+        result['output_filename'] = output_filename
     return result
 
 
@@ -2104,11 +2149,10 @@ async def retopologize(request: RetopologyRequest):
         raise HTTPException(status_code=404, detail=f"Fichier non trouvé: {request.filename}")
 
     # Valider que target_face_count est dans le range acceptable
-    # Range: [original * 2 : original * 5]
-    # Note: original_face_count est fourni par le frontend (déjà calculé lors de l'upload)
+    # Range: [5% : 50%] du mesh original, minimum absolu 1000
     original_face_count = request.original_face_count
-    min_faces = original_face_count * 2
-    max_faces = original_face_count * 5
+    min_faces = max(1000, int(original_face_count * 0.05))
+    max_faces = max(5000, int(original_face_count * 0.5))
 
     if request.target_face_count < min_faces:
         raise HTTPException(
@@ -2119,7 +2163,7 @@ async def retopologize(request: RetopologyRequest):
     if request.target_face_count > max_faces:
         raise HTTPException(
             status_code=400,
-            detail=f"target_face_count trop élevé: maximum {max_faces} faces (mesh original: {original_face_count} faces)"
+            detail=f"target_face_count trop eleve: maximum {max_faces} faces (mesh original: {original_face_count} faces)"
         )
 
     # Créer une tâche asynchrone
@@ -2346,6 +2390,39 @@ async def get_quality_mesh(filename: str):
     file_path = DATA_QUALITY / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Fichier qualite introuvable")
+    return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
+
+
+@app.post("/unwrap-uv")
+async def unwrap_uv_endpoint(request: UnwrapUVRequest):
+    """Lance un UV unwrapping LSCM via trimesh. Retourne task_id."""
+    mesh_path = _resolve_mesh_path(
+        request.filename,
+        request.is_generated,
+        request.is_simplified,
+        request.is_retopologized
+    )
+    if not mesh_path.exists():
+        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {request.filename}")
+
+    task_id = task_manager.create_task(
+        task_type="unwrap_uv",
+        params={
+            "filename": request.filename,
+            "is_generated": request.is_generated,
+            "is_simplified": request.is_simplified,
+            "is_retopologized": request.is_retopologized,
+        }
+    )
+    return {"task_id": task_id, "message": "UV unwrapping lance"}
+
+
+@app.get("/mesh/unwrapped/{filename}")
+async def get_unwrapped_mesh(filename: str):
+    """Serve un mesh UV-unwrapped depuis data/unwrapped/"""
+    file_path = DATA_UNWRAPPED / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier unwrapped introuvable")
     return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
 
 

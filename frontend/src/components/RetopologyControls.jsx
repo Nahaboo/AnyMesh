@@ -1,16 +1,17 @@
 import { useState } from 'react'
 
-function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onLoadOriginal, currentTask, isProcessing }) {
-  // Calculer le range dynamique basé sur le nombre de faces original
-  // Range: [original * 2 : original * 5]
+function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onLoadSanitized, onLoadOriginal, currentTask, isProcessing }) {
+  // Range proportionnel : 5% → 50% du nombre de faces original
+  // La retopo vise un mesh LOW POLY avec topologie optimisée
   const currentFaces = meshInfo?.triangles_count || meshInfo?.faces_count || 0
-  const minFaces = currentFaces * 2
-  const maxFaces = currentFaces * 5
-  const defaultFaces = Math.floor((minFaces + maxFaces) / 2)
+  const minFaces = Math.max(1000, Math.floor(currentFaces * 0.05))
+  const maxFaces = Math.max(5000, Math.floor(currentFaces * 0.5))
+  const defaultFaces = Math.floor(currentFaces * 0.2)
 
   const [targetFaceCount, setTargetFaceCount] = useState(defaultFaces)
   const [deterministic, setDeterministic] = useState(true)
   const [preserveBoundaries, setPreserveBoundaries] = useState(true)
+  const [bakeTextures, setBakeTextures] = useState(false)
 
   const isGenerated = meshInfo?.isGenerated === true
 
@@ -45,7 +46,8 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
         deterministic: deterministic,
         preserve_boundaries: preserveBoundaries,
         is_generated: isGenerated,  // Indiquer si c'est un mesh généré
-        is_simplified: isSimplified  // Indiquer si c'est un mesh simplifié
+        is_simplified: isSimplified,  // Indiquer si c'est un mesh simplifié
+        bake_textures: bakeTextures
       })
     }
   }
@@ -83,7 +85,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
       )}
 
       {/* G10: Avertissement perte de textures pour mesh généré */}
-      {isGenerated && !isRetopologizedMesh && (
+      {isGenerated && !isRetopologizedMesh && !bakeTextures && (
         <div style={{
           background: 'var(--v2-warning-bg)',
           border: '1px solid var(--v2-warning-border)',
@@ -94,7 +96,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
           color: 'var(--v2-warning-text)'
         }}>
           <strong style={{ display: 'block', marginBottom: '4px' }}>Textures seront perdues</strong>
-          La retopologie recrée la géométrie. Les textures et matériaux ne seront pas conservés.
+          La retopologie recrée la géométrie. Activez "Bake texture" pour conserver les couleurs.
         </div>
       )}
 
@@ -264,6 +266,32 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
             />
             Préserver les bordures (meshes ouverts)
           </label>
+
+          {isGenerated && (
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--v2-spacing-sm)',
+              fontSize: '0.875rem',
+              color: 'var(--v2-text-primary)',
+              cursor: (isProcessing || isRetopologizedMesh) ? 'not-allowed' : 'pointer',
+              opacity: (isProcessing || isRetopologizedMesh) ? 0.5 : 1
+            }}>
+              <input
+                type="checkbox"
+                checked={bakeTextures}
+                onChange={(e) => setBakeTextures(e.target.checked)}
+                disabled={isProcessing || isRetopologizedMesh}
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  accentColor: 'var(--v2-accent-primary)',
+                  cursor: (isProcessing || isRetopologizedMesh) ? 'not-allowed' : 'pointer'
+                }}
+              />
+              Bake texture (transfère la texture vers le mesh retopologisé)
+            </label>
+          )}
         </div>
 
         {/* Bouton Lancer */}
@@ -339,6 +367,11 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
                 <div style={{ color: 'var(--v2-accent-primary)', fontWeight: 600 }}>
                   Résultat: {currentTask.result.vertices_count?.toLocaleString()} vertices, {currentTask.result.faces_count?.toLocaleString()} faces
                 </div>
+                {currentTask.result.texture_baked && (
+                  <div style={{ marginTop: '4px', color: 'var(--v2-success-text)' }}>
+                    Texture bakée avec succès
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -388,6 +421,30 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
               <span>Charger le résultat retopologisé</span>
+            </button>
+          )}
+
+          {/* Bouton pour visualiser le mesh sanitizé (étape intermédiaire) */}
+          {currentTask && currentTask.taskType === 'retopology' && currentTask.status === 'completed' && currentTask.result?.sanitized_filename && (
+            <button
+              type="button"
+              onClick={onLoadSanitized}
+              className="v2-btn v2-btn-secondary"
+              style={{
+                width: '100%',
+                padding: 'var(--v2-spacing-sm) var(--v2-spacing-md)',
+                borderRadius: 'var(--v2-radius-lg)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--v2-spacing-xs)',
+                fontWeight: 500
+              }}
+            >
+              <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Voir le mesh sanitizé</span>
             </button>
           )}
 
