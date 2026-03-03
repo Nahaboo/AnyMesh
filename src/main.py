@@ -79,6 +79,7 @@ async def lifespan(app: FastAPI):
     task_manager.register_handler("compare", compare_task_handler)
     task_manager.register_handler("quality_visualize", quality_visualize_task_handler)
     task_manager.register_handler("unwrap_uv", unwrap_uv_task_handler)
+    task_manager.register_handler("generate_lod", generate_lod_task_handler)
     task_manager.start()
 
     # GLB-First: Nettoyer les fichiers temporaires au démarrage
@@ -279,6 +280,12 @@ class SaveMeshRequest(BaseModel):
     """GLB-First: Paramètres pour sauvegarder un mesh"""
     source_filename: str  # Nom du fichier source (dans n'importe quel dossier)
     save_name: str  # Nom de la sauvegarde (sans extension)
+
+
+class GenerateLodRequest(BaseModel):
+    """Paramètres de génération Auto-LOD"""
+    filename: str
+    is_generated: bool = False
 
 
 @app.get("/")
@@ -2424,6 +2431,96 @@ async def get_unwrapped_mesh(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Fichier unwrapped introuvable")
     return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
+
+
+# ── Auto-LOD ──────────────────────────────────────────────────────────────────
+
+LOD_RATIOS = [1.0, 0.5, 0.25, 0.10]  # LOD0=original, LOD1=50%, LOD2=25%, LOD3=10%
+
+def generate_lod_task_handler(task: Task):
+    import zipfile
+    params = task.params
+    input_path = Path(params["input_file"])
+    stem = input_path.stem
+
+    lods = []
+
+    # LOD0 = copie du fichier original
+    lod0_path = DATA_OUTPUT / f"{stem}_LOD0.glb"
+    shutil.copy2(str(input_path), str(lod0_path))
+    original_faces = _count_faces_glb(input_path)
+    lods.append({"level": 0, "filename": lod0_path.name, "faces_count": original_faces})
+
+    # LOD1, LOD2, LOD3
+    for i, ratio in enumerate([0.5, 0.25, 0.10], start=1):
+        lod_path = DATA_OUTPUT / f"{stem}_LOD{i}.glb"
+        result = simplify_mesh_glb(
+            input_path=input_path,
+            output_path=lod_path,
+            reduction_ratio=1.0 - ratio  # ratio = faces gardées → reduction = faces supprimées
+        )
+        faces = result.get("simplified_triangles", 0) if result.get("success") else 0
+        lods.append({"level": i, "filename": lod_path.name, "faces_count": faces})
+
+    # ZIP des 4 fichiers
+    zip_filename = f"{stem}_LODs.zip"
+    zip_path = DATA_OUTPUT / zip_filename
+    with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
+        for lod in lods:
+            lod_file = DATA_OUTPUT / lod["filename"]
+            if lod_file.exists():
+                zf.write(str(lod_file), lod["filename"])
+
+    return {
+        "success": True,
+        "lods": lods,
+        "zip_filename": zip_filename,
+        "original_faces": original_faces,
+    }
+
+
+def _count_faces_glb(path: Path) -> int:
+    try:
+        loaded = trimesh.load(str(path))
+        if hasattr(loaded, "geometry"):
+            meshes = list(loaded.geometry.values())
+            mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
+        else:
+            mesh = loaded
+        return int(len(mesh.faces))
+    except Exception:
+        return 0
+
+
+@app.post("/generate-lod")
+async def generate_lod(request: GenerateLodRequest):
+    """Génère 4 niveaux de LOD (LOD0–LOD3) depuis un mesh GLB et un ZIP téléchargeable."""
+    source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
+    input_path = source_dir / request.filename
+    if not input_path.exists():
+        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {request.filename}")
+
+    task_id = task_manager.create_task(
+        task_type="generate_lod",
+        params={
+            "input_file": str(input_path),
+            "is_generated": request.is_generated,
+        }
+    )
+    return {"task_id": task_id, "message": "Generation LOD lancee"}
+
+
+@app.get("/download-lod-zip/{filename}")
+async def download_lod_zip(filename: str):
+    """Télécharge le ZIP contenant tous les niveaux de LOD."""
+    file_path = DATA_OUTPUT / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="ZIP LOD introuvable")
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type="application/zip"
+    )
 
 
 # NOTE: Les @app.on_event("startup") et @app.on_event("shutdown")

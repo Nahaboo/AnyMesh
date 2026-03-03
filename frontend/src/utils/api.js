@@ -458,4 +458,22 @@ export const getUnwrappedMeshUrl = (filename) => {
   return `${API_BASE_URL}/mesh/unwrapped/${filename}`
 }
 
+// ===== AUTO-LOD =====
+
+export const generateLod = async (params) => {
+  const response = await api.post('/generate-lod', {
+    filename: params.filename,
+    is_generated: params.isGenerated || false,
+  })
+  return response.data
+}
+
+export const getLodZipUrl = (filename) => {
+  return `${API_BASE_URL}/download-lod-zip/${filename}`
+}
+
+export const getLodMeshUrl = (filename) => {
+  return `${API_BASE_URL}/download/${filename}`
+}
+
 export default api

@@ -15,6 +15,7 @@ import TexturingControls from './TexturingControls'
 import CompareControls from './CompareControls'
 import QualityControls from './QualityControls'
 import UVUnwrapControls from './UVUnwrapControls'
+import LodControls from './LodControls'
 import TaskStatus from './TaskStatus'
 import * as THREE from 'three'
 import { useShaderDebugGUI } from '../hooks/useShaderDebugGUI'
@@ -44,6 +45,8 @@ function ViewerLayout({
   onLoadQuality,
   onUnwrapUV,
   onLoadUnwrapped,
+  onGenerateLod,
+  onLoadLod,
   onMeshSaved,
   currentTask,
   isProcessing,
@@ -97,7 +100,7 @@ function ViewerLayout({
 
   const handleToolChange = (tool) => {
     setActiveTool(tool)
-    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing' || tool === 'compare' || tool === 'quality' || tool === 'uv_unwrap')
+    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing' || tool === 'compare' || tool === 'quality' || tool === 'uv_unwrap' || tool === 'lod')
   }
 
   const isPhysicsMode = activeTool === 'physics'
@@ -353,6 +356,7 @@ function ViewerLayout({
                  activeTool === 'compare' ? 'Mesh Comparison' :
                  activeTool === 'quality' ? 'Quality Analysis' :
                  activeTool === 'uv_unwrap' ? 'UV Unwrapping' :
+                 activeTool === 'lod' ? 'Auto-LOD' :
                  activeTool === 'generation' ? 'Generate 3D Mesh' :
                  activeTool === 'prompt-generation' ? 'Generate from Prompt' : 'Tool'}
               </h3>
@@ -447,6 +451,14 @@ function ViewerLayout({
                   onLoadUnwrapped={onLoadUnwrapped}
                   onLoadOriginal={onLoadParent}
                   onUVCheckerChange={setUVCheckerMode}
+                  currentTask={currentTask}
+                  isProcessing={isProcessing}
+                />
+              ) : activeTool === 'lod' ? (
+                <LodControls
+                  meshInfo={meshInfo}
+                  onGenerateLod={onGenerateLod}
+                  onLoadLod={onLoadLod}
                   currentTask={currentTask}
                   isProcessing={isProcessing}
                 />

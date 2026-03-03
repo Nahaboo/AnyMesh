@@ -19,7 +19,8 @@ function TaskStatus({ task, onComplete, activeTool }) {
     'retopology': 'retopoly',
     'generate': 'generation',
     'quality_visualize': 'quality',
-    'unwrap_uv': 'uv_unwrap'
+    'unwrap_uv': 'uv_unwrap',
+    'generate_lod': 'lod'
   }
 
   // N'afficher que si le taskType correspond à l'outil actif
@@ -325,6 +326,27 @@ function TaskStatus({ task, onComplete, activeTool }) {
                 </div>
               )}
             </>
+          ) : task.taskType === 'generate_lod' ? (
+            // Affichage pour l'Auto-LOD
+            <div style={{
+              background: 'var(--v2-success-bg)',
+              borderRadius: 'var(--v2-radius-lg)',
+              padding: 'var(--v2-spacing-md)'
+            }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)', marginBottom: '8px' }}>
+                {task.result.lods?.length} niveaux générés
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {task.result.lods?.map(lod => (
+                  <div key={lod.level} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                    <span style={{ color: 'var(--v2-success-text)' }}>LOD{lod.level}:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--v2-success-text)' }}>
+                      {lod.faces_count.toLocaleString()} triangles
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : task.taskType === 'unwrap_uv' ? (
             // Affichage pour l'UV unwrap
             <div style={{

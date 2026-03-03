@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ConfigSidebar from './components/ConfigSidebar'
 import ViewerLayout from './components/ViewerLayout'
-import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, compareMeshes, visualizeQuality, unwrapMeshUV, pollTaskStatus } from './utils/api'
+import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, compareMeshes, visualizeQuality, unwrapMeshUV, generateLod, pollTaskStatus } from './utils/api'
 import './styles/v2-theme.css'
 
 /**
@@ -566,6 +566,48 @@ function App() {
     })
   }
 
+  // Handler for Auto-LOD generation
+  const handleGenerateLod = async (params) => {
+    setIsProcessing(true)
+    try {
+      const response = await generateLod(params)
+      const taskId = response.task_id
+      await pollTaskStatus(
+        taskId,
+        (task) => {
+          setCurrentTask({ ...task, taskType: 'generate_lod' })
+        },
+        1000
+      )
+      setIsProcessing(false)
+    } catch (error) {
+      console.error('[App] LOD generation error:', error)
+      setIsProcessing(false)
+      setCurrentTask({ id: 'error', status: 'failed', error: error.message || 'An error occurred', taskType: 'generate_lod' })
+    }
+  }
+
+  // Handler to load a specific LOD level in the viewer
+  const handleLoadLod = (lodFilename) => {
+    // Récupérer les stats de ce LOD depuis le résultat de la tâche
+    const lods = currentTask?.result?.lods || []
+    const lodInfo = lods.find(l => l.filename === lodFilename)
+    const facesCount = lodInfo?.faces_count || 0
+
+    setMeshInfo({
+      filename: lodFilename,
+      file_size: 0,
+      format: '.glb',
+      vertices_count: 0,
+      faces_count: facesCount,
+      triangles_count: facesCount,
+      bounding_box: meshInfo?.bounding_box,
+      uploadId: Date.now(),
+      isSimplified: true,
+      originalFilename: lodFilename,
+    })
+  }
+
   // Handler to load the quality visualization GLB
   const handleLoadQuality = () => {
     if (!currentTask || currentTask.status !== 'completed' || !currentTask.result) return
@@ -614,6 +656,8 @@ function App() {
           onLoadCompared={handleLoadCompared}
           onUnwrapUV={handleUnwrapUV}
           onLoadUnwrapped={handleLoadUnwrapped}
+          onGenerateLod={handleGenerateLod}
+          onLoadLod={handleLoadLod}
           onVisualizeQuality={handleVisualizeQuality}
           onLoadQuality={handleLoadQuality}
           onMeshSaved={(result) => console.log('[App] Mesh saved:', result)}
