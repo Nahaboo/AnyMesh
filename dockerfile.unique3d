@@ -1,0 +1,120 @@
+# =============================================================================
+# Unique3D Worker — Image Docker pour la génération 3D
+# Base: CUDA 12.1 + cuDNN 8 + devel (headers pour compilation pytorch3d/nvdiffrast)
+# =============================================================================
+FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
+
+LABEL name="unique3d-worker" maintainer="meshsimplifier"
+
+RUN mkdir -p /workspace
+WORKDIR /workspace
+
+# --- Paquets système ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git wget vim unzip git-lfs cmake curl \
+    libegl1-mesa-dev libglib2.0-0 pkg-config \
+    libglvnd0 libgl1 libglx0 libegl1 libgles2 \
+    libglvnd-dev libgl1-mesa-dev libgles2-mesa-dev \
+    mesa-utils-extra \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV LD_LIBRARY_PATH=/usr/lib64:$LD_LIBRARY_PATH
+ENV PYOPENGL_PLATFORM=egl
+
+# --- Miniconda ---
+RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+    chmod +x Miniconda3-latest-Linux-x86_64.sh && \
+    ./Miniconda3-latest-Linux-x86_64.sh -b -p /workspace/miniconda3 && \
+    rm Miniconda3-latest-Linux-x86_64.sh
+
+ENV PATH="/workspace/miniconda3/bin:${PATH}"
+RUN conda init bash
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+# --- Environnement Python 3.10 ---
+RUN conda create -n unique3d python=3.10 -y && echo "source activate unique3d" > ~/.bashrc
+ENV PATH /workspace/miniconda3/envs/unique3d/bin:$PATH
+
+RUN conda install Ninja -y
+RUN conda install cuda -c nvidia/label/cuda-12.1.0 -y
+
+# --- PyTorch 2.1.0 + CUDA 12.1 ---
+RUN pip install --no-cache-dir \
+    torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 \
+    xformers triton \
+    --index-url https://download.pytorch.org/whl/cu121
+
+# --- Diffusers + HuggingFace (versions compatibles) ---
+RUN pip install --no-cache-dir diffusers==0.27.2 "huggingface_hub<0.25"
+
+# --- NumPy < 2.0 (avant tout requirements.txt) ---
+RUN pip install --no-cache-dir "numpy<2.0.0"
+
+# --- Copie du code Unique3D ---
+COPY ./tools/Unique3D /workspace/Unique3D
+WORKDIR /workspace/Unique3D
+
+# --- Nettoyage du requirements.txt (paquets qu'on installe séparément) ---
+RUN sed -i -e '/onnxruntime_gpu/d' \
+           -e '/ort_nightly_gpu/d' \
+           -e '/pytorch3d/d' \
+           -e '/torch==/d' \
+           -e '/nvdiffrast/d' \
+           -e '/torch_scatter/d' requirements.txt
+
+# --- onnxruntime-gpu 1.17.1 (compatible cuDNN 8 + CUDA 12) ---
+RUN pip install --no-cache-dir onnxruntime-gpu==1.17.1 \
+    --extra-index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/
+
+# --- Paquets compilés from source (nécessitent CUDA headers) ---
+ENV TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6 8.9+PTX"
+ENV FORCE_CUDA=1
+
+# pytorch3d (~15 min de compilation)
+ENV MAX_JOBS=1
+RUN pip install --no-cache-dir --no-build-isolation \
+    "git+https://github.com/facebookresearch/pytorch3d.git@stable"
+
+# nvdiffrast
+ENV MAX_JOBS=2
+RUN pip install --no-cache-dir --no-build-isolation \
+    git+https://github.com/NVlabs/nvdiffrast.git
+
+# torch_scatter
+RUN pip install --no-cache-dir --no-build-isolation torch_scatter
+
+# --- Reste du requirements.txt de Unique3D ---
+RUN pip install --no-cache-dir -r requirements.txt
+
+# --- nvidia-tensorrt ---
+RUN pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com nvidia-tensorrt || true
+
+RUN pip install --no-cache-dir spaces
+
+# --- Modèles ckpt/ montés en volume (voir docker-compose.yml) ---
+# Télécharger une seule fois avec: python tools/Unique3D/download_models.py
+
+# --- Intégration MeshSimplifier ---
+WORKDIR /workspace
+
+COPY requirement.txt /workspace/requirement.txt
+RUN pip install --no-cache-dir -r /workspace/requirement.txt
+
+COPY src/ /workspace/src/
+
+ENV PYTHONPATH="/workspace/Unique3D:/workspace:${PYTHONPATH}"
+
+# --- Re-pin TOUT A LA FIN (requirements.txt peut écraser les versions) ---
+RUN pip install --no-cache-dir \
+    "numpy<2.0.0" \
+    "huggingface_hub<0.25" \
+    "onnxruntime-gpu==1.17.1" \
+    "transformers<4.40" \
+    "peft<0.11"
+
+EXPOSE 8000
+
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AnyMesh – Pipeline 3D post-génération IA</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/theme/night.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+  <style>
+    :root {
+      --accent:  #61dafb;
+      --accent2: #f97316;
+      --accent3: #a78bfa;
+      --green:   #4ade80;
+      --yellow:  #fbbf24;
+      --red:     #f87171;
+    }
+    .reveal { font-family: 'Segoe UI', system-ui, sans-serif; }
+    .reveal h1, .reveal h2, .reveal h3 { text-transform: none; letter-spacing: -0.02em; }
+    .reveal h1 { color: var(--accent); font-size: 2.2em; }
+    .reveal h2 { color: var(--accent); font-size: 1.45em; border-bottom: 2px solid rgba(97,218,251,0.25); padding-bottom: 0.3em; margin-bottom: 0.6em; }
+    .reveal h3 { color: var(--accent2); font-size: 1em; margin-bottom: 0.35em; }
+    .reveal .slides section { text-align: left; }
+    .reveal p { margin: 0.4em 0; }
+    .reveal ul { margin: 0; }
+    .reveal li { margin-bottom: 0.3em; }
+
+    /* ── BADGES ── */
+    .badge { display:inline-block; padding:.15em .65em; border-radius:999px; font-size:.6em; font-weight:600; letter-spacing:.05em; vertical-align:middle; margin:.1em .15em; }
+    .bb { background:rgba(97,218,251,.12); color:var(--accent);  border:1px solid var(--accent); }
+    .bo { background:rgba(249,115,22,.12); color:var(--accent2); border:1px solid var(--accent2); }
+    .bp { background:rgba(167,139,250,.12); color:var(--accent3); border:1px solid var(--accent3); }
+    .bg { background:rgba(74,222,128,.12);  color:var(--green);  border:1px solid var(--green); }
+    .by { background:rgba(251,191,36,.12);  color:var(--yellow); border:1px solid var(--yellow); }
+
+    /* ── CARDS ── */
+    .cg  { display:grid; gap:.7em; }
+    .cg2 { grid-template-columns:1fr 1fr; }
+    .cg3 { grid-template-columns:1fr 1fr 1fr; }
+    .cg4 { grid-template-columns:1fr 1fr 1fr 1fr; }
+
+    .card { background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:.8em 1em; }
+    .card h3  { margin:0 0 .35em 0; font-size:.82em; }
+    .card p, .card ul { margin:0; font-size:.68em; opacity:.85; }
+    .card ul  { padding-left:1.1em; }
+    .card ul li { margin-bottom:.2em; }
+    .cb { border-color:rgba(97,218,251,.4); }
+    .co { border-color:rgba(249,115,22,.4); }
+    .cp { border-color:rgba(167,139,250,.4); }
+    .cg_  { border-color:rgba(74,222,128,.4); }
+    .cy { border-color:rgba(251,191,36,.4); }
+    .cr { border-color:rgba(248,113,113,.4); }
+
+    /* ── FLOW ── */
+    .flow { display:flex; align-items:center; gap:.35em; flex-wrap:wrap; font-size:.68em; margin:.5em 0; }
+    .fstep { background:rgba(97,218,251,.1); border:1px solid rgba(97,218,251,.3); border-radius:8px; padding:.35em .75em; text-align:center; min-width:72px; line-height:1.3; }
+    .fstep-o { background:rgba(249,115,22,.1); border-color:rgba(249,115,22,.3); }
+    .fstep-p { background:rgba(167,139,250,.1); border-color:rgba(167,139,250,.3); }
+    .fstep-g { background:rgba(74,222,128,.1);  border-color:rgba(74,222,128,.3); }
+    .farrow { color:var(--accent); font-size:1.1em; opacity:.6; }
+
+    /* ── LAYOUT ── */
+    .two-col { display:grid; grid-template-columns:1fr 1fr; gap:.9em; align-items:start; }
+    .three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:.7em; align-items:start; }
+
+    /* ── CODE ── */
+    .reveal pre { font-size:.58em; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,.5); margin:.4em 0; }
+
+    /* ── TABLE ── */
+    .reveal table { width:100%; font-size:.65em; border-collapse:collapse; }
+    .reveal table th { background:rgba(97,218,251,.12); color:var(--accent); padding:.4em .7em; text-align:left; border-bottom:2px solid rgba(97,218,251,.2); font-size:.95em; }
+    .reveal table td { padding:.35em .7em; border-bottom:1px solid rgba(255,255,255,.07); vertical-align:top; }
+    .reveal table tr:hover td { background:rgba(255,255,255,.03); }
+    .td-good  { color:var(--green); }
+    .td-warn  { color:var(--yellow); }
+    .td-bad   { color:var(--red); }
+
+    /* ── BOXES ── */
+    .warn-box { background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.35); border-radius:8px; padding:.55em .9em; font-size:.66em; color:var(--yellow); }
+    .info-box { background:rgba(97,218,251,.06);  border:1px solid rgba(97,218,251,.25);  border-radius:8px; padding:.55em .9em; font-size:.66em; color:rgba(255,255,255,.8); }
+    .learn-box { background:rgba(167,139,250,.08); border:1px solid rgba(167,139,250,.3); border-radius:8px; padding:.6em .9em; font-size:.66em; }
+
+    /* ── SPECIAL ── */
+    .big-stat { font-size:2.2em; font-weight:700; color:var(--accent); line-height:1; }
+    .footnote { font-size:.5em; opacity:.45; margin-top:.7em; }
+    .section-tag { display:inline-block; background:rgba(97,218,251,.08); border:1px solid rgba(97,218,251,.25); color:var(--accent); border-radius:5px; padding:.1em .5em; font-size:.5em; font-weight:600; letter-spacing:.1em; text-transform:uppercase; vertical-align:middle; margin-left:.5em; }
+
+    /* ── DIVIDER ── */
+    .div-slide { text-align:center; }
+    .div-slide h2 { border:none !important; font-size:1.9em; color:var(--accent3); }
+    .div-slide p  { opacity:.6; font-size:.85em; margin-top:.4em; }
+
+    /* ── TITLE ── */
+    .title-wrap { text-align:center; }
+    .title-wrap .kicker { font-size:.55em; opacity:.5; text-transform:uppercase; letter-spacing:.15em; margin-bottom:.6em; }
+    .title-wrap .subtitle { font-size:1em; opacity:.65; margin-top:.5em; }
+    .title-wrap .meta { margin-top:1.6em; font-size:.6em; opacity:.45; }
+
+    /* ── STEP NUMBERS ── */
+    .step-num { display:inline-flex; align-items:center; justify-content:center; width:1.6em; height:1.6em; border-radius:50%; background:rgba(97,218,251,.15); border:1px solid rgba(97,218,251,.4); color:var(--accent); font-weight:700; font-size:.75em; margin-right:.4em; flex-shrink:0; }
+
+    .step-row { display:flex; align-items:flex-start; gap:.5em; font-size:.7em; margin-bottom:.5em; }
+    .step-text { flex:1; }
+    .step-text strong { color:rgba(255,255,255,.9); }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ════════════════════════════════════════
+     1 – TITRE
+════════════════════════════════════════ -->
+<section>
+  <div class="title-wrap">
+    <div class="kicker">Portfolio technique · Mars 2026</div>
+    <h1 style="font-size:3em; margin:0;">AnyMesh</h1>
+    <div class="subtitle">Pipeline 3D post-génération IA</div>
+    <div style="margin-top:1.6em; display:flex; gap:.5em; justify-content:center; flex-wrap:wrap;">
+      <span class="badge bb">FastAPI</span>
+      <span class="badge bb">Trimesh</span>
+      <span class="badge bb">PyMeshLab</span>
+      <span class="badge bo">TRELLIS</span>
+      <span class="badge bo">TripoSR</span>
+      <span class="badge bo">Stability AI</span>
+      <span class="badge bp">React Three Fiber</span>
+      <span class="badge bg">Instant Meshes</span>
+      <span class="badge by">RunPod Serverless</span>
+    </div>
+    <div class="meta">Kevin [Nom] · Développeur Full-Stack &amp; 3D</div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     2 – CONTEXTE
+════════════════════════════════════════ -->
+<section>
+  <h2>Contexte &amp; motivation</h2>
+  <div class="two-col">
+    <div>
+      <div class="card cb" style="margin-bottom:.7em;">
+        <h3>💬 Point de départ</h3>
+        <p>Échange avec Chat3D il y a quelques mois — le frein identifié : manque d'expérience concrète sur les <strong>pipelines IA 3D</strong>.</p>
+        <p style="margin-top:.5em;">Réponse : construire le projet pour acquérir cette expérience.</p>
+      </div>
+      <div class="card co">
+        <h3>🎯 Objectif d'AnyMesh</h3>
+        <p>Prendre des sorties brutes de modèles génératifs et les transformer en <strong>assets 3D utilisables en production</strong> — sans intervention manuelle.</p>
+      </div>
+    </div>
+    <div>
+      <div class="card cp">
+        <h3>🔗 Providers intégrés</h3>
+        <ul>
+          <li><strong>TRELLIS</strong> (Microsoft) – RunPod GPU</li>
+          <li><strong>TripoSR</strong> – modèle open-source local</li>
+          <li><strong>Stability AI SF3D</strong> – API cloud</li>
+          <li><strong>Unique3D</strong> – worker Docker auto-hébergé</li>
+        </ul>
+        <p style="margin-top:.5em;">Interface unifiée — un seul point d'entrée pour les 4.</p>
+      </div>
+      <div class="card cg_" style="margin-top:.7em;">
+        <h3>📦 Ce que le pipeline produit</h3>
+        <ul>
+          <li>Retopologie field-aligned (Instant Meshes)</li>
+          <li>Texture baking automatique (LSCM + KDTree)</li>
+          <li>Auto-LOD (4 niveaux, export ZIP)</li>
+          <li>GLB prêt production (Unity / Unreal)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     3 – LE PROBLÈME
+════════════════════════════════════════ -->
+<section>
+  <h2>Le problème — sorties IA non utilisables en l'état</h2>
+  <p style="font-size:.75em; opacity:.7; margin-bottom:.8em;">Une sortie TRELLIS typique, avant tout traitement :</p>
+  <div class="cg cg2">
+    <div>
+      <div class="card cr" style="margin-bottom:.6em;">
+        <h3 style="color:var(--red);">🧩 100 à 700 composantes disconnectées</h3>
+        <p>Pas un mesh unique — une collection de patches géométriques indépendants. Chaque patch est non-fermé.</p>
+      </div>
+      <div class="card cr" style="margin-bottom:.6em;">
+        <h3 style="color:var(--red);">🕳️ Non-watertight</h3>
+        <p>Des trous partout, par design de l'algorithme. La plupart des outils de traitement supposent un mesh fermé.</p>
+      </div>
+    </div>
+    <div>
+      <div class="card cr" style="margin-bottom:.6em;">
+        <h3 style="color:var(--red);">🔺 50 000 à 200 000 triangles chaotiques</h3>
+        <p>Positionnés aléatoirement, sans edge flow. Impossible à rigger ou subdiviser proprement.</p>
+      </div>
+      <div class="card cr">
+        <h3 style="color:var(--red);">🗺️ UVs inutilisables</h3>
+        <p>Absents ou ne correspondant plus à rien après traitement. Pas de texture applicable directement.</p>
+      </div>
+    </div>
+  </div>
+  <div class="info-box" style="margin-top:.7em;">
+    💡 Ces sorties ne passent pas dans Unity ou Unreal sans travail manuel. <strong>AnyMesh automatise ce travail.</strong>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     4 – PIPELINE VUE D'ENSEMBLE
+════════════════════════════════════════ -->
+<section>
+  <h2>Pipeline complet — vue d'ensemble</h2>
+  <div class="flow" style="justify-content:center; font-size:.75em; margin:0.6em 0 1em;">
+    <div class="fstep">📷<br/>Image(s)</div>
+    <div class="farrow">→</div>
+    <div class="fstep fstep-o">🤖<br/>Génération IA<br/><small>4 providers</small></div>
+    <div class="farrow">→</div>
+    <div class="fstep">🔍<br/>Analyse<br/>qualité</div>
+    <div class="farrow">→</div>
+    <div class="fstep fstep-p">🔄<br/>Retopologie<br/>Instant Meshes</div>
+    <div class="farrow">→</div>
+    <div class="fstep fstep-o">🎨<br/>Texture<br/>Baking</div>
+    <div class="farrow">→</div>
+    <div class="fstep">📊<br/>Auto-LOD<br/>×4</div>
+    <div class="farrow">→</div>
+    <div class="fstep fstep-g">📦<br/>GLB<br/>production</div>
+  </div>
+  <div class="cg cg3">
+    <div class="card cb">
+      <h3>🔍 Analyse qualité</h3>
+      <ul>
+        <li>Watertight check</li>
+        <li>Nombre de composantes</li>
+        <li>Aspect ratio triangles</li>
+        <li>Heatmap visuelles dans le viewer</li>
+      </ul>
+    </div>
+    <div class="card cp">
+      <h3>🔄 Retopo + Baking</h3>
+      <ul>
+        <li>Remaillage field-aligned (Instant Meshes)</li>
+        <li>5% à 50% des faces originales</li>
+        <li>Transfer texture high→low poly</li>
+        <li>UVs propres LSCM, texture 1024×1024</li>
+      </ul>
+    </div>
+    <div class="card cg_">
+      <h3>📊 LOD + Export</h3>
+      <ul>
+        <li>LOD0–3 (100%, 50%, 25%, 10%)</li>
+        <li>Export ZIP des 4 GLB</li>
+        <li>Switch de prévisualisation dans le viewer</li>
+        <li>GLB-first : un seul format, textures embarquées</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     5 – DIV : GÉNÉRATION IA
+════════════════════════════════════════ -->
+<section class="div-slide">
+  <h2>🤖 Génération IA</h2>
+  <p>4 providers intégrés dans une interface unifiée</p>
+</section>
+
+<!-- ════════════════════════════════════════
+     6 – 4 PROVIDERS
+════════════════════════════════════════ -->
+<section>
+  <h2>4 providers — interface unifiée</h2>
+  <div class="cg cg2" style="margin-bottom:.7em;">
+    <div class="card co">
+      <h3>🟠 TRELLIS (Microsoft)</h3>
+      <ul>
+        <li>Accès via <strong>RunPod Serverless GPU</strong> (A40/A100)</li>
+        <li>Meilleure qualité visuelle</li>
+        <li>Supporte plusieurs images en entrée (multi-view)</li>
+        <li>⚠ Génère une scène <strong>très fragmentée</strong> (127 compos.) — problématique pour la retopo</li>
+      </ul>
+    </div>
+    <div class="card cb">
+      <h3>🔵 TripoSR</h3>
+      <ul>
+        <li>Modèle open-source, <strong>GPU local</strong></li>
+        <li>Rapide (~28s), <strong>watertight</strong>, mesh propre (1 compo.)</li>
+        <li>Qualité visuelle inférieure mais <strong>topologie plus utilisable</strong></li>
+        <li>Meilleur aspect ratio (1.82 vs 2.31 TRELLIS)</li>
+      </ul>
+    </div>
+    <div class="card cg_">
+      <h3>🟢 Stability AI SF3D</h3>
+      <ul>
+        <li><strong>API cloud</strong> — une seule image</li>
+        <li>Résultat watertight, 1 composante</li>
+        <li>Meilleur aspect ratio (1.43) — triangles proches de l'équilatéral</li>
+        <li>Bon compromis qualité / coût / simplicité d'intégration</li>
+      </ul>
+    </div>
+    <div class="card cp">
+      <h3>🟣 Unique3D</h3>
+      <ul>
+        <li><strong>Worker Docker auto-hébergé</strong></li>
+        <li>Contrôle total, pas de coût variable</li>
+        <li>23 composantes — intermédiaire</li>
+        <li>⚠ Texture 512×512 seulement, ~17min de génération</li>
+      </ul>
+    </div>
+  </div>
+  <div class="info-box">
+    💡 Mode <strong>multi-image TRELLIS</strong> : 3–4 angles (face + dos + profils) améliorent significativement la reconstruction des zones occultées sur une vue unique.
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     7 – BENCHMARK
+════════════════════════════════════════ -->
+<section>
+  <h2>Benchmark objectif <span class="section-tag">benchmark_providers.py</span></h2>
+  <p style="font-size:.68em; opacity:.65; margin-bottom:.7em;">Même set d'images, mêmes conditions — 4 providers comparés sur les métriques qui comptent pour la production.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Provider</th>
+        <th>Temps</th>
+        <th>Taille</th>
+        <th>Faces</th>
+        <th>Compos.</th>
+        <th>Watertight</th>
+        <th>Aspect Ratio</th>
+        <th>Texture</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>TRELLIS</strong></td>
+        <td>~45s</td>
+        <td>~2.3 MB</td>
+        <td>12 450</td>
+        <td class="td-bad"><strong>127</strong></td>
+        <td class="td-bad">Non</td>
+        <td class="td-warn">2.31</td>
+        <td>1024×1024</td>
+      </tr>
+      <tr>
+        <td><strong>TripoSR</strong></td>
+        <td class="td-good">~28s</td>
+        <td>~1.1 MB</td>
+        <td>8 200</td>
+        <td class="td-good"><strong>1</strong></td>
+        <td class="td-good">Oui</td>
+        <td class="td-good">1.82</td>
+        <td>1024×1024</td>
+      </tr>
+      <tr>
+        <td><strong>Stability AI</strong></td>
+        <td>~38s</td>
+        <td>~1.8 MB</td>
+        <td>10 000</td>
+        <td class="td-good"><strong>1</strong></td>
+        <td class="td-good">Oui</td>
+        <td class="td-good"><strong>1.43</strong></td>
+        <td>1024×1024</td>
+      </tr>
+      <tr>
+        <td><strong>Unique3D</strong></td>
+        <td class="td-bad">~17 min</td>
+        <td>~2.1 MB</td>
+        <td>11 300</td>
+        <td class="td-warn">23</td>
+        <td class="td-bad">Non</td>
+        <td class="td-warn">2.14</td>
+        <td class="td-warn">512×512</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="warn-box" style="margin-top:.7em;">
+    🔑 Colonnes révélatrices : <strong>Compos.</strong> (1 = mesh propre, 127 = fragmenté = problème retopo) et <strong>Aspect Ratio</strong> (proche de 1.0 = triangles équilatéraux = bonne topologie).
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     8 – DIV : POST-PROCESSING
+════════════════════════════════════════ -->
+<section class="div-slide">
+  <h2>⚙️ Post-processing</h2>
+  <p>Retopologie · Texture Baking · Auto-LOD · Analyse qualité</p>
+</section>
+
+<!-- ════════════════════════════════════════
+     9 – RETOPOLOGIE
+════════════════════════════════════════ -->
+<section>
+  <h2>Retopologie — le défi sur les sorties IA</h2>
+  <div class="two-col">
+    <div>
+      <div class="card cr" style="margin-bottom:.6em;">
+        <h3 style="color:var(--red);">⚠ Problème 1 — Fragmentation TRELLIS</h3>
+        <p>100 à 700 composantes séparées, toutes non-fermées. Instant Meshes produit des <strong>trous aux jonctions</strong> entre ces composantes (issue GitHub #78, non résolu).</p>
+      </div>
+      <div class="card cr" style="margin-bottom:.6em;">
+        <h3 style="color:var(--red);">⚠ Problème 2 — Sanitization impossible</h3>
+        <p>pymeshfix ferme les trous mais <strong>reconstruit la géométrie autour des bords</strong>, ce qui déforme la forme originale.</p>
+        <p style="margin-top:.3em;">Solution : si le mesh a <strong>&gt;10 composantes → sanitization désactivée</strong> automatiquement.</p>
+      </div>
+      <div class="card cg_">
+        <h3>✅ Ce qui fonctionne</h3>
+        <p>Sur TripoSR et Stability (watertight, 1 composante) : triangles isotropes, edge flow propre, résultats excellents pour animation / subdivision.</p>
+      </div>
+    </div>
+    <div>
+      <div class="card cp" style="margin-bottom:.6em;">
+        <h3>🔧 Instant Meshes — choix technique</h3>
+        <ul>
+          <li>Disney Research / Wenzel Jakob et al., 2015</li>
+          <li>Remaillage <strong>field-aligned</strong> — qualité difficile à égaler en Python pur</li>
+          <li>Intégration : <code>subprocess</code></li>
+        </ul>
+      </div>
+      <div class="card cb">
+        <h3>🔄 Pipeline d'intégration</h3>
+        <div class="flow" style="flex-direction:column; align-items:flex-start; gap:.25em;">
+          <div style="font-size:.75em; display:flex; align-items:center; gap:.4em;"><span style="color:var(--accent);">→</span> GLB entrant</div>
+          <div style="font-size:.75em; display:flex; align-items:center; gap:.4em;"><span style="color:var(--accent);">→</span> Conversion en PLY temporaire</div>
+          <div style="font-size:.75em; display:flex; align-items:center; gap:.4em;"><span style="color:var(--accent);">→</span> Instant Meshes CLI (C++)</div>
+          <div style="font-size:.75em; display:flex; align-items:center; gap:.4em;"><span style="color:var(--accent);">→</span> Triangulation N-gons (PyMeshLab)</div>
+          <div style="font-size:.75em; display:flex; align-items:center; gap:.4em;"><span style="color:var(--accent);">→</span> Export GLB propre</div>
+        </div>
+      </div>
+      <div class="footnote">La fragilité (dépendance externe, parsing stdout) est le prix à payer pour cette qualité sans réécrire un algorithme de remaillage complet.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     10 – TEXTURE BAKING
+════════════════════════════════════════ -->
+<section>
+  <h2>Texture Baking — high poly → low poly</h2>
+  <div class="two-col">
+    <div>
+      <div class="warn-box" style="margin-bottom:.7em;">
+        ⚠ Après retopologie : la géométrie est propre mais la texture est perdue. Les coordonnées UV originales ne correspondent plus à rien.
+      </div>
+      <div class="card co">
+        <h3>🎨 Pipeline en 5 étapes</h3>
+        <div class="step-row"><span class="step-num">1</span><div class="step-text"><strong>LSCM unwrap</strong> — génère des UVs propres sur le low poly. Minimise la distorsion angulaire.</div></div>
+        <div class="step-row"><span class="step-num">2</span><div class="step-text"><strong>KDTree</strong> construit sur les vertices du high poly</div></div>
+        <div class="step-row"><span class="step-num">3</span><div class="step-text">Pour chaque vertex low poly → vertex high poly le plus proche → UV → couleur dans la texture originale</div></div>
+        <div class="step-row"><span class="step-num">4</span><div class="step-text"><strong>Rasterisation</strong> triangle par triangle, interpolation par coordonnées barycentriques</div></div>
+        <div class="step-row"><span class="step-num">5</span><div class="step-text">Export GLB low poly + UVs nouveaux + <strong>texture 1024×1024 embarquée</strong></div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card cg_" style="margin-bottom:.7em;">
+        <h3>📊 Résultat concret</h3>
+        <p>Un mesh low poly (<strong>3 000 faces</strong>) avec une texture 1024×1024 qui capture visuellement les détails du high poly original (<strong>50 000 faces</strong>).</p>
+        <p style="margin-top:.4em;">Ratio qualité visuelle / coût GPU bien meilleur qu'un high poly direct.</p>
+      </div>
+      <div class="learn-box">
+        <h3 style="color:var(--accent3); margin:0 0 .35em;">💡 Honnêteté sur la précision</h3>
+        <p style="margin:0; color:rgba(255,255,255,.8);">L'approche KDTree vertex-to-vertex est une <strong>approximation</strong>. Un raycasting perpendiculaire à la surface serait plus précis aux bords (Blender / xNormal font mieux). La valeur ici est l'<strong>automatisation en un clic</strong>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     11 – AUTO-LOD + ANALYSE QUALITÉ
+════════════════════════════════════════ -->
+<section>
+  <h2>Auto-LOD &amp; Analyse qualité</h2>
+  <div class="two-col">
+    <div>
+      <h3 style="margin-bottom:.4em;">📊 Auto-LOD — 4 niveaux en une opération</h3>
+      <table style="margin-bottom:.7em;">
+        <thead>
+          <tr><th>Niveau</th><th>Faces gardées</th><th>Usage</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>LOD0</strong></td><td class="td-good">100%</td><td>Gros plan, cutscene</td></tr>
+          <tr><td><strong>LOD1</strong></td><td>50%</td><td>Distance moyenne</td></tr>
+          <tr><td><strong>LOD2</strong></td><td class="td-warn">25%</td><td>Distance élevée</td></tr>
+          <tr><td><strong>LOD3</strong></td><td class="td-bad">10%</td><td>Très grande distance</td></tr>
+        </tbody>
+      </table>
+      <div class="info-box">
+        Export ZIP des 4 GLB · Switch de prévisualisation dans le viewer · Implémenté via QEM (3 appels, ratios différents)
+      </div>
+    </div>
+    <div>
+      <h3 style="margin-bottom:.4em;">🔬 Modes de diagnostic visuel</h3>
+      <div class="card cb" style="margin-bottom:.5em;">
+        <h3>🌡️ Heatmap face quality</h3>
+        <p>Aspect ratio par triangle — vert (équilatéral) → rouge (dégénéré). Diagnostic immédiat de la qualité de la retopo.</p>
+      </div>
+      <div class="card co" style="margin-bottom:.5em;">
+        <h3>🔴 Boundary edges</h3>
+        <p>Arêtes non-partagées en rouge — visualise les trous et bords ouverts du mesh.</p>
+      </div>
+      <div class="card cy" style="margin-bottom:.5em;">
+        <h3>🟡 Non-manifold edges</h3>
+        <p>Arêtes partagées par 3+ faces en jaune — problème topologique qui casse beaucoup d'algorithmes.</p>
+      </div>
+      <div class="card cp">
+        <h3>📏 Hausdorff distance</h3>
+        <p>Heatmap de l'écart géométrique entre deux meshes — valide qu'une retopo n'a pas trop déformé l'original.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     12 – DIV : ARCHITECTURE
+════════════════════════════════════════ -->
+<section class="div-slide">
+  <h2>🏗️ Architecture &amp; Stack</h2>
+  <p>Infrastructure, task system et choix techniques</p>
+</section>
+
+<!-- ════════════════════════════════════════
+     13 – ARCHITECTURE
+════════════════════════════════════════ -->
+<section>
+  <h2>Architecture technique</h2>
+  <div class="two-col">
+    <div>
+      <pre><code class="language-text">Navigateur
+    │ REST API (axios)
+    ▼
+FastAPI  (VPS ~10€/mois, pas de GPU)
+    ├── File de tâches async (thread workers)
+    ├── Trimesh · PyMeshLab · SciPy · NumPy
+    └── Instant Meshes (subprocess C++)
+         │
+         ├── RunPod Serverless
+         │   └── GPU A40/A100 à la demande
+         │       TRELLIS (~45s, ~0.05$/run)
+         │
+         └── Docker worker (VPS ou machine locale)
+             └── Unique3D (dépendances CUDA)</code></pre>
+      <div class="info-box" style="margin-top:.6em;">
+        <strong>Pourquoi cette archi :</strong> Le VPS ne paie que les opérations légères (retopo, baking). Les opérations GPU sont déléguées à RunPod — on paie ~45s de GPU par génération, pas un GPU en permanence.
+      </div>
+    </div>
+    <div>
+      <div class="card cb" style="margin-bottom:.6em;">
+        <h3>⚡ Task System</h3>
+        <ul>
+          <li>Pool de workers threads (FastAPI)</li>
+          <li>Frontend poll <code>/tasks/{id}</code> jusqu'à completion</li>
+          <li>Timeout : 5 minutes</li>
+          <li>Retry réseau : ×3 avec <strong>backoff exponentiel</strong></li>
+        </ul>
+      </div>
+      <div class="card co" style="margin-bottom:.6em;">
+        <h3>📦 GLB-First</h3>
+        <ul>
+          <li>Tous les fichiers stockés et servis en GLB</li>
+          <li>Imports OBJ, PLY, STL → convertis à l'upload</li>
+          <li>Un seul format côté frontend</li>
+          <li>Three.js charge les GLB natif avec textures embarquées</li>
+        </ul>
+      </div>
+      <div class="card cp">
+        <h3>📊 Coût infrastructure</h3>
+        <ul>
+          <li>VPS : ~10€/mois (opérations CPU)</li>
+          <li>RunPod TRELLIS : ~0.05$/génération</li>
+          <li>Stability AI : facturation à l'usage</li>
+          <li>Unique3D : 0€ (auto-hébergé)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     14 – STACK
+════════════════════════════════════════ -->
+<section>
+  <h2>Stack complète</h2>
+  <div class="two-col">
+    <div>
+      <h3 style="margin-bottom:.4em; color:var(--accent);">Backend Python</h3>
+      <table>
+        <thead><tr><th>Technologie</th><th>Rôle</th></tr></thead>
+        <tbody>
+          <tr><td><strong>FastAPI</strong></td><td>Backend async, Pydantic, doc auto</td></tr>
+          <tr><td><strong>Trimesh</strong></td><td>Chargement GLB, QEM, LSCM, convex hull</td></tr>
+          <tr><td><strong>PyMeshLab</strong></td><td>Triangulation N-gons (post Instant Meshes)</td></tr>
+          <tr><td><strong>SciPy / NumPy</strong></td><td>KDTree baking, calculs matriciels</td></tr>
+          <tr><td><strong>Pillow</strong></td><td>Lecture/écriture textures PNG</td></tr>
+          <tr><td><strong>Open3D + scikit-learn</strong></td><td>Segmentation par courbure (KMeans normales)</td></tr>
+          <tr><td><strong>Instant Meshes</strong></td><td>Remaillage field-aligned C++ (subprocess)</td></tr>
+          <tr><td><strong>Docker</strong></td><td>Isolation worker Unique3D + dép. CUDA</td></tr>
+          <tr><td><strong>RunPod Serverless</strong></td><td>GPU A40/A100 à la demande</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3 style="margin-bottom:.4em; color:var(--accent3);">Frontend React</h3>
+      <table>
+        <thead><tr><th>Technologie</th><th>Rôle</th></tr></thead>
+        <tbody>
+          <tr><td><strong>React Three Fiber</strong></td><td>Rendu 3D déclaratif dans React</td></tr>
+          <tr><td><strong>@react-three/drei</strong></td><td>OrbitControls, HDRI, ContactShadows</td></tr>
+          <tr><td><strong>Rapier (WASM)</strong></td><td>Physique temps réel — Rust compilé WebAssembly</td></tr>
+          <tr><td><strong>Vite</strong></td><td>Build, HMR instantané</td></tr>
+          <tr><td><strong>Tailwind CSS</strong></td><td>Styling utilitaire</td></tr>
+        </tbody>
+      </table>
+      <div class="learn-box" style="margin-top:.7em;">
+        <h3 style="color:var(--accent3); margin:0 0 .3em;">💡 Rapier (WASM)</h3>
+        <p style="margin:0; color:rgba(255,255,255,.8);">Moteur physique Rust compilé en WebAssembly — physique temps réel directement dans le navigateur, sans serveur.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     15 – CE QUE J'AI APPRIS
+════════════════════════════════════════ -->
+<section>
+  <h2>Ce que ce projet m'a appris</h2>
+  <div class="cg cg2">
+    <div class="learn-box" style="margin-bottom:.5em;">
+      <h3 style="color:var(--accent3); margin:0 0 .3em;">🤖 Sur les sorties IA</h3>
+      <p style="margin:0; color:rgba(255,255,255,.8);">Les modèles sont très différents dans leurs sorties. TRELLIS = meilleure qualité visuelle mais pire topologie. TripoSR = meshes propres mais moins détaillés. <strong>Il n'y a pas de provider universellement meilleur</strong> — ça dépend de l'usage final.</p>
+    </div>
+    <div class="learn-box" style="margin-bottom:.5em;">
+      <h3 style="color:var(--accent3); margin:0 0 .3em;">🔄 Sur la retopologie automatique</h3>
+      <p style="margin:0; color:rgba(255,255,255,.8);">Il n'existe pas de solution parfaite pour retopologiser des meshes non-watertight. Instant Meshes est excellent sur des meshes propres, inutilisable sur des scènes TRELLIS très fragmentées. <strong>Le vrai problème est en amont</strong> : des modèles génératifs qui produisent directement des meshes watertight.</p>
+    </div>
+    <div class="learn-box" style="margin-bottom:.5em;">
+      <h3 style="color:var(--accent3); margin:0 0 .3em;">🎨 Sur le texture baking</h3>
+      <p style="margin:0; color:rgba(255,255,255,.8);">L'approximation KDTree est <strong>suffisante pour un usage web interactif</strong>. La précision d'un Blender est inutile quand l'objectif est une prévisualisation à 60fps dans un navigateur.</p>
+    </div>
+    <div class="learn-box">
+      <h3 style="color:var(--accent3); margin:0 0 .3em;">☁️ Sur l'infrastructure GPU</h3>
+      <p style="margin:0; color:rgba(255,255,255,.8);">RunPod Serverless est une excellente solution pour accéder à des GPU haut de gamme sans infrastructure fixe. La <strong>latence de cold start (~10s)</strong> est le seul inconvénient notable.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     16 – PROCHAINES ÉTAPES
+════════════════════════════════════════ -->
+<section>
+  <h2>Prochaines étapes identifiées</h2>
+  <div class="cg cg3" style="margin-bottom:.8em;">
+    <div class="card co">
+      <h3>🔗 Re-baking post-simplification</h3>
+      <p>La logique est implémentée pour la retopo, pas encore branchée sur la simplification. <strong>Le chaînon manquant évident</strong> du pipeline.</p>
+    </div>
+    <div class="card cp">
+      <h3>🎯 Raycasting pour le baking</h3>
+      <p>Remplacer le KDTree vertex-to-vertex par un <strong>vrai raycasting perpendiculaire à la surface</strong> pour améliorer la précision aux bords.</p>
+    </div>
+    <div class="card cb">
+      <h3>🤖 Modèles génératifs watertight</h3>
+      <p>Le vrai problème de la retopo sur TRELLIS se résoudrait en amont avec un modèle qui génère directement des meshes fermés.</p>
+    </div>
+  </div>
+  <div class="cg cg2">
+    <div class="card cg_">
+      <h3>✅ Déjà implémenté</h3>
+      <ul>
+        <li>4 providers 3D intégrés (interface unifiée)</li>
+        <li>Retopologie Instant Meshes + sanitization auto</li>
+        <li>Texture baking KDTree + LSCM</li>
+        <li>Auto-LOD × 4 + export ZIP</li>
+        <li>Analyse qualité : 4 modes de diagnostic visuel</li>
+        <li>Benchmark objectif des providers</li>
+        <li>Architecture VPS + RunPod Serverless</li>
+      </ul>
+    </div>
+    <div class="card cy">
+      <h3>⏳ En cours / identifié</h3>
+      <ul>
+        <li>Re-baking post-simplification</li>
+        <li>Raycasting précis pour le baking</li>
+        <li>Support meshes non-watertight TRELLIS</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════
+     17 – CONCLUSION / LIENS
+════════════════════════════════════════ -->
+<section>
+  <div style="text-align:center; margin-bottom:.9em;">
+    <h2 style="border:none; color:var(--accent3); font-size:1.7em;">AnyMesh — en résumé</h2>
+    <p style="font-size:.72em; opacity:.6;">Pipeline 3D post-génération IA, du brut au prêt-production</p>
+  </div>
+  <div class="cg cg4" style="margin-bottom:1em;">
+    <div class="card cb" style="text-align:center;">
+      <div class="big-stat">4</div>
+      <p style="margin-top:.25em;">Providers IA<br/>intégrés</p>
+    </div>
+    <div class="card co" style="text-align:center;">
+      <div class="big-stat" style="color:var(--accent2);">5</div>
+      <p style="margin-top:.25em;">Étapes de<br/>pipeline</p>
+    </div>
+    <div class="card cp" style="text-align:center;">
+      <div class="big-stat" style="color:var(--accent3);">4</div>
+      <p style="margin-top:.25em;">Modes de<br/>diagnostic</p>
+    </div>
+    <div class="card cg_" style="text-align:center;">
+      <div class="big-stat" style="color:var(--green);">10€</div>
+      <p style="margin-top:.25em;">/mois<br/>infrastructure</p>
+    </div>
+  </div>
+  <div class="cg cg3">
+    <div class="card cb" style="text-align:center;">
+      <h3 style="font-size:1em;">🌐 Démo live</h3>
+      <p style="font-size:.8em; color:var(--accent);">[lien VPS]</p>
+    </div>
+    <div class="card cp" style="text-align:center;">
+      <h3 style="font-size:1em;">💻 Repo GitHub</h3>
+      <p style="font-size:.8em; color:var(--accent3);">[lien repo]</p>
+    </div>
+    <div class="card co" style="text-align:center;">
+      <h3 style="font-size:1em;">🎬 Démo vidéo</h3>
+      <p style="font-size:.8em; color:var(--accent2);">[lien Loom]</p>
+    </div>
+  </div>
+</section>
+
+</div><!-- /.slides -->
+</div><!-- /.reveal -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'slide',
+    transitionSpeed: 'fast',
+    backgroundTransition: 'fade',
+    controls: true,
+    progress: true,
+    center: false,
+    width: 1280,
+    height: 720,
+    margin: 0.04,
+    plugins: []
+  });
+  document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+</script>
+</body>
+</html>
