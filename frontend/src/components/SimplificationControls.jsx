@@ -3,7 +3,6 @@ import { useState } from 'react'
 function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoadOriginal, currentTask, isProcessing }) {
   // Niveaux de simplification: 0 = Basse, 1 = Moyenne, 2 = Forte
   const [simplificationLevel, setSimplificationLevel] = useState(1)
-  const [preserveBoundary, setPreserveBoundary] = useState(true)
 
   // Mapper les niveaux vers des ratios de réduction
   const levelToRatio = {
@@ -39,7 +38,6 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
         mode: 'standard',
         filename: filenameForSimplification,
         reduction_ratio: reductionRatio,
-        preserve_boundary: preserveBoundary,
         is_generated: isGenerated
       })
     }
@@ -230,32 +228,6 @@ function SimplificationControls({ meshInfo, onSimplify, onLoadSimplified, onLoad
             </div>
           </div>
         )}
-
-        {/* Options avancees */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-sm)' }}>
-          <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-text-secondary)' }}>Options avancees</h3>
-
-          {/* Option preserve_boundary */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--v2-spacing-xs)', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={preserveBoundary}
-              onChange={(e) => setPreserveBoundary(e.target.checked)}
-              disabled={isProcessing || isSimplifiedMesh || isRetopologizedMesh}
-              style={{
-                width: '16px',
-                height: '16px',
-                accentColor: 'var(--v2-accent-primary)',
-                cursor: (isProcessing || isSimplifiedMesh || isRetopologizedMesh) ? 'not-allowed' : 'pointer',
-                opacity: (isProcessing || isSimplifiedMesh || isRetopologizedMesh) ? 0.5 : 1
-                }}
-              />
-              <span style={{ fontSize: '0.875rem', color: 'var(--v2-text-secondary)' }}>
-                Preserver les bords du maillage
-              </span>
-            </label>
-
-        </div>
 
         {/* Bouton de simplification */}
         <button

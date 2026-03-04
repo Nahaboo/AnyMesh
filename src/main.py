@@ -28,7 +28,7 @@ from pydantic import BaseModel
 import trimesh
 
 from .task_manager import task_manager, Task
-from .simplify import simplify_mesh, adaptive_simplify_mesh, simplify_mesh_glb
+from .simplify import simplify_mesh_glb
 from .converter import convert_mesh_format, convert_any_to_glb
 from .mamouth_client import generate_image_from_prompt, generate_texture_from_prompt, infer_physics_from_prompt
 from .retopology import retopologize_mesh, retopologize_mesh_glb
@@ -68,7 +68,6 @@ async def lifespan(app: FastAPI):
 
     # Enregistrer les handlers de tâches
     task_manager.register_handler("simplify", simplify_task_handler)
-    task_manager.register_handler("simplify_adaptive", adaptive_simplify_task_handler)
     task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
     task_manager.register_handler("retopologize", retopologize_task_handler)
     task_manager.register_handler("segment", segment_task_handler)
@@ -190,15 +189,6 @@ class SimplifyRequest(BaseModel):
     filename: str
     target_triangles: Optional[int] = None
     reduction_ratio: Optional[float] = None
-    preserve_boundary: bool = True
-    is_generated: bool = False  # Si True, cherche dans data/generated_meshes
-
-class AdaptiveSimplifyRequest(BaseModel):
-    """Paramètres de simplification adaptative"""
-    filename: str
-    target_ratio: float = 0.5  # Ratio de reduction de base (0.0 - 1.0)
-    flat_multiplier: float = 2.0  # Multiplicateur pour zones plates (1.0 - 3.0)
-    curvature_threshold: Optional[float] = None  # Seuil auto si None
     is_generated: bool = False  # Si True, cherche dans data/generated_meshes
 
 class GenerateMeshRequest(BaseModel):
@@ -720,163 +710,38 @@ def simplify_task_handler(task: Task):
     params = task.params
     input_path = Path(params["input_file"])
     output_path = Path(params["output_file"])
-    reduction_ratio = params.get("reduction_ratio", 0.5)
 
-    try:
-        from .geometry_engine import to_pyvista, MeshSanitizer
-        from .simplify import simplify_mesh_pyvista
-
-        # 1. Chargement universel (GLB, OBJ, STL, PLY -> PolyData)
-        pv_mesh = to_pyvista(input_path)
-        original_faces = pv_mesh.n_cells
-        original_vertices = pv_mesh.n_points
-
-        # 2. Sanitization si mesh IA (sorties non-manifold de TripoSR)
-        if params.get("is_generated", False):
-            sanitizer = MeshSanitizer()
-            cloud = sanitizer.sample_mesh_to_cloud(
-                trimesh.Trimesh(vertices=pv_mesh.points, faces=pv_mesh.faces.reshape(-1, 4)[:, 1:])
-            )
-            surface = sanitizer.reconstruct_surface(cloud)
-            pv_mesh = surface
-
-        # 3. Decimation VTK
-        simplified = simplify_mesh_pyvista(pv_mesh, reduction_ratio=reduction_ratio)
-
-        # 4. Export GLB via Trimesh
-        faces_back = simplified.faces.reshape(-1, 4)[:, 1:]
-        final = trimesh.Trimesh(vertices=simplified.points, faces=faces_back)
-        final.export(str(output_path), file_type='glb')
-
-        simplified_faces = simplified.n_cells
-        simplified_vertices = simplified.n_points
-
-        # 5. Contrat API frontend
-        return {
-            'success': True,
-            'output_filename': output_path.name,
-            'output_file': str(output_path),
-            'output_size': output_path.stat().st_size,
-            'vertices_count': simplified_vertices,
-            'faces_count': simplified_faces,
-            'original': {
-                'vertices': original_vertices,
-                'triangles': original_faces
-            },
-            'simplified': {
-                'vertices': simplified_vertices,
-                'triangles': simplified_faces
-            },
-            'reduction': {
-                'vertices_ratio': 1 - (simplified_vertices / original_vertices) if original_vertices > 0 else 0,
-                'triangles_ratio': 1 - (simplified_faces / original_faces) if original_faces > 0 else 0
-            }
-        }
-
-    except Exception as e:
-        logger.error(f"[SIMPLIFY] Failed: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'output_filename': output_path.name,
-            'faces_count': 0,
-            'vertices_count': 0
-        }
-
-
-def adaptive_simplify_task_handler(task: Task):
-    """Handler qui exécute la simplification adaptative d'un maillage"""
-    params = task.params
-    input_file = params["input_file"]
-    output_file = params["output_file"]
-    target_ratio = params.get("target_ratio", 0.5)
-    flat_multiplier = params.get("flat_multiplier", 2.0)
-    curvature_threshold = params.get("curvature_threshold")
-    is_generated = params.get("is_generated", False)
-
-    logger.info(f"[ADAPTIVE SIMPLIFY] Starting: {Path(input_file).name} (ratio={target_ratio}, flat_mult={flat_multiplier}x)")
-
-    # Si le fichier est un GLB, le convertir en OBJ pour la simplification
-    input_path = Path(input_file)
-    if input_path.suffix.lower() == '.glb':
-        logger.debug("Converting GLB to OBJ for simplification...")
-        temp_obj_filename = f"{input_path.stem}_temp.obj"
-        temp_obj_file = input_path.parent / temp_obj_filename
-
-        from .converter import convert_mesh_format
-        conversion_result = convert_mesh_format(
-            input_path=input_path,
-            output_path=temp_obj_file,
-            output_format='obj'
-        )
-
-        if not conversion_result['success']:
-            return {
-                'success': False,
-                'error': f"Conversion GLB→OBJ échouée: {conversion_result.get('error')}"
-            }
-
-        # Utiliser le fichier OBJ temporaire comme input
-        input_file = str(temp_obj_file)
-        logger.debug(f"Using temporary OBJ: {temp_obj_filename}")
-
-    # Exécute la simplification adaptative
-    # TEMPORAIRE: Utiliser Trimesh en mode standard (pas de vraie adaptation)
-    # car Open3D donne de mauvais résultats sur les gros modèles
-    result = simplify_mesh(
-        input_path=Path(input_file),
-        output_path=Path(output_file),
-        reduction_ratio=target_ratio,
-        preserve_boundary=True,
-        use_trimesh=True  # Utiliser Trimesh
+    result = simplify_mesh_glb(
+        input_path=input_path,
+        output_path=output_path,
+        target_triangles=params.get("target_triangles"),
+        reduction_ratio=params.get("reduction_ratio", 0.5)
     )
 
     if result.get('success'):
-        logger.info("[ADAPTIVE SIMPLIFY] Completed successfully")
-
-        # Afficher les stats adaptatives
-        adaptive_stats = result.get('adaptive_stats', {})
-        logger.debug(f"Flat regions: {adaptive_stats.get('flat_percentage', 0):.1f}% of mesh")
-        logger.debug(f"Flat triangles: {adaptive_stats.get('flat_triangles_original', 0)} -> {adaptive_stats.get('flat_triangles_final', 0)}")
-        logger.debug(f"Curved triangles: {adaptive_stats.get('curved_triangles_original', 0)} -> {adaptive_stats.get('curved_triangles_final', 0)}")
-
-        # Transformer le résultat pour le frontend
-        output_path = Path(output_file)
-        result_data = {
-            'success': True,
-            'output_filename': output_path.name,
-            'output_file': str(output_path),
-            'output_size': result.get('output_size', 0),
-            'vertices_count': result.get('simplified_vertices', 0),
-            'faces_count': result.get('simplified_triangles', 0),
-            'original': {
-                'vertices': result.get('original_vertices', 0),
-                'triangles': result.get('original_triangles', 0)
-            },
-            'simplified': {
-                'vertices': result.get('simplified_vertices', 0),
-                'triangles': result.get('simplified_triangles', 0)
-            },
-            'reduction': {
-                'vertices_ratio': result.get('vertices_ratio', 0),
-                'triangles_ratio': result.get('triangles_ratio', 0)
-            },
-            'adaptive_stats': adaptive_stats
+        result['output_filename'] = output_path.name
+        result['vertices_count'] = result['simplified_vertices']
+        result['faces_count'] = result['simplified_triangles']
+        result['original'] = {
+            'vertices': result['original_vertices'],
+            'triangles': result['original_triangles']
         }
-
-        # Nettoyer le fichier OBJ temporaire si on a converti depuis GLB
-        if '_temp.obj' in str(input_file) and Path(input_file).exists():
-            logger.debug("Removing temporary OBJ file")
-            Path(input_file).unlink()
-
-        return result_data
-
-    # En cas d'échec, nettoyer quand même le fichier temporaire
-    if '_temp.obj' in str(input_file) and Path(input_file).exists():
-        logger.debug("Removing temporary OBJ file")
-        Path(input_file).unlink()
+        result['simplified'] = {
+            'vertices': result['simplified_vertices'],
+            'triangles': result['simplified_triangles']
+        }
+        result['reduction'] = {
+            'vertices_ratio': result['vertices_ratio'],
+            'triangles_ratio': result['triangles_ratio']
+        }
+    else:
+        logger.error(f"[SIMPLIFY] Failed: {result.get('error')}")
+        result['output_filename'] = output_path.name
+        result['faces_count'] = 0
+        result['vertices_count'] = 0
 
     return result
+
 
 @app.post("/simplify")
 async def simplify_mesh_async(request: SimplifyRequest):
@@ -906,7 +771,6 @@ async def simplify_mesh_async(request: SimplifyRequest):
             "output_file": str(output_path),
             "target_triangles": request.target_triangles,
             "reduction_ratio": request.reduction_ratio,
-            "preserve_boundary": request.preserve_boundary,
             "is_generated": request.is_generated
         }
     )
@@ -917,44 +781,6 @@ async def simplify_mesh_async(request: SimplifyRequest):
         "output_filename": output_filename
     }
 
-@app.post("/simplify-adaptive")
-async def simplify_mesh_adaptive_async(request: AdaptiveSimplifyRequest):
-    """
-    GLB-First: Lance une tâche de simplification adaptative en arrière-plan.
-
-    Détecte les zones plates et les simplifie plus agressivement.
-    Note: Cette fonctionnalité n'a pas encore de version GLB-native.
-    """
-    # Déterminer le dossier source selon is_generated
-    source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
-    input_path = source_dir / request.filename
-
-    # Vérification que le fichier existe
-    if not input_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {request.filename}")
-
-    # GLB-First: Sortie en GLB
-    output_filename = f"{input_path.stem}_adaptive.glb"
-    output_path = DATA_OUTPUT / output_filename
-
-    # Création de la tâche
-    task_id = task_manager.create_task(
-        task_type="simplify_adaptive",
-        params={
-            "input_file": str(input_path),
-            "output_file": str(output_path),
-            "target_ratio": request.target_ratio,
-            "flat_multiplier": request.flat_multiplier,
-            "curvature_threshold": request.curvature_threshold,
-            "is_generated": request.is_generated
-        }
-    )
-
-    return {
-        "task_id": task_id,
-        "message": "Tâche de simplification adaptative créée",
-        "output_filename": output_filename
-    }
 
 def sanitize_task_handler(task: Task):
     params = task.params
@@ -2182,7 +2008,8 @@ async def retopologize(request: RetopologyRequest):
             "deterministic": request.deterministic,
             "preserve_boundaries": request.preserve_boundaries,
             "is_generated": request.is_generated,
-            "is_simplified": request.is_simplified
+            "is_simplified": request.is_simplified,
+            "bake_textures": request.bake_textures
         }
     )
 
