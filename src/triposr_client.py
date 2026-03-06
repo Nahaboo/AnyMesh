@@ -1,9 +1,6 @@
 """
-Client local TripoSR pour generation de mesh 3D
-Alternative gratuite a Stability AI Fast 3D
-
-TripoSR est un modele open-source co-developpe par Tripo AI et Stability AI
-qui genere des meshes 3D a partir d'une seule image en < 0.5 sec sur GPU.
+Local TripoSR client for 3D mesh generation.
+Open-source model co-developed by Tripo AI and Stability AI. Generates meshes from a single image in < 0.5s on GPU.
 """
 
 import sys
@@ -12,18 +9,18 @@ import trimesh
 from pathlib import Path
 from typing import Dict
 
-# Ajouter TripoSR au path Python
+# Add TripoSR to Python path
 TRIPOSR_PATH = Path(__file__).parent.parent / "tools" / "TripoSR"
 if str(TRIPOSR_PATH) not in sys.path:
     sys.path.insert(0, str(TRIPOSR_PATH))
 
-# Cache global pour le modele (evite de le recharger a chaque appel)
+# Global model cache to avoid reloading on every call
 _model_cache = None
 _model_device = None
 
 
 def _get_model(device: str):
-    """Charge le modele TripoSR (cache apres premier appel)"""
+    """Load the TripoSR model, cached after the first call."""
     global _model_cache, _model_device
 
     if _model_cache is not None and _model_device == device:
@@ -53,30 +50,13 @@ def generate_mesh_from_image_triposr(
     foreground_ratio: float = 0.85
 ) -> Dict:
     """
-    Genere un mesh 3D a partir d'une image avec TripoSR (local, gratuit)
+    Generate a 3D mesh from an image using local TripoSR. Free, no API key required.
 
-    Args:
-        image_path: Chemin vers l'image d'entree (JPG/PNG)
-        output_path: Chemin de sortie (.glb)
-        resolution: 'low', 'medium', 'high' (affecte marching cubes resolution)
-        foreground_ratio: Ratio de l'objet dans l'image (0.5-1.0)
-
-    Returns:
-        Dict avec resultats de generation:
-        {
-            'success': bool,
-            'output_file': str,
-            'vertices_count': int,
-            'faces_count': int,
-            'resolution': str,
-            'generation_time_ms': float,
-            'method': 'triposr_local',
-            'api_credits_used': 0
-        }
+    resolution controls marching cubes resolution: low=128, medium=256, high=512.
     """
     start_time = time.time()
 
-    # Mapping resolution -> marching cubes resolution
+    # Resolution to marching cubes resolution mapping
     MC_RESOLUTION = {
         'low': 128,
         'medium': 256,
@@ -85,7 +65,7 @@ def generate_mesh_from_image_triposr(
     mc_res = MC_RESOLUTION.get(resolution, 256)
 
     try:
-        # Imports lazy pour eviter chargement au demarrage du serveur
+        # Lazy imports to avoid loading at server startup
         from tsr.utils import remove_background, resize_foreground
         from PIL import Image
         import torch
@@ -95,31 +75,31 @@ def generate_mesh_from_image_triposr(
         print(f"  Input: {image_path.name}")
         print(f"  Resolution: {resolution} (mc={mc_res})")
 
-        # Detecter device
+        # Detect device
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         print(f"  Device: {device}")
 
         if device == "cpu":
             print("  [WARN] Running on CPU - this will be slow!")
 
-        # Charger le modele (cache)
+        # Load model (cached)
         model = _get_model(device)
 
-        # Pretraitement de l'image (identique au pipeline officiel run.py)
+        # Image preprocessing (matches the official run.py pipeline)
         print(f"  Preprocessing image...")
         image = remove_background(Image.open(image_path), force=True)
         image = resize_foreground(image, foreground_ratio)
-        # Fond gris 50% via alpha compositing (comme le pipeline officiel)
+        # 50% grey background via alpha compositing (matches official pipeline)
         image = np.array(image).astype(np.float32) / 255.0
         image = image[:, :, :3] * image[:, :, 3:4] + (1 - image[:, :, 3:4]) * 0.5
         image = Image.fromarray((image * 255.0).astype(np.uint8))
 
-        # Generation
+        # Generate 3D representation
         print(f"  Generating 3D representation...")
         with torch.no_grad():
             scene_codes = model([image], device=device)
 
-        # Extraction du mesh
+        # Extract mesh
         print(f"  Extracting mesh (resolution={mc_res})...")
         meshes = model.extract_mesh(
             scene_codes,
@@ -129,15 +109,14 @@ def generate_mesh_from_image_triposr(
         )
         mesh = meshes[0]
 
-        # GLB-First: Forcer extension .glb
+        # GLB-First: force .glb extension
         if output_path.suffix.lower() != '.glb':
             output_path = output_path.with_suffix('.glb')
 
-        # Exporter en GLB
         print(f"  Exporting to GLB: {output_path.name}")
         mesh.export(str(output_path), file_type='glb')
 
-        # Recharger pour stats (trimesh)
+        # Reload for stats
         final_mesh = trimesh.load(str(output_path))
         if hasattr(final_mesh, 'geometry'):
             meshes_list = list(final_mesh.geometry.values())
@@ -162,7 +141,7 @@ def generate_mesh_from_image_triposr(
             'resolution': resolution,
             'generation_time_ms': round(generation_time, 2),
             'method': 'triposr_local',
-            'api_credits_used': 0  # Gratuit !
+            'api_credits_used': 0  # Free
         }
 
     except ImportError as e:
@@ -170,17 +149,17 @@ def generate_mesh_from_image_triposr(
         if 'tsr' in error_msg.lower():
             return {
                 'success': False,
-                'error': f"TripoSR non installe. Installez avec: pip install -r tools/TripoSR/requirements.txt"
+                'error': f"TripoSR not installed. Run: pip install -r tools/TripoSR/requirements.txt"
             }
         return {
             'success': False,
-            'error': f"Dependance manquante: {error_msg}"
+            'error': f"Missing dependency: {error_msg}"
         }
 
     except torch.cuda.OutOfMemoryError:
         return {
             'success': False,
-            'error': "Memoire GPU insuffisante. Essayez une resolution plus basse ou liberez de la VRAM."
+            'error': "Insufficient GPU memory. Try a lower resolution or free some VRAM."
         }
 
     except Exception as e:
@@ -188,6 +167,6 @@ def generate_mesh_from_image_triposr(
         traceback.print_exc()
         return {
             'success': False,
-            'error': f"Erreur TripoSR: {str(e)}",
+            'error': f"TripoSR error: {str(e)}",
             'error_type': type(e).__name__
         }

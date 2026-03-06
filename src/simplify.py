@@ -1,5 +1,5 @@
 """
-Module de simplification de maillages 3D — GLB-First via pyfqmr QEM
+3D mesh simplification using pyfqmr Quadric Error Metric (QEM). GLB-first.
 """
 
 from pathlib import Path
@@ -16,43 +16,32 @@ def simplify_mesh_glb(
     reduction_ratio: float = None
 ) -> Dict[str, Any]:
     """
-    Simplifie un GLB directement avec l'algorithme Quadric Error Metric de Trimesh.
+    Simplify a GLB using Quadric Error Metric (pyfqmr).
 
-    ATTENTION: Les textures sont perdues lors de la simplification
-    car les UVs deviennent invalides après modification de la géométrie.
-
-    Args:
-        input_path: Chemin vers le fichier GLB d'entrée
-        output_path: Chemin vers le fichier GLB de sortie
-        target_triangles: Nombre cible de triangles (prioritaire sur reduction_ratio)
-        reduction_ratio: Ratio de réduction (0.0 - 1.0), ex: 0.5 = garder 50% des faces
-
-    Returns:
-        Dictionnaire contenant les statistiques de simplification
+    Textures are always lost: UVs become invalid after geometry modification.
+    target_triangles takes priority over reduction_ratio.
     """
     try:
         if not input_path.exists():
-            return {'success': False, 'error': f"Fichier introuvable: {input_path}"}
+            return {'success': False, 'error': f"File not found: {input_path}"}
 
         if target_triangles is None and reduction_ratio is None:
-            return {'success': False, 'error': "Spécifier target_triangles ou reduction_ratio"}
+            return {'success': False, 'error': "Specify target_triangles or reduction_ratio"}
 
-        # Charger le GLB avec Trimesh
         loaded = trimesh.load(str(input_path))
 
-        # Gérer les Scenes (plusieurs meshes dans un GLB)
         if hasattr(loaded, 'geometry'):
             meshes = list(loaded.geometry.values())
             if not meshes:
-                return {'success': False, 'error': 'Scene vide, aucune geometrie'}
+                return {'success': False, 'error': 'Empty scene, no geometry'}
             mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
         else:
             mesh = loaded
 
         if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:
-            return {'success': False, 'error': 'Pas de vertices valides'}
+            return {'success': False, 'error': 'No valid vertices'}
         if not hasattr(mesh, 'faces') or len(mesh.faces) == 0:
-            return {'success': False, 'error': 'Pas de faces valides'}
+            return {'success': False, 'error': 'No valid faces'}
 
         had_textures = (
             hasattr(mesh, 'visual') and
@@ -68,8 +57,7 @@ def simplify_mesh_glb(
 
         target_triangles = max(4, min(int(target_triangles), original_triangles))
 
-        # pyfqmr : preserve_border=True protège les arêtes ouvertes (boundary edges)
-        # ce que trimesh.simplify_quadric_decimation ne supporte pas
+        # preserve_border=True protects open boundary edges, unlike trimesh.simplify_quadric_decimation
         simplifier = pyfqmr.Simplify()
         simplifier.setMesh(
             mesh.vertices.astype(np.float64),

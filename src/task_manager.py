@@ -1,5 +1,5 @@
 """
-Gestionnaire de taches asynchrones pour le traitement de maillages
+Async task queue with thread workers for mesh processing.
 """
 
 import threading
@@ -12,7 +12,7 @@ from enum import Enum
 
 
 class TaskStatus(Enum):
-    """Statuts possibles d'une tache"""
+    """Possible task statuses."""
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -20,7 +20,7 @@ class TaskStatus(Enum):
 
 
 class Task:
-    """Representation d'une tache de traitement"""
+    """A single processing task."""
 
     def __init__(self, task_id: str, task_type: str, params: Dict[str, Any]):
         self.id = task_id
@@ -35,7 +35,7 @@ class Task:
         self.completed_at = None
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convertit la tache en dictionnaire pour l'API"""
+        """Serialize the task to a dict for the API."""
         return {
             "id": self.id,
             "type": self.type,
@@ -50,15 +50,9 @@ class Task:
 
 
 class TaskManager:
-    """
-    Gestionnaire de file d'attente de taches avec workers threads
-    """
+    """Task queue with thread workers."""
 
     def __init__(self, num_workers: int = 2):
-        """
-        Args:
-            num_workers: Nombre de threads workers pour traiter les taches
-        """
         self.task_queue = queue.Queue()
         self.tasks: Dict[str, Task] = {}
         self.task_handlers: Dict[str, Callable] = {}
@@ -67,31 +61,15 @@ class TaskManager:
         self.running = False
         self.lock = threading.Lock()
 
-        # P1: Configuration du nettoyage automatique des tâches
-        self.task_ttl_seconds = 3600  # Garder les tâches terminées 1 heure
-        self.max_tasks = 1000  # Maximum 1000 tâches en mémoire
+        self.task_ttl_seconds = 3600  # Keep completed tasks for 1 hour
+        self.max_tasks = 1000  # Max tasks in memory
 
     def register_handler(self, task_type: str, handler: Callable):
-        """
-        Enregistre une fonction pour traiter un type de tache specifique
-
-        Args:
-            task_type: Type de tache (ex: "simplify")
-            handler: Fonction qui prend une Task et retourne le resultat
-        """
+        """Register a handler function for a given task type."""
         self.task_handlers[task_type] = handler
 
     def create_task(self, task_type: str, params: Dict[str, Any]) -> str:
-        """
-        Cree une nouvelle tache et l'ajoute a la file d'attente
-
-        Args:
-            task_type: Type de tache
-            params: Parametres de la tache
-
-        Returns:
-            ID de la tache creee
-        """
+        """Create a task, enqueue it, and return its ID."""
         task_id = str(uuid.uuid4())
         task = Task(task_id, task_type, params)
 
@@ -102,33 +80,28 @@ class TaskManager:
         return task_id
 
     def get_task(self, task_id: str) -> Task:
-        """Recupere une tache par son ID"""
+        """Return a task by ID."""
         with self.lock:
             return self.tasks.get(task_id)
 
     def get_all_tasks(self) -> Dict[str, Task]:
-        """Recupere toutes les taches"""
+        """Return all tasks."""
         with self.lock:
             return dict(self.tasks)
 
     def cleanup_old_tasks(self):
-        """
-        P1: Supprime les tâches terminées depuis plus de task_ttl_seconds.
-        Appelé périodiquement par les workers pour éviter les fuites mémoire.
-        """
+        """Remove completed/failed tasks older than task_ttl_seconds. Called periodically by workers."""
         now = datetime.now()
         with self.lock:
             tasks_to_remove = []
 
             for task_id, task in self.tasks.items():
-                # Seulement nettoyer les tâches terminées (completed ou failed)
                 if task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED]:
                     if task.completed_at:
                         age = (now - task.completed_at).total_seconds()
                         if age > self.task_ttl_seconds:
                             tasks_to_remove.append(task_id)
 
-            # Supprimer les vieilles tâches
             for task_id in tasks_to_remove:
                 del self.tasks[task_id]
 
@@ -136,15 +109,14 @@ class TaskManager:
                 print(f"[TASK_MANAGER] Cleaned up {len(tasks_to_remove)} old tasks (>{self.task_ttl_seconds}s)")
 
     def _worker(self, worker_id: int):
-        """Thread worker qui traite les taches de la file d'attente"""
+        """Thread worker. Processes tasks from the queue until stopped."""
         print(f"[WORKER-{worker_id}] Started and waiting for tasks...")
         while self.running:
             try:
-                # P1: Nettoyage périodique des vieilles tâches (10% de chance à chaque itération)
+                # 10% chance of cleanup per iteration to avoid memory leaks
                 if random.random() < 0.1:
                     self.cleanup_old_tasks()
 
-                # Recupere une tache avec timeout pour permettre l'arret propre
                 task_id = self.task_queue.get(timeout=1)
 
                 with self.lock:
@@ -153,7 +125,6 @@ class TaskManager:
                 if task is None:
                     continue
 
-                # Marque la tache comme en cours
                 task.status = TaskStatus.PROCESSING
                 task.started_at = datetime.now()
                 task.progress = 0
@@ -161,15 +132,12 @@ class TaskManager:
                 print(f"[WORKER-{worker_id}] Processing task {task_id[:8]}... (type: {task.type})")
 
                 try:
-                    # Execute le handler correspondant au type de tache
                     handler = self.task_handlers.get(task.type)
                     if handler is None:
-                        raise ValueError(f"Aucun handler pour le type de tache: {task.type}")
+                        raise ValueError(f"No handler for task type: {task.type}")
 
-                    # Execute la tache
                     result = handler(task)
 
-                    # Marque la tache comme completee
                     task.status = TaskStatus.COMPLETED
                     task.result = result
                     task.progress = 100
@@ -179,7 +147,6 @@ class TaskManager:
                     print(f"[WORKER-{worker_id}] Completed task {task_id[:8]} in {duration:.2f}s")
 
                 except Exception as e:
-                    # Marque la tache comme echouee
                     task.status = TaskStatus.FAILED
                     task.error = str(e)
                     task.completed_at = datetime.now()
@@ -189,12 +156,11 @@ class TaskManager:
                     self.task_queue.task_done()
 
             except queue.Empty:
-                # Pas de tache disponible, continue d'attendre
                 continue
         print(f"[WORKER-{worker_id}] Stopped")
 
     def start(self):
-        """Demarre les threads workers"""
+        """Start the worker threads."""
         if self.running:
             return
 
@@ -206,16 +172,16 @@ class TaskManager:
             self.workers.append(worker)
 
     def stop(self):
-        """Arrete les threads workers"""
+        """Stop the worker threads."""
         self.running = False
         for worker in self.workers:
             worker.join(timeout=5)
         self.workers = []
 
     def get_queue_size(self) -> int:
-        """Retourne le nombre de taches en attente"""
+        """Return the number of pending tasks."""
         return self.task_queue.qsize()
 
 
-# Instance globale du gestionnaire de taches
+# Global task manager instance
 task_manager = TaskManager(num_workers=2)

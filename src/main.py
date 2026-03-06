@@ -1,6 +1,5 @@
 """
-Backend FastAPI pour MeshSimplifier
-Fournit les endpoints pour l'upload et le traitement de maillages 3D
+FastAPI backend for AnyMesh. Provides endpoints for uploading and processing 3D meshes.
 """
 
 import os
@@ -14,7 +13,7 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 
-# Q2: Configuration du logging
+# Logging config
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] %(levelname)s - %(message)s',
@@ -35,21 +34,14 @@ from .retopology import retopologize_mesh, retopologize_mesh_glb
 from .segmentation import segment_mesh, segment_mesh_glb
 from .temp_utils import cleanup_temp_directory, safe_delete
 
-# Charger les variables d'environnement depuis .env
 load_dotenv()
 
 
-# Q1: Lifespan context manager (remplace @app.on_event deprecated)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Gestion du cycle de vie de l'application.
-    Remplace les @app.on_event("startup") et @app.on_event("shutdown") dépréciés.
-    """
-    # === STARTUP ===
+    """Application lifespan: startup and shutdown logic."""
     logger.info("=== MeshSimplifier Backend Starting ===")
 
-    # Valider la clé API Stability
     api_key = os.getenv('STABILITY_API_KEY')
     if not api_key:
         logger.warning("STABILITY_API_KEY not set - mesh generation will fail")
@@ -59,14 +51,12 @@ async def lifespan(app: FastAPI):
     else:
         logger.info(f"Stability API key loaded: {api_key[:10]}...")
 
-    # Valider la cle API Mamouth
     mamouth_key = os.getenv('MAMOUTH_API_KEY')
     if mamouth_key:
         logger.info(f"Mamouth API key loaded: {mamouth_key[:10]}...")
     else:
         logger.warning("MAMOUTH_API_KEY not set - prompt generation disabled")
 
-    # Enregistrer les handlers de tâches
     task_manager.register_handler("simplify", simplify_task_handler)
     task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
     task_manager.register_handler("retopologize", retopologize_task_handler)
@@ -81,13 +71,12 @@ async def lifespan(app: FastAPI):
     task_manager.register_handler("generate_lod", generate_lod_task_handler)
     task_manager.start()
 
-    # GLB-First: Nettoyer les fichiers temporaires au démarrage
-    logger.info("Nettoyage des fichiers temporaires...")
+    logger.info("Cleaning up temp files...")
     cleanup_temp_directory(DATA_TEMP, max_age_hours=1)
 
     logger.info("Backend started successfully")
 
-    yield  # L'application tourne ici
+    yield
 
     # === SHUTDOWN ===
     logger.info("=== MeshSimplifier Backend Stopping ===")
@@ -97,26 +86,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="MeshSimplifier API",
-    description="API pour la simplification et réparation de maillages 3D",
+    description="API for 3D mesh simplification and processing",
     version="0.2.0",
-    lifespan=lifespan  # Q1: Utilisation du nouveau système lifespan
+    lifespan=lifespan
 )
 
-# Configuration CORS - Lecture depuis variable d'environnement
-# En dev: ALLOWED_ORIGINS=* (défaut)
-# En prod: ALLOWED_ORIGINS=https://votre-frontend.vercel.app
+# CORS: read origins from ALLOWED_ORIGINS env var. Use "*" for dev, explicit origins for prod.
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
 allowed_origins = ["*"] if allowed_origins_env == "*" else [o.strip() for o in allowed_origins_env.split(",")]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=False,  # Doit être False si allow_origins contient "*"
+    allow_credentials=False,  # Must be False when allow_origins contains "*"
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Dossiers de données
+# Data directories
 DATA_INPUT = Path("data/input")
 DATA_OUTPUT = Path("data/output")
 DATA_INPUT_IMAGES = Path("data/input_images")
@@ -124,8 +111,8 @@ DATA_GENERATED_MESHES = Path("data/generated_meshes")
 DATA_RETOPO = Path("data/retopo")
 DATA_SEGMENTED = Path("data/segmented")
 DATA_GENERATED_TEXTURES = Path("data/generated_textures")
-DATA_TEMP = Path("data/temp")  # GLB-First: Fichiers temporaires pour conversions
-DATA_SAVED = Path("data/saved")  # GLB-First: Meshes sauvegardés par l'utilisateur
+DATA_TEMP = Path("data/temp")   # Temp files for format conversions
+DATA_SAVED = Path("data/saved")  # User-saved meshes
 DATA_COMPARED = Path("data/compared")
 DATA_QUALITY = Path("data/quality")
 DATA_UNWRAPPED = Path("data/unwrapped")
@@ -141,104 +128,91 @@ DATA_COMPARED.mkdir(parents=True, exist_ok=True)
 DATA_QUALITY.mkdir(parents=True, exist_ok=True)
 DATA_UNWRAPPED.mkdir(parents=True, exist_ok=True)
 
-# Formats de fichiers supportés
+# Supported file formats
 SUPPORTED_FORMATS = {".obj", ".stl", ".ply", ".off", ".gltf", ".glb"}
 SUPPORTED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png"}
 
-# Limite de taille de fichier (95 MB)
+# File size limit: 95 MB
 MAX_UPLOAD_SIZE = 95 * 1024 * 1024  # 95 MB en bytes
 
 
 def sanitize_filename(filename: str) -> str:
     """
-    Nettoie un nom de fichier pour éviter les path traversal attacks.
+    Sanitize a filename to prevent path traversal attacks.
 
-    Sécurité:
-    - Retire tout chemin (garde seulement le nom de fichier)
-    - Retire les séquences ".." dangereuses
-    - Limite aux caractères alphanumériques, points, tirets et underscores
+    Strips any directory component, removes ".." sequences,
+    and limits characters to alphanumeric, dot, dash, and underscore.
     """
     if not filename:
-        raise ValueError("Nom de fichier vide")
+        raise ValueError("Empty filename")
 
-    # Retirer tout chemin (garde seulement le nom de fichier)
     filename = os.path.basename(filename)
-
-    # Retirer les caractères dangereux de path traversal
     filename = filename.replace("..", "")
 
-    # Limiter aux caractères sûrs: alphanumériques, point, tiret, underscore
-    # Préserver l'extension en traitant séparément
     stem = Path(filename).stem
     ext = Path(filename).suffix.lower()
 
-    # Nettoyer le stem (nom sans extension)
     clean_stem = re.sub(r'[^\w\-]', '_', stem)
-
-    # Reconstruire le filename
     clean_filename = f"{clean_stem}{ext}" if ext else clean_stem
 
     if not clean_filename or clean_filename in ('.', '..'):
-        raise ValueError("Nom de fichier invalide apres nettoyage")
+        raise ValueError("Invalid filename after sanitization")
 
     return clean_filename
 
-# Modèles Pydantic
 class SimplifyRequest(BaseModel):
-    """Paramètres de simplification"""
+    """Simplification parameters."""
     filename: str
     target_triangles: Optional[int] = None
     reduction_ratio: Optional[float] = None
-    is_generated: bool = False  # Si True, cherche dans data/generated_meshes
+    is_generated: bool = False  # If True, looks in data/generated_meshes
 
 class GenerateMeshRequest(BaseModel):
-    """Paramètres de génération de maillage à partir d'images
-    GLB-First: Le format de sortie est toujours GLB (natif de l'API Stability ou TripoSR)
-    """
+    """Mesh generation parameters. Output format is always GLB."""
     session_id: str
     resolution: str = "medium"  # 'low', 'medium', 'high'
     remesh_option: str = "quad"  # 'none', 'triangle', 'quad' (Stability AI only)
-    provider: str = "unique3d"  # 'unique3d' (Docker GPU), 'triposr' (local GPU), 'stability' (API cloud)
+    provider: str = "unique3d"  # 'unique3d' (Docker GPU), 'triposr' (local GPU), 'stability' (cloud API)
 
 class GenerateImageRequest(BaseModel):
-    """Parametres de generation d'image a partir d'un prompt textuel via Mamouth.ai"""
+    """Image generation parameters for Mamouth.ai text-to-image."""
     prompt: str
     resolution: str = "medium"  # 'low', 'medium', 'high'
 
 class GenerateTextureRequest(BaseModel):
-    """Parametres de generation de texture via Mamouth.ai"""
+    """Texture generation parameters for Mamouth.ai."""
     prompt: str
     resolution: str = "medium"  # 'low', 'medium', 'high'
 
 class GenerateMaterialRequest(BaseModel):
-    """Parametres de generation de materiau IA (texture + physique)"""
+    """AI material generation parameters (texture + physics)."""
     prompt: str
 
 class RetopologyRequest(BaseModel):
-    """Paramètres de retopologie avec Instant Meshes"""
+    """Retopology parameters for Instant Meshes."""
     filename: str
     target_face_count: int = 10000
-    original_face_count: int  # Nombre de faces du mesh original (envoyé par le frontend)
+    original_face_count: int  # Original mesh face count, sent by frontend
     deterministic: bool = True
     preserve_boundaries: bool = True
-    is_generated: bool = False  # Si True, cherche dans data/generated_meshes
-    is_simplified: bool = False  # Si True, cherche dans data/output
-    bake_textures: bool = False  # Si True, bake la texture high→low après retopo
+    is_generated: bool = False
+    is_simplified: bool = False
+    bake_textures: bool = False  # If True, bake high-poly texture onto retopo result
 
 class SegmentRequest(BaseModel):
-    """Paramètres de segmentation de mesh"""
+    """Mesh segmentation parameters."""
     filename: str
     method: str = "connectivity"  # 'connectivity', 'sharp_edges', 'curvature', 'planes'
-    angle_threshold: Optional[float] = None  # Pour sharp_edges (degrés)
-    num_clusters: Optional[int] = None  # Pour curvature
-    num_planes: Optional[int] = None  # Pour planes
-    is_generated: bool = False  # Si True, cherche dans data/generated_meshes
-    is_simplified: bool = False  # Si True, cherche dans data/output
-    is_retopo: bool = False  # Si True, cherche dans data/retopo
+    angle_threshold: Optional[float] = None  # For sharp_edges (degrees)
+    num_clusters: Optional[int] = None  # For curvature
+    num_planes: Optional[int] = None  # For planes
+    is_generated: bool = False
+    is_simplified: bool = False
+    is_retopo: bool = False
 
 
 class CompareRequest(BaseModel):
-    """Parametres de comparaison de meshes"""
+    """Mesh comparison parameters."""
     filename_ref: str
     filename_comp: str
     is_generated_ref: bool = False
@@ -250,7 +224,7 @@ class CompareRequest(BaseModel):
 
 
 class QualityVisualizeRequest(BaseModel):
-    """Parametres de visualisation de qualite de mesh"""
+    """Mesh quality visualization parameters."""
     filename: str
     diagnostic_type: str  # "boundary" | "non_manifold" | "face_quality"
     is_generated: bool = False
@@ -259,7 +233,7 @@ class QualityVisualizeRequest(BaseModel):
 
 
 class UnwrapUVRequest(BaseModel):
-    """Parametres pour UV unwrapping LSCM"""
+    """UV unwrap parameters."""
     filename: str
     is_generated: bool = False
     is_simplified: bool = False
@@ -267,20 +241,20 @@ class UnwrapUVRequest(BaseModel):
 
 
 class SaveMeshRequest(BaseModel):
-    """GLB-First: Paramètres pour sauvegarder un mesh"""
-    source_filename: str  # Nom du fichier source (dans n'importe quel dossier)
-    save_name: str  # Nom de la sauvegarde (sans extension)
+    """Mesh save parameters."""
+    source_filename: str  # Source filename (searched across all data folders)
+    save_name: str  # Save name (without extension)
 
 
 class GenerateLodRequest(BaseModel):
-    """Paramètres de génération Auto-LOD"""
+    """Auto-LOD generation parameters."""
     filename: str
     is_generated: bool = False
 
 
 @app.get("/")
 async def root():
-    """Endpoint racine - vérification que l'API fonctionne"""
+    """Root endpoint. Confirms the API is running."""
     return {
         "message": "MeshSimplifier API",
         "version": "0.1.0",
@@ -289,15 +263,10 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """
-    U6: Health check détaillé avec infos système.
-    Retourne le statut de l'API, les tâches en cours et l'espace disque.
-    """
-    # Espace disque disponible
+    """Detailed health check. Returns API status, active tasks, and disk space."""
     disk = shutil.disk_usage(DATA_INPUT)
     disk_free_gb = disk.free / (1024 ** 3)
 
-    # Tâches en cours
     all_tasks = task_manager.get_all_tasks()
     pending_count = sum(1 for t in all_tasks.values() if t.status.value == "pending")
     processing_count = sum(1 for t in all_tasks.values() if t.status.value == "processing")
@@ -319,20 +288,15 @@ async def health_check():
 @app.post("/upload")
 async def upload_mesh(file: UploadFile = File(...)):
     """
-    Upload un fichier de maillage 3D avec conversion automatique vers GLB.
+    Upload a 3D mesh file and convert it to GLB.
 
-    GLB-First Architecture:
-    - Tous les fichiers sont convertis en GLB (format master)
-    - Le fichier original est sauvegardé temporairement puis supprimé
-    - Seul le GLB reste dans data/input/
-
-    Formats supportés: OBJ, STL, PLY, OFF, GLTF, GLB
+    GLB-First: all uploads are converted to GLB and stored in data/input/.
+    Supported formats: OBJ, STL, PLY, OFF, GLTF, GLB.
     """
     import uuid
     start_total = time.time()
     logger.info(f"[UPLOAD] Started: {file.filename}")
 
-    # S1: Sécuriser le nom de fichier (path traversal protection)
     try:
         safe_filename = sanitize_filename(file.filename)
     except ValueError as e:
@@ -340,26 +304,23 @@ async def upload_mesh(file: UploadFile = File(...)):
 
     logger.debug(f"Filename sanitized: {file.filename} -> {safe_filename}")
 
-    # S2: Vérifier la taille du fichier AVANT d'écrire
-    file.file.seek(0, 2)  # Aller à la fin
+    file.file.seek(0, 2)  # Seek to end to get size
     file_size = file.file.tell()
-    file.file.seek(0)  # Revenir au début
+    file.file.seek(0)
 
     if file_size > MAX_UPLOAD_SIZE:
         raise HTTPException(
             status_code=413,  # Payload Too Large
-            detail=f"Fichier trop volumineux ({file_size / 1024 / 1024:.1f} MB). Maximum: {MAX_UPLOAD_SIZE // (1024*1024)} MB"
+            detail=f"File too large ({file_size / 1024 / 1024:.1f} MB). Maximum: {MAX_UPLOAD_SIZE // (1024*1024)} MB"
         )
 
-    # Vérification de l'extension
     file_ext = Path(safe_filename).suffix.lower()
     if file_ext not in SUPPORTED_FORMATS:
         raise HTTPException(
             status_code=400,
-            detail=f"Format non supporté. Formats acceptés: {', '.join(SUPPORTED_FORMATS)}"
+            detail=f"Unsupported format. Accepted: {', '.join(SUPPORTED_FORMATS)}"
         )
 
-    # GLB-First: Sauvegarder d'abord dans temp/
     start_save = time.time()
     temp_path = DATA_TEMP / f"upload_{uuid.uuid4().hex[:8]}{file_ext}"
 
@@ -369,43 +330,37 @@ async def upload_mesh(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur lors de la sauvegarde: {str(e)}"
+            detail=f"Failed to save file: {str(e)}"
         ) from e
 
     save_duration = (time.time() - start_save) * 1000
     original_size = temp_path.stat().st_size
     logger.debug(f"Temp save: {save_duration:.2f}ms ({original_size / 1024 / 1024:.2f} MB)")
 
-    # GLB-First: Définir le chemin GLB avant le try pour le cleanup
-    # S1: Utiliser le filename sécurisé
     glb_filename = f"{Path(safe_filename).stem}.glb"
     glb_path = DATA_INPUT / glb_filename
 
     try:
-        # GLB-First: Convertir vers GLB
         start_convert = time.time()
-
         conversion_result = convert_any_to_glb(temp_path, glb_path)
         convert_duration = (time.time() - start_convert) * 1000
 
         if not conversion_result['success']:
             raise HTTPException(
                 status_code=400,
-                detail=f"Conversion GLB echouee: {conversion_result.get('error')}"
+                detail=f"GLB conversion failed: {conversion_result.get('error')}"
             )
 
         logger.debug(f"GLB conversion: {convert_duration:.2f}ms")
         logger.debug(f"Original format: {conversion_result['original_format']}, Has textures: {conversion_result['has_textures']}")
 
-        # Charger le GLB pour analyse
         start_load = time.time()
         loaded = trimesh.load(str(glb_path))
 
-        # Gérer les Scenes
         if hasattr(loaded, 'geometry'):
             meshes = list(loaded.geometry.values())
             if len(meshes) == 0:
-                raise HTTPException(status_code=400, detail="La scene ne contient aucune geometrie")
+                raise HTTPException(status_code=400, detail="Scene contains no geometry")
             mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
         else:
             mesh = loaded
@@ -413,13 +368,11 @@ async def upload_mesh(file: UploadFile = File(...)):
         load_duration = (time.time() - start_load) * 1000
         logger.debug(f"GLB load: {load_duration:.2f}ms")
 
-        # Validation
         if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:
-            raise HTTPException(status_code=400, detail="Le fichier ne contient pas de vertices valides")
+            raise HTTPException(status_code=400, detail="File contains no valid vertices")
         if not hasattr(mesh, 'faces') or len(mesh.faces) == 0:
-            raise HTTPException(status_code=400, detail="Le fichier ne contient pas de faces")
+            raise HTTPException(status_code=400, detail="File contains no faces")
 
-        # Analyse du mesh
         start_analyze = time.time()
 
         is_watertight = bool(mesh.is_watertight) if hasattr(mesh, 'is_watertight') else False
@@ -444,11 +397,11 @@ async def upload_mesh(file: UploadFile = File(...)):
         }
 
         mesh_info = {
-            "filename": glb_filename,  # GLB-First: filename est toujours le GLB
-            "original_filename": file.filename,  # Nom original pour référence
+            "filename": glb_filename,
+            "original_filename": file.filename,
             "original_format": conversion_result['original_format'],
             "file_size": glb_path.stat().st_size,
-            "format": ".glb",  # GLB-First: format est toujours .glb
+            "format": ".glb",
             "vertices_count": int(len(mesh.vertices)),
             "triangles_count": int(len(mesh.faces)),
             "has_normals": hasattr(mesh, 'vertex_normals') and mesh.vertex_normals is not None,
@@ -477,7 +430,7 @@ async def upload_mesh(file: UploadFile = File(...)):
         }
 
         return {
-            "message": "Fichier uploade et converti en GLB avec succes",
+            "message": "File uploaded and converted to GLB successfully",
             "mesh_info": mesh_info,
             "backend_timings": backend_timings,
             "conversion": {
@@ -491,39 +444,33 @@ async def upload_mesh(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        # Supprimer le GLB si créé
         if glb_path.exists():
             glb_path.unlink()
         raise HTTPException(
             status_code=400,
-            detail=f"Erreur lors du chargement du maillage: {str(e)}"
+            detail=f"Failed to load mesh: {str(e)}"
         ) from e
     finally:
-        # GLB-First: Toujours supprimer le fichier temporaire
         safe_delete(temp_path)
 
 @app.get("/analyze/{filename}")
 async def analyze_mesh(filename: str):
-    """
-    Analyse détaillée d'un fichier de maillage déjà uploadé
-    Retourne les statistiques complètes (vertices, triangles, propriétés)
-    """
+    """Detailed analysis of an uploaded mesh. Returns full stats."""
     start_analyze = time.time()
     logger.info(f"[ANALYZE] Starting: {filename}")
 
     file_path = DATA_INPUT / filename
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+        raise HTTPException(status_code=404, detail="File not found")
 
     try:
         loaded = trimesh.load(str(file_path))
 
-        # Si c'est une Scene, extraire et fusionner les géométries
         if hasattr(loaded, 'geometry'):
             meshes = list(loaded.geometry.values())
             if len(meshes) == 0:
-                raise HTTPException(status_code=400, detail="La scène ne contient aucune géométrie")
+                raise HTTPException(status_code=400, detail="Scene contains no geometry")
             elif len(meshes) == 1:
                 mesh = meshes[0]
             else:
@@ -532,16 +479,15 @@ async def analyze_mesh(filename: str):
             mesh = loaded
 
         if not hasattr(mesh, 'vertices') or len(mesh.vertices) == 0:
-            raise HTTPException(status_code=400, detail="Le fichier ne contient pas de vertices valides")
+            raise HTTPException(status_code=400, detail="File contains no valid vertices")
 
         if not hasattr(mesh, 'faces') or len(mesh.faces) == 0:
-            raise HTTPException(status_code=400, detail="Le fichier ne contient pas de faces")
+            raise HTTPException(status_code=400, detail="File contains no faces")
 
-        # Extraction des propriétés du maillage
         is_watertight = bool(mesh.is_watertight) if hasattr(mesh, 'is_watertight') else False
         is_winding_consistent = bool(mesh.is_winding_consistent) if hasattr(mesh, 'is_winding_consistent') else None
 
-        # Volume - calcul sécurisé uniquement si watertight
+        # Volume is only valid for watertight meshes
         volume = None
         if is_watertight:
             try:
@@ -575,12 +521,12 @@ async def analyze_mesh(filename: str):
         logger.error(f"[ANALYZE] Failed: {e}")
         raise HTTPException(
             status_code=400,
-            detail=f"Erreur lors de l'analyse: {str(e)}"
+            detail=f"Analysis failed: {str(e)}"
         ) from e
 
 @app.get("/meshes")
 async def list_meshes():
-    """Liste tous les fichiers de maillage disponibles"""
+    """List all available mesh files."""
     meshes = []
     for file_path in DATA_INPUT.iterdir():
         if file_path.suffix.lower() in SUPPORTED_FORMATS:
@@ -592,16 +538,8 @@ async def list_meshes():
     return {"meshes": meshes, "count": len(meshes)}
 
 
-# ============================================================================
-# GLB-First: Endpoints de sauvegarde à la demande (M6)
-# ============================================================================
-
 def _find_mesh_in_directories(filename: str) -> Optional[Path]:
-    """
-    GLB-First: Recherche un mesh dans tous les dossiers de données.
-
-    Ordre de recherche: input → output → retopo → segmented → generated_meshes
-    """
+    """Search for a mesh across all data directories. Order: input, output, retopo, segmented, generated_meshes."""
     search_dirs = [
         DATA_INPUT,
         DATA_OUTPUT,
@@ -618,33 +556,23 @@ def _find_mesh_in_directories(filename: str) -> Optional[Path]:
 
 @app.post("/save")
 async def save_mesh(request: SaveMeshRequest):
-    """
-    GLB-First: Sauvegarde un mesh avec un nom personnalisé.
-
-    Permet à l'utilisateur de sauvegarder le résultat d'une opération
-    avant de procéder à une autre opération.
-    """
-    # Trouver le fichier source
+    """Save a mesh with a custom name."""
     source_path = _find_mesh_in_directories(request.source_filename)
     if not source_path:
         raise HTTPException(
             status_code=404,
-            detail=f"Fichier non trouve: {request.source_filename}"
+            detail=f"File not found: {request.source_filename}"
         )
 
-    # Valider le nom de sauvegarde
     save_name = request.save_name.strip()
     if not save_name:
-        raise HTTPException(status_code=400, detail="Nom de sauvegarde requis")
+        raise HTTPException(status_code=400, detail="Save name is required")
 
-    # Nettoyer le nom (enlever caractères spéciaux)
     import re
     save_name = re.sub(r'[^\w\-]', '_', save_name)
 
-    # Créer le dossier si nécessaire
     DATA_SAVED.mkdir(parents=True, exist_ok=True)
 
-    # Copier le fichier
     save_path = DATA_SAVED / f"{save_name}.glb"
     shutil.copy2(source_path, save_path)
 
@@ -660,7 +588,7 @@ async def save_mesh(request: SaveMeshRequest):
 
 @app.get("/saved")
 async def list_saved_meshes():
-    """GLB-First: Liste tous les meshes sauvegardés par l'utilisateur."""
+    """List all user-saved meshes."""
     if not DATA_SAVED.exists():
         return {"saved_meshes": [], "count": 0}
 
@@ -672,18 +600,17 @@ async def list_saved_meshes():
             "saved_at": file_path.stat().st_mtime
         })
 
-    # Trier par date (plus récent en premier)
-    saved.sort(key=lambda x: x["saved_at"], reverse=True)
+    saved.sort(key=lambda x: x["saved_at"], reverse=True)  # Most recent first
 
     return {"saved_meshes": saved, "count": len(saved)}
 
 
 @app.delete("/saved/{filename}")
 async def delete_saved_mesh(filename: str):
-    """GLB-First: Supprime un mesh sauvegardé."""
+    """Delete a saved mesh."""
     file_path = DATA_SAVED / filename
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouve")
+        raise HTTPException(status_code=404, detail="File not found")
 
     file_path.unlink()
     logger.info(f"[DELETE] Saved mesh deleted: {filename}")
@@ -693,10 +620,10 @@ async def delete_saved_mesh(filename: str):
 
 @app.get("/mesh/saved/{filename}")
 async def get_saved_mesh(filename: str):
-    """GLB-First: Stream un mesh sauvegardé pour visualisation."""
+    """Stream a saved mesh for visualization."""
     file_path = DATA_SAVED / filename
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouve")
+        raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(
         path=file_path,
@@ -705,7 +632,6 @@ async def get_saved_mesh(filename: str):
     )
 
 
-# Handler pour les tâches de simplification
 def simplify_task_handler(task: Task):
     params = task.params
     input_path = Path(params["input_file"])
@@ -745,25 +671,16 @@ def simplify_task_handler(task: Task):
 
 @app.post("/simplify")
 async def simplify_mesh_async(request: SimplifyRequest):
-    """
-    GLB-First: Lance une tâche de simplification de maillage en arrière-plan.
-
-    Avec l'architecture GLB-First, tous les fichiers sont en GLB.
-    Le task handler utilise simplify_mesh_glb pour traiter directement les GLB.
-    """
-    # Déterminer le dossier source selon is_generated
+    """Start an async mesh simplification task. Returns task_id."""
     source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
     input_path = source_dir / request.filename
 
-    # Vérification que le fichier existe
     if not input_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {request.filename}")
+        raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
 
-    # GLB-First: Le fichier est déjà en GLB, sortie aussi en GLB
     output_filename = f"{input_path.stem}_simplified.glb"
     output_path = DATA_OUTPUT / output_filename
 
-    # Création de la tâche
     task_id = task_manager.create_task(
         task_type="simplify",
         params={
@@ -777,7 +694,7 @@ async def simplify_mesh_async(request: SimplifyRequest):
 
     return {
         "task_id": task_id,
-        "message": "Tâche de simplification créée",
+        "message": "Simplification task created",
         "output_filename": output_filename
     }
 
@@ -793,17 +710,17 @@ def sanitize_task_handler(task: Task):
 
 @app.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
-    """Récupère le statut d'une tâche"""
+    """Return the status of a task."""
     task = task_manager.get_task(task_id)
 
     if task is None:
-        raise HTTPException(status_code=404, detail="Tâche non trouvée")
+        raise HTTPException(status_code=404, detail="Task not found")
 
     return task.to_dict()
 
 @app.get("/tasks")
 async def list_tasks():
-    """Liste toutes les tâches"""
+    """List all tasks."""
     tasks = task_manager.get_all_tasks()
     return {
         "tasks": [task.to_dict() for task in tasks.values()],
@@ -813,20 +730,13 @@ async def list_tasks():
 
 @app.get("/mesh/input/{filename}")
 async def get_input_mesh(filename: str):
-    """
-    GLB-First: Sert un fichier de maillage depuis data/input pour la visualisation.
-
-    Avec l'architecture GLB-First, tous les fichiers uploadés sont convertis en GLB
-    et stockés directement dans data/input.
-    """
+    """Stream a mesh from data/input for visualization."""
     file_path = DATA_INPUT / filename
     file_ext = Path(filename).suffix.lower()
 
-    # GLB-First: Le fichier devrait exister directement dans data/input
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {filename}")
+        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
 
-    # Déterminer le media_type
     media_type_mapping = {
         ".obj": "model/obj",
         ".stl": "model/stl",
@@ -837,8 +747,7 @@ async def get_input_mesh(filename: str):
     }
     media_type = media_type_mapping.get(file_ext, "application/octet-stream")
 
-    # Streamer le fichier avec des chunks optimisés (1MB par chunk)
-    CHUNK_SIZE = 1024 * 1024  # 1 MB chunks pour de meilleures performances
+    CHUNK_SIZE = 1024 * 1024  # 1 MB chunks
 
     def iterfile():
         with open(file_path, mode="rb") as file_like:
@@ -850,24 +759,18 @@ async def get_input_mesh(filename: str):
         media_type=media_type,
         headers={
             "Content-Disposition": f'inline; filename="{file_path.name}"',
-            "Content-Length": str(file_path.stat().st_size)  # Important pour la barre de progression
+            "Content-Length": str(file_path.stat().st_size)
         }
     )
 
 @app.get("/mesh/output/{filename}")
 async def get_output_mesh(filename: str):
-    """
-    Sert un fichier de maillage depuis data/output pour la visualisation
-    Utilisé pour visualiser les meshes simplifiés
-    Convertit automatiquement en GLB pour de meilleures performances
-    """
+    """Stream a simplified mesh from data/output for visualization."""
     file_path = DATA_OUTPUT / filename
 
-    # GLB-First: Le fichier devrait exister directement en GLB
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {filename}")
+        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
 
-    # Déterminer le media_type
     file_ext = file_path.suffix.lower()
     media_type_mapping = {
         ".obj": "model/obj",
@@ -879,7 +782,6 @@ async def get_output_mesh(filename: str):
     }
     media_type = media_type_mapping.get(file_ext, "application/octet-stream")
 
-    # Streamer le fichier
     CHUNK_SIZE = 1024 * 1024
 
     def iterfile():
@@ -898,11 +800,11 @@ async def get_output_mesh(filename: str):
 
 @app.get("/download/{filename}")
 async def download_mesh(filename: str):
-    """Télécharge un fichier de maillage simplifié depuis data/output"""
+    """Download a simplified mesh from data/output."""
     file_path = DATA_OUTPUT / filename
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+        raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(
         path=str(file_path),
@@ -913,23 +815,10 @@ async def download_mesh(filename: str):
 @app.get("/export/{filename}")
 async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False, is_simplified: bool = False, is_retopologized: bool = False, is_segmented: bool = False):
     """
-    GLB-First: Exporte un fichier de maillage dans le format demandé.
+    Export a mesh file in the requested format.
 
-    Avec l'architecture GLB-First, tous les fichiers source sont en GLB.
-    L'export convertit depuis GLB vers le format demandé.
-
-    Args:
-        filename: Nom du fichier source (GLB)
-        format: Format de sortie ('obj', 'stl', 'ply', 'glb')
-        is_generated: Si True, cherche dans data/generated_meshes
-        is_simplified: Si True, cherche dans data/output (meshes simplifiés)
-        is_retopologized: Si True, cherche dans data/retopo (meshes retopologisés)
-        is_segmented: Si True, cherche dans data/segmented (meshes segmentés)
-
-    Returns:
-        Le fichier converti au format demandé
+    GLB-First: source files are always GLB. Converts to the target format on the fly.
     """
-    # Déterminer le dossier source
     if is_segmented:
         source_dir = DATA_SEGMENTED
     elif is_retopologized:
@@ -943,12 +832,8 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
 
     source_path = source_dir / filename
 
-    # GLB-First: Le fichier source est toujours en GLB
-    # Vérifier que le fichier existe
     if not source_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {filename}")
-
-    # Si le format demandé est le même que le fichier source, le renvoyer directement
+        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
     source_ext = source_path.suffix.lower().lstrip('.')
     target_format = format.lower()
 
@@ -959,46 +844,37 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
             media_type="application/octet-stream"
         )
 
-    # Sinon, convertir vers le format demandé
     output_filename = f"{source_path.stem}.{target_format}"
     output_path = DATA_OUTPUT / output_filename
 
     logger.info(f"[EXPORT] Converting {filename} to {target_format.upper()}")
 
-    # Convertir le fichier
     result = convert_mesh_format(source_path, output_path, target_format)
 
     if not result['success']:
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur lors de la conversion: {result.get('error', 'Unknown error')}"
+            detail=f"Conversion failed: {result.get('error', 'Unknown error')}"
         )
 
     logger.info(f"[EXPORT] Success: {output_filename}")
 
-    # Retourner le fichier converti
     return FileResponse(
         path=str(output_path),
         filename=output_filename,
         media_type="application/octet-stream"
     )
 
-# ===== ENDPOINTS GÉNÉRATION DE MAILLAGES À PARTIR D'IMAGES =====
-
 @app.post("/upload-images")
 async def upload_images(files: list[UploadFile] = File(...)):
     """
-    Upload multiple d'images pour génération de maillage 3D
-    Crée une session et sauvegarde les images
+    Upload one or more images for 3D mesh generation.
 
-    Returns:
-        session_id: Identifiant de session pour la génération
-        images: Liste des images uploadées avec preview
+    Creates a session and saves the images. Returns session_id and image list.
     """
     if len(files) == 0:
-        raise HTTPException(status_code=400, detail="Aucune image fournie")
+        raise HTTPException(status_code=400, detail="No images provided")
 
-    # Créer un ID de session unique
     session_id = f"session_{int(time.time() * 1000)}"
     session_path = DATA_INPUT_IMAGES / session_id
     session_path.mkdir(parents=True, exist_ok=True)
@@ -1008,15 +884,13 @@ async def upload_images(files: list[UploadFile] = File(...)):
     uploaded_images = []
 
     for idx, file in enumerate(files):
-        # Vérification de l'extension
         file_ext = Path(file.filename).suffix.lower()
         if file_ext not in SUPPORTED_IMAGE_FORMATS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Format non supporté: {file.filename}. Formats acceptés: {', '.join(SUPPORTED_IMAGE_FORMATS)}"
+                detail=f"Unsupported format: {file.filename}. Accepted: {', '.join(SUPPORTED_IMAGE_FORMATS)}"
             )
 
-        # Sauvegarde du fichier
         file_path = session_path / f"image_{idx:03d}{file_ext}"
         try:
             with open(file_path, "wb") as buffer:
@@ -1024,7 +898,7 @@ async def upload_images(files: list[UploadFile] = File(...)):
         except Exception as e:
             raise HTTPException(
                 status_code=500,
-                detail=f"Erreur lors de la sauvegarde de {file.filename}: {str(e)}"
+                detail=f"Failed to save {file.filename}: {str(e)}"
             ) from e
 
         uploaded_images.append({
@@ -1039,7 +913,7 @@ async def upload_images(files: list[UploadFile] = File(...)):
     logger.info(f"[UPLOAD-IMAGES] Completed: {len(uploaded_images)} images")
 
     return {
-        "message": "Images uploadées avec succès",
+        "message": "Images uploaded successfully",
         "session_id": session_id,
         "images": uploaded_images,
         "images_count": len(uploaded_images)
@@ -1047,13 +921,11 @@ async def upload_images(files: list[UploadFile] = File(...)):
 
 @app.get("/sessions/{session_id}/images")
 async def list_session_images(session_id: str):
-    """
-    Liste les images d'une session
-    """
+    """List images in a session."""
     session_path = DATA_INPUT_IMAGES / session_id
 
     if not session_path.exists():
-        raise HTTPException(status_code=404, detail="Session non trouvée")
+        raise HTTPException(status_code=404, detail="Session not found")
 
     images = []
     for file_path in session_path.iterdir():
@@ -1070,16 +942,14 @@ async def list_session_images(session_id: str):
         "count": len(images)
     }
 
-# Handler pour les tâches de génération de maillages
 def generate_mesh_task_handler(task: Task):
-    """Handler de generation 3D - route vers le bon provider (unique3d, triposr, stability)"""
+    """3D generation handler. Routes to the correct provider: unique3d, triposr, or stability."""
     params = task.params
     session_id = params["session_id"]
     resolution = params.get("resolution", "medium")
     provider = params.get("provider", "unique3d")
 
-    # [DEV/TEST] Si c'est une tâche fake, elle est déjà complétée, ne rien faire
-    if params.get("fake", False):
+    if params.get("fake", False):  # Dev/test: fake task, already completed
         logger.debug("[GENERATE-MESH] Fake task detected, skipping API call")
         return task.result
 
@@ -1088,12 +958,11 @@ def generate_mesh_task_handler(task: Task):
     if not session_path.exists():
         return {
             'success': False,
-            'error': 'Session non trouvée'
+            'error': 'Session not found'
         }
 
     logger.info(f"[GENERATE-MESH] Starting {provider} (session={session_id}, resolution={resolution})")
 
-    # Récupérer toutes les images de la session
     image_paths = sorted([
         p for p in session_path.iterdir()
         if p.suffix.lower() in SUPPORTED_IMAGE_FORMATS
@@ -1102,15 +971,14 @@ def generate_mesh_task_handler(task: Task):
     if len(image_paths) == 0:
         return {
             'success': False,
-            'error': 'Aucune image trouvée dans la session'
+            'error': 'No images found in session'
         }
 
-    # Tous les providers utilisent uniquement la première image (single-view)
+    # All providers use only the first image (single-view)
     first_image = image_paths[0]
     if len(image_paths) > 1:
         logger.info(f"Using first image: {first_image.name} (single-view only)")
 
-    # GLB-First: Format de sortie toujours GLB
     output_filename = f"{session_id}_generated.glb"
     output_path = DATA_GENERATED_MESHES / output_filename
 
@@ -1127,7 +995,7 @@ def generate_mesh_task_handler(task: Task):
         if not api_key:
             return {
                 'success': False,
-                'error': 'STABILITY_API_KEY non configuree dans .env'
+                'error': 'STABILITY_API_KEY not configured in .env'
             }
         result = generate_mesh_from_image_sf3d(
             image_path=first_image,
@@ -1146,7 +1014,7 @@ def generate_mesh_task_handler(task: Task):
             extra_images=extra,
         )
     else:
-        # unique3d (defaut)
+        # unique3d (default)
         from .unique3d_client import generate_mesh_from_image_unique3d
         result = generate_mesh_from_image_unique3d(
             image_path=first_image,
@@ -1189,7 +1057,7 @@ def generate_mesh_task_handler(task: Task):
     return result
 
 def generate_image_task_handler(task: Task):
-    """Handler qui genere une image a partir d'un prompt textuel via Mamouth.ai"""
+    """Generate an image from a text prompt via Mamouth.ai."""
     params = task.params
     prompt = params["prompt"]
     resolution = params.get("resolution", "medium")
@@ -1221,7 +1089,7 @@ def generate_image_task_handler(task: Task):
 
 
 def generate_texture_task_handler(task: Task):
-    """Handler qui genere une texture seamless a partir d'un prompt via Mamouth.ai"""
+    """Generate a seamless texture from a prompt via Mamouth.ai."""
     params = task.params
     prompt = params["prompt"]
     resolution = params.get("resolution", "medium")
@@ -1253,11 +1121,7 @@ def generate_texture_task_handler(task: Task):
 
 
 def retopologize_task_handler(task: Task):
-    """
-    Handler qui exécute la retopologie avec Instant Meshes.
-
-    GLB-First: Utilise retopologize_mesh_glb pour les fichiers GLB.
-    """
+    """Execute retopology using Instant Meshes."""
     params = task.params
     filename = params["filename"]
     target_face_count = params.get("target_face_count", 10000)
@@ -1266,7 +1130,6 @@ def retopologize_task_handler(task: Task):
     is_generated = params.get("is_generated", False)
     is_simplified = params.get("is_simplified", False)
 
-    # Déterminer le dossier source selon le flag
     if is_simplified:
         input_file = DATA_OUTPUT / filename
     elif is_generated:
@@ -1277,22 +1140,17 @@ def retopologize_task_handler(task: Task):
     if not input_file.exists():
         return {
             'success': False,
-            'error': f'Fichier source non trouve: {filename}'
+            'error': f'Source file not found: {filename}'
         }
 
     bake_textures = params.get("bake_textures", False)
 
     logger.info(f"[RETOPOLOGIZE] Starting: {filename} (target={target_face_count} faces, bake={bake_textures})")
 
-    # GLB-First: Utiliser retopologize_mesh_glb directement pour les GLB
     if input_file.suffix.lower() == '.glb':
-        logger.debug("[GLB-First] Direct GLB retopology pipeline")
-
-        # Sortie en GLB
         output_filename = f"{input_file.stem}_retopo.glb"
         output_file = DATA_RETOPO / output_filename
 
-        # Supprimer l'ancien résultat s'il existe
         if output_file.exists():
             output_file.unlink()
 
@@ -1331,8 +1189,7 @@ def retopologize_task_handler(task: Task):
             }
         return result
 
-    # GLB-First: Ce code ne devrait pas être atteint car tous les uploads sont GLB
-    # Mais par sécurité, on produit quand même un GLB en sortie
+    # Non-GLB fallback (all uploads should be GLB, but kept for safety)
     logger.warning(f"Non-GLB input detected ({input_file.suffix}), converting to GLB pipeline")
 
     output_filename = f"{Path(filename).stem}_retopo.glb"
@@ -1342,7 +1199,6 @@ def retopologize_task_handler(task: Task):
     if output_file.exists():
         output_file.unlink()
 
-    # Retopologie vers PLY temporaire
     result = retopologize_mesh(
         input_path=input_file,
         output_path=temp_ply,
@@ -1352,7 +1208,6 @@ def retopologize_task_handler(task: Task):
     )
 
     if result.get('success'):
-        # Convertir le PLY résultant en GLB
         try:
             import trimesh
             mesh = trimesh.load(str(temp_ply), process=False)
@@ -1375,11 +1230,7 @@ def retopologize_task_handler(task: Task):
     return result
 
 def segment_task_handler(task: Task):
-    """
-    Handler pour la tâche de segmentation.
-
-    GLB-First: Utilise segment_mesh_glb pour les fichiers GLB.
-    """
+    """Execute mesh segmentation."""
     params = task.params
     filename = params.get("filename")
     method = params.get("method", "connectivity")
@@ -1387,7 +1238,6 @@ def segment_task_handler(task: Task):
     is_simplified = params.get("is_simplified", False)
     is_retopo = params.get("is_retopo", False)
 
-    # Déterminer le fichier source selon les flags
     if is_generated:
         input_path = DATA_GENERATED_MESHES / filename
         source_label = "generated"
@@ -1403,7 +1253,6 @@ def segment_task_handler(task: Task):
 
     logger.info(f"[SEGMENT] Starting: {filename} ({source_label}) method={method}")
 
-    # Construire les kwargs
     kwargs = {}
     if params.get("angle_threshold") is not None:
         kwargs["angle_threshold"] = params["angle_threshold"]
@@ -1413,11 +1262,7 @@ def segment_task_handler(task: Task):
         kwargs["num_planes"] = params["num_planes"]
 
     try:
-        # GLB-First: Utiliser segment_mesh_glb pour les GLB
         if input_path.suffix.lower() == '.glb':
-            logger.debug("[GLB-First] Direct GLB segmentation pipeline")
-
-            # Sortie en GLB
             output_filename = f"{input_path.stem}_segmented.glb"
             output_path = DATA_SEGMENTED / output_filename
 
@@ -1452,8 +1297,7 @@ def segment_task_handler(task: Task):
                 }
             return result
 
-        # GLB-First: Ce code ne devrait pas être atteint car tous les uploads sont GLB
-        # Mais par sécurité, on produit quand même un GLB en sortie
+        # Non-GLB fallback (all uploads should be GLB, but kept for safety)
         logger.warning(f"Non-GLB input detected ({input_path.suffix}), converting to GLB pipeline")
 
         base_name = Path(filename).stem
@@ -1488,8 +1332,7 @@ def segment_task_handler(task: Task):
                 return {"success": False, "error": f"GLB conversion failed: {e}"}
             finally:
                 safe_delete(temp_output)
-                # Aussi supprimer le .mtl si présent
-                mtl_path = temp_output.with_suffix('.mtl')
+                mtl_path = temp_output.with_suffix('.mtl')  # Also clean up .mtl if present
                 safe_delete(mtl_path)
 
         logger.error(f"Segmentation failed: {result.get('error')}")
@@ -1504,7 +1347,7 @@ def segment_task_handler(task: Task):
         }
 
 def compare_task_handler(task: Task):
-    """Handler pour la comparaison de meshes avec heatmap."""
+    """Compare two meshes and generate a distance heatmap."""
     from .compare import compare_meshes
 
     params = task.params
@@ -1544,7 +1387,7 @@ def compare_task_handler(task: Task):
 
 
 def quality_visualize_task_handler(task: Task):
-    """Handler pour la visualisation de qualite de mesh."""
+    """Generate a mesh quality visualization."""
     from .mesh_quality import generate_quality_visualization
 
     params = task.params
@@ -1569,7 +1412,7 @@ def quality_visualize_task_handler(task: Task):
 
 
 def unwrap_uv_task_handler(task: Task):
-    """Handler pour UV unwrapping LSCM."""
+    """Execute LSCM UV unwrapping."""
     from .uv_unwrap import unwrap_uv
 
     params = task.params
@@ -1581,7 +1424,7 @@ def unwrap_uv_task_handler(task: Task):
     )
 
     if not mesh_path.exists():
-        return {'success': False, 'error': f'Fichier non trouve: {params["filename"]}'}
+        return {'success': False, 'error': f'File not found: {params["filename"]}'}
 
     output_filename = f"{mesh_path.stem}_unwrapped.glb"
     output_path = DATA_UNWRAPPED / output_filename
@@ -1607,42 +1450,32 @@ def _resolve_mesh_path(filename, is_generated, is_simplified, is_retopologized):
 
 @app.post("/generate-mesh-fake")
 async def generate_mesh_fake(request: GenerateMeshRequest):
-    """
-    [DEV/TEST] Génère un mesh fake en copiant un GLB existant
-    Utile pour tester sans consommer de crédits API
-    """
+    """[DEV/TEST] Generate a fake mesh by copying an existing GLB. No API credits consumed."""
     session_path = DATA_INPUT_IMAGES / request.session_id
 
-    # Vérification que la session existe
     if not session_path.exists():
-        raise HTTPException(status_code=404, detail="Session non trouvée")
+        raise HTTPException(status_code=404, detail="Session not found")
 
-    # Chercher un fichier GLB template dans data/input
     template_files = list(DATA_INPUT.glob("*.glb"))
     if not template_files:
         raise HTTPException(
             status_code=404,
-            detail="Aucun fichier GLB template trouvé dans data/input. Uploadez un fichier GLB d'abord."
+            detail="No GLB template found in data/input. Upload a GLB file first."
         )
 
-    # Utiliser le premier fichier GLB trouvé comme template
     template_glb = template_files[0]
     logger.info(f"[FAKE-GENERATE] Using template: {template_glb.name}")
 
-    # Générer le nom de fichier de sortie
     output_filename = f"{request.session_id}_generated.glb"
     output_path = DATA_GENERATED_MESHES / output_filename
 
-    # Copier le fichier template
     import shutil
     shutil.copy2(template_glb, output_path)
     logger.debug(f"[FAKE-GENERATE] Copied to: {output_filename}")
 
-    # Charger le mesh pour obtenir les stats
     import trimesh
     mesh = trimesh.load(str(output_path))
     if hasattr(mesh, 'geometry'):
-        # Scene avec plusieurs maillages
         meshes = list(mesh.geometry.values())
         if len(meshes) > 0:
             mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
@@ -1650,7 +1483,6 @@ async def generate_mesh_fake(request: GenerateMeshRequest):
     vertices_count = len(mesh.vertices)
     faces_count = len(mesh.faces)
 
-    # GLB-First: Créer une tâche fake qui se termine immédiatement
     task_id = task_manager.create_task(
         task_type="generate_mesh",
         params={
@@ -1661,7 +1493,6 @@ async def generate_mesh_fake(request: GenerateMeshRequest):
         }
     )
 
-    # Marquer la tâche comme complétée immédiatement
     task = task_manager.get_task(task_id)
     if task:
         task.status = "completed"
@@ -1686,17 +1517,12 @@ async def generate_mesh_fake(request: GenerateMeshRequest):
 
 @app.post("/generate-mesh")
 async def generate_mesh_async(request: GenerateMeshRequest):
-    """
-    Lance une tâche de génération de maillage à partir d'images en arrière-plan
-    Retourne un task_id pour suivre la progression
-    """
+    """Start an async 3D mesh generation task. Returns task_id."""
     session_path = DATA_INPUT_IMAGES / request.session_id
 
-    # Vérification que la session existe
     if not session_path.exists():
-        raise HTTPException(status_code=404, detail="Session non trouvée")
+        raise HTTPException(status_code=404, detail="Session not found")
 
-    # Vérifier qu'il y a des images dans la session
     image_count = len([
         p for p in session_path.iterdir()
         if p.suffix.lower() in SUPPORTED_IMAGE_FORMATS
@@ -1705,14 +1531,13 @@ async def generate_mesh_async(request: GenerateMeshRequest):
     if image_count == 0:
         raise HTTPException(
             status_code=400,
-            detail="Aucune image trouvée dans la session"
+            detail="No images found in session"
         )
 
-    # Validation de la résolution
     if request.resolution not in ['low', 'medium', 'high']:
         raise HTTPException(
             status_code=400,
-            detail="Résolution invalide. Valeurs acceptées: 'low', 'medium', 'high'"
+            detail="Invalid resolution. Use 'low', 'medium', or 'high'"
         )
 
     # Création de la tâche
@@ -1728,7 +1553,7 @@ async def generate_mesh_async(request: GenerateMeshRequest):
 
     return {
         "task_id": task_id,
-        "message": "Tâche de génération créée",
+        "message": "Generation task created",
         "session_id": request.session_id,
         "images_count": image_count,
         "provider": request.provider
@@ -1736,7 +1561,7 @@ async def generate_mesh_async(request: GenerateMeshRequest):
 
 @app.post("/process")
 async def process_worker_task(payload: dict):
-    # Ce code ne sera exécuté QUE par le conteneur unique3d-worker
+    # Executed only by the unique3d-worker container
     from src.unique3d_client import generate_mesh_from_image_unique3d
     return generate_mesh_from_image_unique3d(
         image_path=Path(payload["image_path"]),
@@ -1746,21 +1571,18 @@ async def process_worker_task(payload: dict):
 
 @app.post("/generate-image-from-prompt")
 async def generate_image_from_prompt_endpoint(request: GenerateImageRequest):
-    """
-    Lance une tache de generation d'image a partir d'un prompt textuel via Mamouth.ai
-    Retourne un task_id pour suivre la progression
-    """
+    """Start an async image generation task from a text prompt via Mamouth.ai. Returns task_id."""
     if not os.getenv('MAMOUTH_API_KEY'):
-        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY non configuree dans .env")
+        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY not configured in .env")
 
     if not request.prompt or not request.prompt.strip():
-        raise HTTPException(status_code=400, detail="Le prompt ne peut pas etre vide")
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
     if len(request.prompt) > 1000:
-        raise HTTPException(status_code=400, detail="Prompt trop long (max 1000 caracteres)")
+        raise HTTPException(status_code=400, detail="Prompt too long (max 1000 characters)")
 
     if request.resolution not in ['low', 'medium', 'high']:
-        raise HTTPException(status_code=400, detail="Resolution invalide. Valeurs acceptees: 'low', 'medium', 'high'")
+        raise HTTPException(status_code=400, detail="Invalid resolution. Use 'low', 'medium', or 'high'")
 
     task_id = task_manager.create_task(
         task_type="generate_image",
@@ -1775,24 +1597,24 @@ async def generate_image_from_prompt_endpoint(request: GenerateImageRequest):
     return {
         "task_id": task_id,
         "status": "pending",
-        "message": "Generation d'image en cours"
+        "message": "Image generation in progress"
     }
 
 
 @app.post("/generate-texture")
 async def generate_texture_endpoint(request: GenerateTextureRequest):
-    """Lance une tache de generation de texture seamless via Mamouth.ai"""
+    """Start an async seamless texture generation task via Mamouth.ai."""
     if not os.getenv('MAMOUTH_API_KEY'):
-        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY non configuree dans .env")
+        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY not configured in .env")
 
     if not request.prompt or not request.prompt.strip():
-        raise HTTPException(status_code=400, detail="Le prompt ne peut pas etre vide")
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
     if len(request.prompt) > 1000:
-        raise HTTPException(status_code=400, detail="Prompt trop long (max 1000 caracteres)")
+        raise HTTPException(status_code=400, detail="Prompt too long (max 1000 characters)")
 
     if request.resolution not in ['low', 'medium', 'high']:
-        raise HTTPException(status_code=400, detail="Resolution invalide")
+        raise HTTPException(status_code=400, detail="Invalid resolution")
 
     task_id = task_manager.create_task(
         task_type="generate_texture",
@@ -1807,7 +1629,7 @@ async def generate_texture_endpoint(request: GenerateTextureRequest):
     return {
         "task_id": task_id,
         "status": "pending",
-        "message": "Generation de texture en cours"
+        "message": "Texture generation in progress"
     }
 
 @app.post("/sanitize")
@@ -1823,7 +1645,7 @@ async def sanitize_mesh_endpoint(filename: str):
     return {"task_id": task_id, "output_filename": output_filename}
 
 def generate_material_task_handler(task: Task):
-    """Handler qui genere un materiau complet: texture + parametres physiques en parallele"""
+    """Generate a full material: texture + physics parameters, in parallel."""
     from concurrent.futures import ThreadPoolExecutor
     params = task.params
     prompt = params["prompt"]
@@ -1839,8 +1661,7 @@ def generate_material_task_handler(task: Task):
 
     start_time = time.time()
 
-    # Lancer texture + physics en parallele
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:  # Texture + physics in parallel
         texture_future = executor.submit(
             generate_texture_from_prompt,
             prompt=prompt, output_path=output_path, resolution="medium", api_key=api_key
@@ -1874,15 +1695,15 @@ def generate_material_task_handler(task: Task):
 
 @app.post("/generate-material")
 async def generate_material_endpoint(request: GenerateMaterialRequest):
-    """Lance une tache de generation de materiau IA (texture + physique) via Mamouth.ai"""
+    """Start an async AI material generation task (texture + physics) via Mamouth.ai."""
     if not os.getenv('MAMOUTH_API_KEY'):
-        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY non configuree dans .env")
+        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY not configured in .env")
 
     if not request.prompt or not request.prompt.strip():
-        raise HTTPException(status_code=400, detail="Le prompt ne peut pas etre vide")
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
     if len(request.prompt) > 1000:
-        raise HTTPException(status_code=400, detail="Prompt trop long (max 1000 caracteres)")
+        raise HTTPException(status_code=400, detail="Prompt too long (max 1000 characters)")
 
     task_id = task_manager.create_task(
         task_type="generate_material",
@@ -1894,49 +1715,46 @@ async def generate_material_endpoint(request: GenerateMaterialRequest):
     return {
         "task_id": task_id,
         "status": "pending",
-        "message": "Generation de materiau en cours"
+        "message": "Material generation in progress"
     }
 
 
 @app.get("/texture/generated/{texture_id}/{filename}")
 async def get_generated_texture(texture_id: str, filename: str):
-    """Sert un fichier texture genere"""
+    """Serve a generated texture file."""
     texture_path = DATA_GENERATED_TEXTURES / sanitize_filename(texture_id) / sanitize_filename(filename)
 
     if not texture_path.exists():
-        raise HTTPException(status_code=404, detail="Texture non trouvee")
+        raise HTTPException(status_code=404, detail="Texture not found")
 
     return FileResponse(str(texture_path), media_type="image/png")
 
 
 @app.get("/session-images/{session_id}/{filename}")
 async def get_session_image(session_id: str, filename: str):
-    """Sert une image generee depuis une session (pour preview dans le frontend)"""
+    """Serve a session image for frontend preview."""
     image_path = DATA_INPUT_IMAGES / sanitize_filename(session_id) / sanitize_filename(filename)
 
     if not image_path.exists():
-        raise HTTPException(status_code=404, detail="Image non trouvee")
+        raise HTTPException(status_code=404, detail="Image not found")
 
     suffix = image_path.suffix.lower()
     if suffix not in SUPPORTED_IMAGE_FORMATS:
-        raise HTTPException(status_code=400, detail="Format d'image non supporte")
+        raise HTTPException(status_code=400, detail="Unsupported image format")
 
     return FileResponse(str(image_path), media_type=f"image/{suffix[1:]}")
 
 
 @app.get("/mesh/generated/{filename}")
 async def get_generated_mesh(filename: str):
-    """
-    Sert un fichier de maillage généré depuis data/generated_meshes pour la visualisation
-    """
+    """Stream a generated mesh from data/generated_meshes for visualization."""
     file_path = DATA_GENERATED_MESHES / filename
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+        raise HTTPException(status_code=404, detail="File not found")
 
     file_ext = file_path.suffix.lower()
 
-    # Déterminer le media_type
     media_type_mapping = {
         ".obj": "model/obj",
         ".stl": "model/stl",
@@ -1946,7 +1764,6 @@ async def get_generated_mesh(filename: str):
     }
     media_type = media_type_mapping.get(file_ext, "application/octet-stream")
 
-    # Streamer le fichier
     CHUNK_SIZE = 1024 * 1024  # 1 MB chunks
 
     def iterfile():
@@ -1965,10 +1782,7 @@ async def get_generated_mesh(filename: str):
 
 @app.post("/retopologize")
 async def retopologize(request: RetopologyRequest):
-    """
-    Lance une tâche de retopologie avec Instant Meshes
-    """
-    # Déterminer le dossier source selon le flag
+    """Start an async retopology task using Instant Meshes."""
     if request.is_simplified:
         source_dir = DATA_OUTPUT
     elif request.is_generated:
@@ -1979,10 +1793,9 @@ async def retopologize(request: RetopologyRequest):
     input_file = source_dir / request.filename
 
     if not input_file.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier non trouvé: {request.filename}")
+        raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
 
-    # Valider que target_face_count est dans le range acceptable
-    # Range: [5% : 50%] du mesh original, minimum absolu 1000
+    # Validate target_face_count range: [5% : 50%] of original, minimum 1000
     original_face_count = request.original_face_count
     min_faces = max(1000, int(original_face_count * 0.05))
     max_faces = max(5000, int(original_face_count * 0.5))
@@ -1990,16 +1803,15 @@ async def retopologize(request: RetopologyRequest):
     if request.target_face_count < min_faces:
         raise HTTPException(
             status_code=400,
-            detail=f"target_face_count trop bas: minimum {min_faces} faces (mesh original: {original_face_count} faces)"
+            detail=f"target_face_count too low: minimum {min_faces} faces (original: {original_face_count})"
         )
 
     if request.target_face_count > max_faces:
         raise HTTPException(
             status_code=400,
-            detail=f"target_face_count trop eleve: maximum {max_faces} faces (mesh original: {original_face_count} faces)"
+            detail=f"target_face_count too high: maximum {max_faces} faces (original: {original_face_count})"
         )
 
-    # Créer une tâche asynchrone
     task_id = task_manager.create_task(
         task_type="retopologize",
         params={
@@ -2016,24 +1828,19 @@ async def retopologize(request: RetopologyRequest):
     return {
         "task_id": task_id,
         "status": "pending",
-        "message": "Tâche de retopologie créée"
+        "message": "Retopology task created"
     }
 
 @app.get("/mesh/retopo/{filename}")
 async def get_retopo_mesh(filename: str):
-    """
-    GLB-First: Sert un fichier de maillage retopologisé depuis data/retopo.
-
-    Avec l'architecture GLB-First, tous les fichiers retopologisés sont directement en GLB.
-    """
+    """Stream a retopologized mesh from data/retopo for visualization."""
     file_path = DATA_RETOPO / filename
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+        raise HTTPException(status_code=404, detail="File not found")
 
     file_ext = file_path.suffix.lower()
 
-    # Déterminer le media_type
     media_type_mapping = {
         ".obj": "model/obj",
         ".stl": "model/stl",
@@ -2062,13 +1869,7 @@ async def get_retopo_mesh(filename: str):
 
 @app.post("/segment")
 async def segment(request: SegmentRequest):
-    """
-    Crée une tâche de segmentation asynchrone
-
-    La segmentation colore le mesh selon différentes méthodes géométriques.
-    Formats supportés: OBJ, STL, PLY, OFF
-    """
-    # Déterminer le dossier source selon les flags
+    """Start an async mesh segmentation task."""
     if request.is_generated:
         input_dir = DATA_GENERATED_MESHES
         source_label = "generated"
@@ -2084,14 +1885,12 @@ async def segment(request: SegmentRequest):
 
     input_path = input_dir / request.filename
 
-    # Vérifier que le fichier existe
     if not input_path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Fichier {request.filename} introuvable dans {source_label}"
+            detail=f"File {request.filename} not found in {source_label}"
         )
 
-    # Créer la tâche asynchrone
     task_id = task_manager.create_task(
         task_type="segment",
         params={
@@ -2108,16 +1907,16 @@ async def segment(request: SegmentRequest):
 
     return {
         "task_id": task_id,
-        "message": f"Segmentation lancée avec méthode '{request.method}'"
+        "message": f"Segmentation started with method '{request.method}'"
     }
 
 @app.get("/mesh/segmented/{filename}")
 async def get_segmented_mesh(filename: str):
-    """Télécharge un mesh segmenté depuis data/segmented/"""
+    """Download a segmented mesh from data/segmented/."""
     file_path = DATA_SEGMENTED / filename
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier segmenté introuvable")
+        raise HTTPException(status_code=404, detail="Segmented file not found")
 
     return FileResponse(
         path=str(file_path),
@@ -2127,7 +1926,7 @@ async def get_segmented_mesh(filename: str):
 
 @app.post("/compare")
 async def compare_meshes_endpoint(request: CompareRequest):
-    """Compare deux meshes et genere une heatmap de distance."""
+    """Compare two meshes and generate a distance heatmap."""
 
     def _resolve(filename, is_gen, is_simp, is_retopo):
         if is_gen:
@@ -2144,9 +1943,9 @@ async def compare_meshes_endpoint(request: CompareRequest):
                          request.is_simplified_comp, request.is_retopo_comp)
 
     if not ref_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier reference introuvable: {request.filename_ref}")
+        raise HTTPException(status_code=404, detail=f"Reference file not found: {request.filename_ref}")
     if not comp_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier comparaison introuvable: {request.filename_comp}")
+        raise HTTPException(status_code=404, detail=f"Comparison file not found: {request.filename_comp}")
 
     task_id = task_manager.create_task(
         task_type="compare",
@@ -2162,15 +1961,15 @@ async def compare_meshes_endpoint(request: CompareRequest):
         }
     )
 
-    return {"task_id": task_id, "message": "Comparaison lancee"}
+    return {"task_id": task_id, "message": "Comparison started"}
 
 
 @app.get("/mesh/compared/{filename}")
 async def get_compared_mesh(filename: str):
-    """Telecharge un mesh de comparaison (heatmap) depuis data/compared/"""
+    """Download a comparison mesh (heatmap) from data/compared/."""
     file_path = DATA_COMPARED / filename
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier de comparaison introuvable")
+        raise HTTPException(status_code=404, detail="Comparison file not found")
     return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
 
 
@@ -2186,7 +1985,7 @@ async def get_quality_stats(
 
     mesh_path = _resolve_mesh_path(filename, is_generated, is_simplified, is_retopologized)
     if not mesh_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier introuvable: {filename}")
+        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
 
     return compute_quality_stats(mesh_path)
 
@@ -2202,7 +2001,7 @@ async def quality_visualize_endpoint(request: QualityVisualizeRequest):
         raise HTTPException(status_code=404, detail=f"Fichier introuvable: {request.filename}")
 
     if request.diagnostic_type not in ("boundary", "non_manifold", "face_quality"):
-        raise HTTPException(status_code=400, detail=f"Type invalide: {request.diagnostic_type}")
+        raise HTTPException(status_code=400, detail=f"Invalid diagnostic type: {request.diagnostic_type}")
 
     task_id = task_manager.create_task(
         task_type="quality_visualize",
@@ -2215,21 +2014,21 @@ async def quality_visualize_endpoint(request: QualityVisualizeRequest):
         }
     )
 
-    return {"task_id": task_id, "message": "Analyse qualite lancee"}
+    return {"task_id": task_id, "message": "Quality analysis started"}
 
 
 @app.get("/mesh/quality/{filename}")
 async def get_quality_mesh(filename: str):
-    """Serve a quality visualization GLB from data/quality/"""
+    """Serve a quality visualization GLB from data/quality/."""
     file_path = DATA_QUALITY / filename
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier qualite introuvable")
+        raise HTTPException(status_code=404, detail="Quality file not found")
     return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
 
 
 @app.post("/unwrap-uv")
 async def unwrap_uv_endpoint(request: UnwrapUVRequest):
-    """Lance un UV unwrapping LSCM via trimesh. Retourne task_id."""
+    """Start an async LSCM UV unwrapping task. Returns task_id."""
     mesh_path = _resolve_mesh_path(
         request.filename,
         request.is_generated,
@@ -2237,7 +2036,7 @@ async def unwrap_uv_endpoint(request: UnwrapUVRequest):
         request.is_retopologized
     )
     if not mesh_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {request.filename}")
+        raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
 
     task_id = task_manager.create_task(
         task_type="unwrap_uv",
@@ -2248,15 +2047,15 @@ async def unwrap_uv_endpoint(request: UnwrapUVRequest):
             "is_retopologized": request.is_retopologized,
         }
     )
-    return {"task_id": task_id, "message": "UV unwrapping lance"}
+    return {"task_id": task_id, "message": "UV unwrapping started"}
 
 
 @app.get("/mesh/unwrapped/{filename}")
 async def get_unwrapped_mesh(filename: str):
-    """Serve un mesh UV-unwrapped depuis data/unwrapped/"""
+    """Serve a UV-unwrapped mesh from data/unwrapped/."""
     file_path = DATA_UNWRAPPED / filename
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier unwrapped introuvable")
+        raise HTTPException(status_code=404, detail="Unwrapped file not found")
     return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
 
 
@@ -2272,7 +2071,7 @@ def generate_lod_task_handler(task: Task):
 
     lods = []
 
-    # LOD0 = copie du fichier original
+    # LOD0: copy of the original
     lod0_path = DATA_OUTPUT / f"{stem}_LOD0.glb"
     shutil.copy2(str(input_path), str(lod0_path))
     original_faces = _count_faces_glb(input_path)
@@ -2284,12 +2083,12 @@ def generate_lod_task_handler(task: Task):
         result = simplify_mesh_glb(
             input_path=input_path,
             output_path=lod_path,
-            reduction_ratio=1.0 - ratio  # ratio = faces gardées → reduction = faces supprimées
+            reduction_ratio=1.0 - ratio  # ratio = faces kept; reduction = faces removed
         )
         faces = result.get("simplified_triangles", 0) if result.get("success") else 0
         lods.append({"level": i, "filename": lod_path.name, "faces_count": faces})
 
-    # ZIP des 4 fichiers
+    # Pack all 4 LOD files into a ZIP
     zip_filename = f"{stem}_LODs.zip"
     zip_path = DATA_OUTPUT / zip_filename
     with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
@@ -2321,11 +2120,11 @@ def _count_faces_glb(path: Path) -> int:
 
 @app.post("/generate-lod")
 async def generate_lod(request: GenerateLodRequest):
-    """Génère 4 niveaux de LOD (LOD0–LOD3) depuis un mesh GLB et un ZIP téléchargeable."""
+    """Generate 4 LOD levels (LOD0-LOD3) from a GLB mesh and package them as a downloadable ZIP."""
     source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
     input_path = source_dir / request.filename
     if not input_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier non trouve: {request.filename}")
+        raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
 
     task_id = task_manager.create_task(
         task_type="generate_lod",
@@ -2334,25 +2133,21 @@ async def generate_lod(request: GenerateLodRequest):
             "is_generated": request.is_generated,
         }
     )
-    return {"task_id": task_id, "message": "Generation LOD lancee"}
+    return {"task_id": task_id, "message": "LOD generation started"}
 
 
 @app.get("/download-lod-zip/{filename}")
 async def download_lod_zip(filename: str):
-    """Télécharge le ZIP contenant tous les niveaux de LOD."""
+    """Download the ZIP containing all LOD levels."""
     file_path = DATA_OUTPUT / filename
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="ZIP LOD introuvable")
+        raise HTTPException(status_code=404, detail="LOD ZIP not found")
     return FileResponse(
         path=str(file_path),
         filename=filename,
         media_type="application/zip"
     )
 
-
-# NOTE: Les @app.on_event("startup") et @app.on_event("shutdown")
-# ont été migrés vers le système lifespan (voir ligne ~33)
-# Cette migration suit les recommandations FastAPI 0.93+
 
 if __name__ == "__main__":
     import uvicorn

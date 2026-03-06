@@ -1,10 +1,10 @@
 """
-RunPod Serverless handler pour Unique3D.
-Recoit une image en base64, genere un mesh 3D, retourne le GLB en base64.
+RunPod Serverless handler for Unique3D.
+Receives an image as base64, generates a 3D mesh, returns the GLB as base64.
 
-Deploiement:
-    docker build -f dockerfile.runpod -t tonuser/unique3d-worker:runpod .
-    docker push tonuser/unique3d-worker:runpod
+Deployment:
+    docker build -f dockerfile.runpod -t youruser/unique3d-worker:runpod .
+    docker push youruser/unique3d-worker:runpod
 """
 
 import runpod
@@ -33,13 +33,13 @@ def handler(job):
     if "image_base64" not in job_input:
         return {"success": False, "error": "Missing image_base64 in input"}
 
-    # Decoder l'image base64 → fichier temp
+    # Decode base64 image to a temp file
     img_data = base64.b64decode(job_input["image_base64"])
     tmp_input = "/tmp/runpod_input.png"
     tmp_output = "/tmp/runpod_output.glb"
     Path(tmp_input).write_bytes(img_data)
 
-    # Preparer l'environnement (meme logique que unique3d_client.py worker mode)
+    # Set up env (same as unique3d_client.py worker mode)
     my_env = os.environ.copy()
     current_ld = my_env.get("LD_LIBRARY_PATH", "")
     my_env["LD_LIBRARY_PATH"] = ":".join(NV_LIBS) + (f":{current_ld}" if current_ld else "")
@@ -47,7 +47,6 @@ def handler(job):
     my_env["CUDA_MODULE_LOADING"] = "LAZY"
     my_env["ORT_CUDA_FLAGS"] = "1"
 
-    # Lancer run_unique3d.py
     seed = str(job_input.get("seed", 42))
     cmd = [
         PYTHON_PATH, "scripts/run_unique3d.py",
@@ -69,7 +68,7 @@ def handler(job):
             "error": f"Script failed (exit {result.returncode}): {result.stdout[-1000:]}",
         }
 
-    # Encoder le GLB → base64
+    # Encode GLB as base64
     if Path(tmp_output).exists():
         glb_bytes = Path(tmp_output).read_bytes()
         glb_b64 = base64.b64encode(glb_bytes).decode()

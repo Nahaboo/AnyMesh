@@ -1,23 +1,22 @@
 """
-Benchmark providers 3D - compare TRELLIS, TripoSR, Stability AI et Unique3D
-sur les memes images.
+Benchmark for 3D providers: compare TRELLIS, TripoSR, Stability AI, and Unique3D on the same images.
 
 Usage:
     python benchmark_providers.py image.png
     python benchmark_providers.py images/
     python benchmark_providers.py img1.png img2.jpg --resolution high
 
-    # Selectionner les providers a tester
+    # Select providers to test
     python benchmark_providers.py image.png --only trellis stability
     python benchmark_providers.py image.png --skip triposr unique3d
 
-Prerequis par provider:
-    TRELLIS    : RUNPOD_TRELLIS_ENDPOINT_ID + RUNPOD_API_KEY dans .env
+Prerequisites per provider:
+    TRELLIS    : RUNPOD_TRELLIS_ENDPOINT_ID + RUNPOD_API_KEY in .env
     TripoSR    : pip install -r tools/TripoSR/requirements.txt
-    Stability  : STABILITY_API_KEY dans .env
-    Unique3D   : worker Docker lance (docker compose up unique3d-worker)
+    Stability  : STABILITY_API_KEY in .env
+    Unique3D   : Docker worker running (docker compose up unique3d-worker)
 
-Sortie:
+Output:
     data/generated_meshes/<stem>_trellis.glb
     data/generated_meshes/<stem>_triposr.glb
     data/generated_meshes/<stem>_stability.glb
@@ -75,13 +74,13 @@ def encode_image_b64(image_path: Path, max_size: int = MAX_IMAGE_SIZE) -> str:
 
 
 def mesh_quality_stats(glb_path: Path) -> dict:
-    """Calcule les stats qualite d'un GLB : faces, watertight, composantes, aspect ratio, texture."""
+    """Compute quality stats for a GLB: faces, watertight, components, aspect ratio, texture."""
     try:
         import trimesh
         import numpy as np
         loaded = trimesh.load(str(glb_path), force="scene")
 
-        # Fusionner toutes les geometries en un seul mesh pour les stats globales
+        # Merge all geometries for global stats
         if hasattr(loaded, "geometry"):
             meshes = list(loaded.geometry.values())
         else:
@@ -90,10 +89,10 @@ def mesh_quality_stats(glb_path: Path) -> dict:
         faces = sum(len(m.faces) for m in meshes)
         components = len(meshes)
 
-        # Watertight = toutes les geometries sont watertight
+        # Watertight only if all geometries are watertight
         watertight = all(m.is_watertight for m in meshes)
 
-        # Aspect ratio moyen : rapport entre le plus long et le plus court cote de chaque triangle
+        # Mean aspect ratio: longest / shortest edge per triangle
         all_aspect = []
         for m in meshes:
             if len(m.faces) == 0:
@@ -107,7 +106,7 @@ def mesh_quality_stats(glb_path: Path) -> dict:
             all_aspect.extend(ratio.tolist())
         aspect_ratio = float(np.mean(all_aspect)) if all_aspect else 0.0
 
-        # Texture : chercher baseColorTexture dans les materiaux
+        # Find baseColorTexture in materials
         tex_res = None
         for m in meshes:
             if hasattr(m, "visual") and hasattr(m.visual, "material"):
@@ -281,7 +280,7 @@ PROVIDER_LABELS = {
 
 
 def print_comparison(image_name: str, results: dict[str, dict]):
-    header = f"  {'Provider':<12} {'Statut':<8} {'Temps':>7} {'Taille':>8} {'Faces':>8} {'Compos.':>8} {'Watertight':<12} {'AspRatio':>9} {'Texture':>12}"
+    header = f"  {'Provider':<12} {'Status':<8} {'Time':>7} {'Size':>8} {'Faces':>8} {'Comps.':>8} {'Watertight':<12} {'AspRatio':>9} {'Texture':>12}"
     sep    = f"  {'-'*12} {'-'*8} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*12} {'-'*9} {'-'*12}"
     print(f"\n{header}")
     print(sep)
@@ -290,13 +289,13 @@ def print_comparison(image_name: str, results: dict[str, dict]):
         if r.get("error") == "skipped":
             print(f"  {label:<12} {'---':<8}")
         elif r["success"]:
-            wt = "Oui" if r["watertight"] else "Non"
+            wt = "Yes" if r["watertight"] else "No"
             print(
                 f"  {label:<12} {'OK':<8} {r['time']:>6.0f}s {r['size_mb']:>7.1f}M"
                 f" {r['faces']:>8,} {r['components']:>8} {wt:<12} {r['aspect_ratio']:>9.2f} {r['texture']:>12}"
             )
         else:
-            print(f"  {label:<12} {'ECHEC':<8}  {r['error']}")
+            print(f"  {label:<12} {'FAIL':<8}  {r['error']}")
 
 
 def save_results(results: list[dict], active_providers: list[str], output_file: Path):
@@ -316,25 +315,24 @@ def save_results(results: list[dict], active_providers: list[str], output_file: 
                     f" | aspect {r['aspect_ratio']:.2f} | texture {r['texture']} | {r['output']}"
                 )
             else:
-                lines.append(f"  {label}: ECHEC | {r['error']}")
+                lines.append(f"  {label}: FAIL | {r['error']}")
         lines.append("")
     output_file.write_text("\n".join(lines), encoding="utf-8")
-    print(f"\nResultats sauvegardes: {output_file}")
+    print(f"\nResults saved: {output_file}")
 
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Benchmark 4 providers 3D generation")
-    parser.add_argument("inputs", nargs="+", help="Images ou dossiers")
+    parser = argparse.ArgumentParser(description="Benchmark 4 3D generation providers")
+    parser.add_argument("inputs", nargs="+", help="Images or image directories")
     parser.add_argument("--resolution", choices=["low", "medium", "high"], default="medium")
     parser.add_argument("--only", nargs="+", choices=ALL_PROVIDERS, metavar="PROVIDER",
-                        help="Tester seulement ces providers")
+                        help="Test only these providers")
     parser.add_argument("--skip", nargs="+", choices=ALL_PROVIDERS, metavar="PROVIDER",
-                        help="Ignorer ces providers")
+                        help="Skip these providers")
     args = parser.parse_args()
 
-    # Determiner les providers actifs
     if args.only:
         active = args.only
     elif args.skip:
@@ -344,35 +342,33 @@ def main():
 
     images = collect_images(args.inputs)
     if not images:
-        print("Aucune image trouvee.")
+        print("No images found.")
         sys.exit(1)
 
-    # Verifier les prerequis
     trellis_endpoint = os.getenv("RUNPOD_TRELLIS_ENDPOINT_ID")
     trellis_key = os.getenv("RUNPOD_API_KEY")
     stability_key = os.getenv("STABILITY_API_KEY")
 
     errors = []
     if "trellis" in active and (not trellis_endpoint or not trellis_key):
-        errors.append("TRELLIS: RUNPOD_TRELLIS_ENDPOINT_ID et RUNPOD_API_KEY manquants dans .env")
+        errors.append("TRELLIS: RUNPOD_TRELLIS_ENDPOINT_ID and RUNPOD_API_KEY missing in .env")
     if "stability" in active and not stability_key:
-        errors.append("Stability: STABILITY_API_KEY manquant dans .env")
+        errors.append("Stability: STABILITY_API_KEY missing in .env")
 
     if errors:
         for e in errors:
-            print(f"ERREUR: {e}")
-        print("Utilisez --skip ou --only pour exclure les providers non configures.")
+            print(f"ERROR: {e}")
+        print("Use --skip or --only to exclude unconfigured providers.")
         sys.exit(1)
 
-    # Precharger TripoSR (lourd a importer)
     if "triposr" in active:
-        print("Chargement TripoSR...", end=" ", flush=True)
+        print("Loading TripoSR...", end=" ", flush=True)
         try:
             from src.triposr_client import generate_mesh_from_image_triposr
             print("OK")
         except ImportError as e:
-            print(f"ECHEC: {e}")
-            print("Retirez triposr avec --skip triposr ou installez les dependances.")
+            print(f"FAIL: {e}")
+            print("Remove triposr with --skip triposr or install dependencies.")
             sys.exit(1)
 
     GENERATED_MESHES.mkdir(parents=True, exist_ok=True)

@@ -1,17 +1,17 @@
 """
-Batch generation 3D - genere des meshes 3D a partir d'un dossier d'images.
+Batch 3D generation from a folder of images.
 
 Usage:
-    python batch_generate.py images/                        # Unique3D local (Docker)
-    python batch_generate.py --runpod images/               # Unique3D RunPod
-    python batch_generate.py --trellis images/              # TRELLIS: 1 image = 1 mesh
+    python batch_generate.py images/                       # Unique3D local (Docker)
+    python batch_generate.py --runpod images/              # Unique3D RunPod
+    python batch_generate.py --trellis images/             # TRELLIS: 1 image = 1 mesh
     python batch_generate.py --trellis --multi images/     # TRELLIS: N images = 1 mesh (multi-view)
 
-Mode local : le worker Docker doit etre lance avant:
+Local mode: start the Docker worker first:
     docker compose up unique3d-worker
 
-Mode RunPod : configurer RUNPOD_ENDPOINT_ID et RUNPOD_API_KEY dans .env
-Mode TRELLIS : configurer RUNPOD_TRELLIS_ENDPOINT_ID et RUNPOD_API_KEY dans .env
+RunPod mode: set RUNPOD_ENDPOINT_ID and RUNPOD_API_KEY in .env
+TRELLIS mode: set RUNPOD_TRELLIS_ENDPOINT_ID and RUNPOD_API_KEY in .env
 """
 
 import sys
@@ -30,19 +30,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 WORKER_URL = "http://localhost:8001"
-TIMEOUT = 1800  # 30 min par generation
+TIMEOUT = 1800  # 30 min per generation
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
 DATA_DIR = Path("data")
 INPUT_IMAGES = DATA_DIR / "input_images"
 GENERATED_MESHES = DATA_DIR / "generated_meshes"
 
-RUNPOD_POLL_INTERVAL = 10  # secondes entre chaque poll
-MAX_IMAGE_SIZE = 1024  # TRELLIS réduit à 518px en interne, 1024 suffit
+RUNPOD_POLL_INTERVAL = 10  # seconds between polls
+MAX_IMAGE_SIZE = 1024  # TRELLIS internally reduces to 518px; 1024 is sufficient
 
 
 def encode_image_b64(image_path: Path, max_size: int = MAX_IMAGE_SIZE) -> str:
-    """Encode une image en base64, redimensionnée si > max_size px."""
+    """Encode an image as base64, resizing it if larger than max_size px."""
     img = Image.open(image_path)
     if max(img.size) > max_size:
         img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
@@ -52,7 +52,7 @@ def encode_image_b64(image_path: Path, max_size: int = MAX_IMAGE_SIZE) -> str:
 
 
 def collect_images(paths: list[str]) -> list[Path]:
-    """Collecte les images depuis les arguments (fichiers ou dossiers)."""
+    """Collect images from the given arguments (files or directories)."""
     images = []
     for p in paths:
         path = Path(p)
@@ -63,14 +63,14 @@ def collect_images(paths: list[str]) -> list[Path]:
         elif path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
             images.append(path)
         else:
-            print(f"  [SKIP] {p} (pas une image supportee)")
+            print(f"  [SKIP] {p} (unsupported format)")
     return images
 
 
 # --- MODE LOCAL (Docker) ---
 
 def check_worker() -> bool:
-    """Verifie que le worker Docker est accessible."""
+    """Check that the Docker worker is reachable."""
     try:
         r = requests.get(f"{WORKER_URL}/health", timeout=5)
         return r.status_code == 200
@@ -79,7 +79,7 @@ def check_worker() -> bool:
 
 
 def generate_one_local(image_path: Path, batch_dir: Path, index: int) -> dict:
-    """Genere un mesh 3D via le worker Docker local."""
+    """Generate a 3D mesh via the local Docker worker."""
     dest = batch_dir / f"image_{index:03d}{image_path.suffix.lower()}"
     shutil.copy2(image_path, dest)
 
@@ -120,7 +120,7 @@ def generate_one_local(image_path: Path, batch_dir: Path, index: int) -> dict:
 
 def generate_one_trellis(image_path: Path, endpoint_id: str, api_key: str,
                          extra_images: list[Path] = None) -> dict:
-    """Genere un mesh 3D via RunPod TRELLIS (single ou multi-image)."""
+    """Generate a 3D mesh via RunPod TRELLIS (single or multi-image)."""
     output_name = f"{image_path.stem}_trellis.glb"
     output_path = GENERATED_MESHES / output_name
 
@@ -165,7 +165,7 @@ def generate_one_trellis(image_path: Path, endpoint_id: str, api_key: str,
     if not job_id:
         return {"success": False, "time": time.time() - start, "error": f"No job_id: {job_data}"}
 
-    print(f"    Job soumis: {job_id}")
+    print(f"    Job: {job_id}")
 
     while True:
         time.sleep(RUNPOD_POLL_INTERVAL)
@@ -206,11 +206,10 @@ def generate_one_trellis(image_path: Path, endpoint_id: str, api_key: str,
 
 
 def generate_one_runpod(image_path: Path, endpoint_id: str, api_key: str) -> dict:
-    """Genere un mesh 3D via RunPod Serverless."""
+    """Generate a 3D mesh via RunPod Serverless."""
     output_name = f"{image_path.stem}_unique3d.glb"
     output_path = GENERATED_MESHES / output_name
 
-    # Encoder l'image en base64
     img_b64 = base64.b64encode(image_path.read_bytes()).decode()
 
     headers = {
@@ -220,7 +219,7 @@ def generate_one_runpod(image_path: Path, endpoint_id: str, api_key: str) -> dic
 
     start = time.time()
 
-    # 1. Soumettre le job (async)
+    # Submit async job
     try:
         r = requests.post(
             f"https://api.runpod.ai/v2/{endpoint_id}/run",
@@ -240,9 +239,9 @@ def generate_one_runpod(image_path: Path, endpoint_id: str, api_key: str) -> dic
     if not job_id:
         return {"success": False, "time": time.time() - start, "error": f"No job_id: {job_data}"}
 
-    print(f"    Job soumis: {job_id}")
+    print(f"    Job: {job_id}")
 
-    # 2. Polling jusqu'a completion
+    # Poll until completion
     while True:
         time.sleep(RUNPOD_POLL_INTERVAL)
         elapsed = time.time() - start
@@ -282,21 +281,20 @@ def generate_one_runpod(image_path: Path, endpoint_id: str, api_key: str) -> dic
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Batch generation 3D")
-    parser.add_argument("inputs", nargs="+", help="Images ou dossiers d'images")
-    parser.add_argument("--runpod", action="store_true", help="Unique3D via RunPod GPU distant")
-    parser.add_argument("--trellis", action="store_true", help="TRELLIS via RunPod GPU distant")
-    parser.add_argument("--multi", action="store_true", help="Multi-image: toutes les images = 1 seul mesh (TRELLIS uniquement)")
+    parser = argparse.ArgumentParser(description="Batch 3D generation")
+    parser.add_argument("inputs", nargs="+", help="Images or image directories")
+    parser.add_argument("--runpod", action="store_true", help="Unique3D via remote RunPod GPU")
+    parser.add_argument("--trellis", action="store_true", help="TRELLIS via remote RunPod GPU")
+    parser.add_argument("--multi", action="store_true", help="Multi-image: all images = 1 mesh (TRELLIS only)")
     args = parser.parse_args()
 
     if args.multi and not args.trellis:
-        print("ERREUR: --multi ne fonctionne qu'avec --trellis")
+        print("ERROR: --multi only works with --trellis")
         sys.exit(1)
 
-    # Collecter les images
     images = collect_images(args.inputs)
     if not images:
-        print("Aucune image trouvee.")
+        print("No images found.")
         sys.exit(1)
 
     if args.trellis:
@@ -314,32 +312,32 @@ def main():
         print(f"  {i + 1}. {img.name}")
 
     if args.trellis:
-        # --- Mode TRELLIS RunPod ---
+        # --- TRELLIS RunPod mode ---
         endpoint_id = os.getenv("RUNPOD_TRELLIS_ENDPOINT_ID")
         api_key = os.getenv("RUNPOD_API_KEY")
         if not endpoint_id or not api_key:
-            print("\nERREUR: RUNPOD_TRELLIS_ENDPOINT_ID et RUNPOD_API_KEY doivent etre configures dans .env")
+            print("\nERROR: RUNPOD_TRELLIS_ENDPOINT_ID and RUNPOD_API_KEY must be set in .env")
             sys.exit(1)
         print(f"\nEndpoint TRELLIS: {endpoint_id}")
     elif args.runpod:
-        # --- Mode Unique3D RunPod ---
+        # --- Unique3D RunPod mode ---
         endpoint_id = os.getenv("RUNPOD_ENDPOINT_ID")
         api_key = os.getenv("RUNPOD_API_KEY")
         if not endpoint_id or not api_key:
-            print("\nERREUR: RUNPOD_ENDPOINT_ID et RUNPOD_API_KEY doivent etre configures dans .env")
+            print("\nERROR: RUNPOD_ENDPOINT_ID and RUNPOD_API_KEY must be set in .env")
             sys.exit(1)
         print(f"\nEndpoint RunPod: {endpoint_id}")
     else:
-        # --- Mode local ---
-        print("\nVerification du worker...", end=" ")
+        # --- Local mode ---
+        print("\nChecking worker...", end=" ")
         if not check_worker():
-            print("ECHEC")
-            print("Le worker n'est pas accessible sur", WORKER_URL)
-            print("Lancez-le avec : docker compose up unique3d-worker")
+            print("FAIL")
+            print("Worker not reachable at", WORKER_URL)
+            print("Start it with: docker compose up unique3d-worker")
             sys.exit(1)
         print("OK")
 
-    # Preparer le dossier batch (mode local seulement)
+    # Prepare batch directory (local mode only)
     batch_dir = None
     if not args.runpod and not args.trellis:
         batch_id = f"batch_{int(time.time())}"
@@ -347,19 +345,18 @@ def main():
         batch_dir.mkdir(parents=True, exist_ok=True)
     GENERATED_MESHES.mkdir(parents=True, exist_ok=True)
 
-    # Generer sequentiellement
     results = []
     total_start = time.time()
 
-    # Mode multi-image: toutes les images en un seul job
+    # Multi-image: all images in a single job
     if args.multi:
         print(f"\n[MULTI] {len(images)} images -> 1 mesh...")
         result = generate_one_trellis(images[0], endpoint_id, api_key, extra_images=images[1:])
         results.append(result)
         if result["success"]:
-            print(f"  OK - {result['output']} ({result['size_mb']:.1f} Mo, {result['time']:.0f}s)")
+            print(f"  OK - {result['output']} ({result['size_mb']:.1f} MB, {result['time']:.0f}s)")
         else:
-            print(f"  ECHEC - {result['error']} ({result['time']:.0f}s)")
+            print(f"  FAIL - {result['error']} ({result['time']:.0f}s)")
 
     for i, img in enumerate(images):
         if args.multi:
@@ -376,21 +373,20 @@ def main():
         results.append(result)
 
         if result["success"]:
-            print(f"  OK - {result['output']} ({result['size_mb']:.1f} Mo, {result['time']:.0f}s)")
+            print(f"  OK - {result['output']} ({result['size_mb']:.1f} MB, {result['time']:.0f}s)")
         else:
-            print(f"  ECHEC - {result['error']} ({result['time']:.0f}s)")
+            print(f"  FAIL - {result['error']} ({result['time']:.0f}s)")
 
-    # Resume
     total_time = time.time() - total_start
     ok = sum(1 for r in results if r["success"])
     fail = len(results) - ok
 
-    print(f"\n== Resume ==")
-    print(f"  Reussis : {ok}/{len(results)}")
+    print(f"\n== Summary ==")
+    print(f"  Success: {ok}/{len(results)}")
     if fail:
-        print(f"  Echoues : {fail}")
-    print(f"  Temps total : {total_time / 60:.1f} min")
-    print(f"  Sortie : {GENERATED_MESHES}/")
+        print(f"  Failed: {fail}")
+    print(f"  Total time: {total_time / 60:.1f} min")
+    print(f"  Output: {GENERATED_MESHES}/")
 
 
 if __name__ == "__main__":

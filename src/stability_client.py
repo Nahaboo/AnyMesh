@@ -1,6 +1,5 @@
 """
-Stability AI Fast 3D mesh generation client
-Genere des maillages 3D de haute qualite a partir d'images en utilisant l'API Stability AI
+Stability AI Fast 3D mesh generation client. Generates GLB meshes from images via the Stability AI API.
 """
 
 import time
@@ -13,7 +12,7 @@ from PIL import Image
 
 STABILITY_API_URL = "https://api.stability.ai/v2beta/3d/stable-fast-3d"
 
-# Mapping resolution vers parametres API Stability
+# Resolution to Stability API parameter mapping
 RESOLUTION_PARAMS = {
     'low': {
         'texture_resolution': 512,
@@ -34,7 +33,7 @@ RESOLUTION_PARAMS = {
 
 
 class StabilityAPIError(Exception):
-    """Exception personnalisee pour les erreurs API Stability"""
+    """Raised when the Stability API returns an error."""
     def __init__(self, status_code: int, message: str):
         self.status_code = status_code
         self.message = message
@@ -42,26 +41,17 @@ class StabilityAPIError(Exception):
 
 
 def _translate_error(status_code: int, api_message: str) -> str:
-    """
-    Convertit les erreurs API en messages utilisateur francais
-
-    Args:
-        status_code: Code HTTP de l'erreur
-        api_message: Message original de l'API
-
-    Returns:
-        Message d'erreur traduit
-    """
+    """Return a user-facing error message for the given API status code."""
     ERROR_MESSAGES = {
-        400: "Image invalide ou rejetee par le filtre de contenu",
-        401: "Cle API invalide - Verifiez STABILITY_API_KEY dans .env",
-        402: "Credits API insuffisants - Rechargez votre compte Stability AI",
-        429: "Limite de debit atteinte - Reessayez dans quelques secondes",
-        500: "Erreur serveur Stability AI - Reessayez plus tard",
-        503: "Service Stability AI temporairement indisponible"
+        400: "Invalid image or rejected by content filter",
+        401: "Invalid API key - check STABILITY_API_KEY in .env",
+        402: "Insufficient API credits - top up your Stability AI account",
+        429: "Rate limit reached - retry in a few seconds",
+        500: "Stability AI server error - retry later",
+        503: "Stability AI service temporarily unavailable"
     }
 
-    user_message = ERROR_MESSAGES.get(status_code, f"Erreur API ({status_code})")
+    user_message = ERROR_MESSAGES.get(status_code, f"API error ({status_code})")
     return f"{user_message} | Details: {api_message}"
 
 
@@ -74,23 +64,9 @@ def _call_stability_api(
     api_key: str
 ) -> bytes:
     """
-    Appel API Stability de bas niveau - retourne les bytes GLB
+    Low-level Stability API call. Returns raw GLB bytes.
 
-    Args:
-        image_path: Chemin vers l'image d'entree
-        texture_resolution: 512, 1024, ou 2048
-        foreground_ratio: 0.1-1.0 (defaut 0.85)
-        remesh: 'none', 'quad', ou 'triangle'
-        vertex_count: -1 (illimite) ou nombre specifique
-        api_key: Cle API Stability
-
-    Returns:
-        bytes: Contenu du fichier GLB
-
-    Raises:
-        StabilityAPIError: L'API a retourne une erreur
-        httpx.TimeoutException: La requete a expire
-        httpx.NetworkError: Erreur de connexion reseau
+    Raises StabilityAPIError on non-200 responses.
     """
     print(f"  [STABILITY-API] Calling Fast 3D API")
     print(f"    Image: {image_path.name}")
@@ -99,7 +75,6 @@ def _call_stability_api(
     print(f"    Remesh: {remesh}")
 
     with open(image_path, 'rb') as img_file:
-        # Preparer les donnees multipart/form-data
         files = {'image': (image_path.name, img_file, 'image/jpeg')}
         data = {
             'texture_resolution': str(texture_resolution),
@@ -109,7 +84,6 @@ def _call_stability_api(
         }
         headers = {'authorization': api_key}
 
-        # Effectuer l'appel API avec timeout
         with httpx.Client(timeout=120.0) as client:
             response = client.post(
                 STABILITY_API_URL,
@@ -118,13 +92,11 @@ def _call_stability_api(
                 headers=headers
             )
 
-        # Verifier le statut de la reponse
         if response.status_code == 200:
             file_size_kb = len(response.content) / 1024
             print(f"  [OK] API call successful, received {file_size_kb:.1f} KB")
             return response.content
         else:
-            # Parser la reponse d'erreur
             try:
                 error_json = response.json()
                 error_message = error_json.get('message', response.text)
@@ -145,56 +117,28 @@ def generate_mesh_from_image_sf3d(
     api_key: Optional[str] = None
 ) -> Dict:
     """
-    Genere un maillage 3D a partir d'une image en utilisant Stability AI Fast 3D
+    Generate a 3D mesh from an image using Stability AI Fast 3D.
 
-    GLB-First: L'API Stability retourne nativement du GLB, donc on sauvegarde directement
-    sans conversion. Le parametre output_path doit etre un .glb.
-
-    Args:
-        image_path: Chemin vers l'image d'entree (JPG/PNG)
-        output_path: Chemin de sortie (.glb uniquement - GLB-First)
-        resolution: 'low', 'medium', ou 'high'
-        remesh_option: 'none', 'triangle', ou 'quad' - Topologie du mesh (None = auto selon resolution)
-        api_key: Cle API Stability (requis)
-
-    Returns:
-        Dict avec resultats de generation:
-        {
-            'success': bool,
-            'output_file': str,
-            'vertices_count': int,
-            'faces_count': int,
-            'resolution': str,
-            'generation_time_ms': float,
-            'api_credits_used': int,
-            'method': 'stability_fast3d',
-            'texture_resolution': int,
-            'vertex_count': int,
-            'error': str (si echec)
-        }
+    GLB-First: the API returns GLB natively, so output_path must be a .glb.
     """
     start_time = time.time()
 
-    # Valider la cle API
     if not api_key:
         return {
             'success': False,
-            'error': 'STABILITY_API_KEY manquante - Verifiez votre fichier .env'
+            'error': 'STABILITY_API_KEY missing - check your .env file'
         }
 
-    # Valider la resolution
     if resolution not in RESOLUTION_PARAMS:
         return {
             'success': False,
-            'error': f"Resolution invalide: {resolution}. Utilisez 'low', 'medium', ou 'high'"
+            'error': f"Invalid resolution: {resolution}. Use 'low', 'medium', or 'high'"
         }
 
-    # Obtenir les parametres pour la resolution
     params = RESOLUTION_PARAMS[resolution]
 
-    # Surcharger remesh si specifie
     if remesh_option is not None:
-        params = params.copy()  # Ne pas modifier le dict global
+        params = params.copy()  # Don't mutate the global dict
         params['remesh'] = remesh_option
 
     print(f"\n [STABILITY-MESH] Generating mesh from image")
@@ -203,7 +147,6 @@ def generate_mesh_from_image_sf3d(
     print(f"  Remesh: {params['remesh']}")
 
     try:
-        # Valider l'image d'entree
         try:
             img = Image.open(image_path)
             img.verify()
@@ -211,21 +154,19 @@ def generate_mesh_from_image_sf3d(
         except Exception as e:
             return {
                 'success': False,
-                'error': f"Image invalide: {str(e)}"
+                'error': f"Invalid image: {str(e)}"
             }
 
-        # Appeler l'API Stability
         glb_bytes = _call_stability_api(
             image_path=image_path,
             texture_resolution=params['texture_resolution'],
-            foreground_ratio=0.85,  # Valeur recommandee par defaut
+            foreground_ratio=0.85,
             remesh=params['remesh'],
             vertex_count=params['vertex_count'],
             api_key=api_key
         )
 
-        # GLB-First: Sauvegarde directe du GLB (pas de conversion)
-        # Forcer l'extension .glb si ce n'est pas deja le cas
+        # GLB-First: save directly, no conversion needed
         if output_path.suffix.lower() != '.glb':
             output_path = output_path.with_suffix('.glb')
 
@@ -233,10 +174,8 @@ def generate_mesh_from_image_sf3d(
         output_path.write_bytes(glb_bytes)
         final_output = output_path
 
-        # Charger le maillage pour les statistiques
         mesh = trimesh.load(str(final_output))
         if hasattr(mesh, 'geometry'):
-            # Scene avec plusieurs maillages
             meshes = list(mesh.geometry.values())
             if len(meshes) > 0:
                 mesh = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
@@ -257,7 +196,7 @@ def generate_mesh_from_image_sf3d(
             'faces_count': faces_count,
             'resolution': resolution,
             'generation_time_ms': round(generation_time, 2),
-            'api_credits_used': 10,  # SF3D coute 10 credits par generation
+            'api_credits_used': 10,  # SF3D costs 10 credits per generation
             'method': 'stability_fast3d',
             'texture_resolution': params['texture_resolution'],
             'vertex_count': params['vertex_count']
@@ -266,13 +205,13 @@ def generate_mesh_from_image_sf3d(
     except httpx.TimeoutException:
         return {
             'success': False,
-            'error': "Timeout: L'API Stability n'a pas repondu en 2 minutes"
+            'error': "Timeout: Stability API did not respond within 2 minutes"
         }
 
     except httpx.NetworkError as e:
         return {
             'success': False,
-            'error': f"Erreur reseau: {str(e)}"
+            'error': f"Network error: {str(e)}"
         }
 
     except StabilityAPIError as e:
@@ -284,6 +223,6 @@ def generate_mesh_from_image_sf3d(
     except Exception as e:
         return {
             'success': False,
-            'error': f"Erreur inattendue: {str(e)}",
+            'error': f"Unexpected error: {str(e)}",
             'error_type': type(e).__name__
         }
