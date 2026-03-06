@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { API_BASE_URL, generateImageFromPrompt, pollTaskStatus } from '../utils/api'
 
 /**
@@ -13,6 +13,11 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
   const [generatedImage, setGeneratedImage] = useState(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [error, setError] = useState('')
+  const pollCancelRef = useRef(null)
+
+  useEffect(() => {
+    return () => { pollCancelRef.current?.() }
+  }, [])
 
   const providerInfo = {
     trellis: {
@@ -38,7 +43,7 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
       const response = await generateImageFromPrompt({ prompt: prompt.trim(), resolution })
       const taskId = response.task_id
 
-      await pollTaskStatus(
+      const poll = pollTaskStatus(
         taskId,
         (task) => {
           if (task.status === 'completed' && task.result) {
@@ -53,6 +58,8 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
         },
         1000
       )
+      pollCancelRef.current = poll.cancel
+      await poll
     } catch (err) {
       setError(err.message || 'Erreur de generation')
     } finally {

@@ -140,13 +140,16 @@ export const getDownloadUrl = (filename) => {
  * @param {number} maxAttempts - Nombre max de tentatives (default: 300 = 5 min)
  * @returns {Promise} Resultat final de la tache
  */
-export const pollTaskStatus = async (taskId, onProgress, interval = 1000, maxAttempts = 300) => {
-  return new Promise((resolve, reject) => {
-    let attempts = 0
-    let networkRetries = 0
-    const maxNetworkRetries = 3
+export const pollTaskStatus = (taskId, onProgress, interval = 1000, maxAttempts = 300) => {
+  let cancelled = false
+  let attempts = 0
+  let networkRetries = 0
+  const maxNetworkRetries = 3
 
+  const promise = new Promise((resolve, reject) => {
     const poll = async () => {
+      if (cancelled) return
+
       attempts++
 
       // P3: Timeout apres maxAttempts
@@ -157,6 +160,7 @@ export const pollTaskStatus = async (taskId, onProgress, interval = 1000, maxAtt
 
       try {
         const task = await getTaskStatus(taskId)
+        if (cancelled) return
         networkRetries = 0 // Reset sur succes
 
         // Callback de progression
@@ -174,6 +178,7 @@ export const pollTaskStatus = async (taskId, onProgress, interval = 1000, maxAtt
           setTimeout(poll, interval)
         }
       } catch (error) {
+        if (cancelled) return
         // Retry sur erreur reseau (3 tentatives max)
         networkRetries++
         if (networkRetries < maxNetworkRetries) {
@@ -188,6 +193,9 @@ export const pollTaskStatus = async (taskId, onProgress, interval = 1000, maxAtt
     // Demarrer le polling
     poll()
   })
+
+  promise.cancel = () => { cancelled = true }
+  return promise
 }
 
 // ===== API GÉNÉRATION DE MAILLAGES À PARTIR D'IMAGES =====

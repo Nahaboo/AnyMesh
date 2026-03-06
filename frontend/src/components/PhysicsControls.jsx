@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { generateMaterial, pollTaskStatus } from '../utils/api'
 
 export const MATERIAL_PRESETS = [
@@ -69,6 +69,11 @@ function PhysicsControls({
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [aiError, setAiError] = useState('')
+  const pollCancelRef = useRef(null)
+
+  useEffect(() => {
+    return () => { pollCancelRef.current?.() }
+  }, [])
 
   const handleGenerateMaterial = async () => {
     if (!aiPrompt.trim() || isGenerating) return
@@ -76,7 +81,9 @@ function PhysicsControls({
     setAiError('')
     try {
       const { task_id } = await generateMaterial({ prompt: aiPrompt.trim() })
-      const result = await pollTaskStatus(task_id, null, 1500, 120)
+      const poll = pollTaskStatus(task_id, null, 1500, 120)
+      pollCancelRef.current = poll.cancel
+      const result = await poll
       if (result.status === 'completed' && result.result?.success) {
         onAIMaterialGenerated?.({
           textureId: result.result.texture_id,

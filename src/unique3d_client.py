@@ -7,9 +7,7 @@ import subprocess
 
 logger = logging.getLogger(__name__)
 
-# --- DÉTECTION DE L'ENVIRONNEMENT ---
-# Cette variable permet de savoir si on est dans le conteneur lourd (Worker)
-# ou dans le conteneur léger (Backend)
+# True when running inside the Unique3D worker container, False on the backend container
 IS_WORKER = os.getenv("MESH_GENERATION_PROVIDER") == "unique3d"
 
 def generate_mesh_from_image_unique3d(
@@ -19,14 +17,12 @@ def generate_mesh_from_image_unique3d(
     task_id: str = "default"
 ) -> Dict:
     """
-    Point d'entrée principal. 
-    Se comporte comme un client HTTP sur le Backend et comme un moteur IA sur le Worker.
+    Main entry point. Acts as an HTTP client on the backend, and as an AI engine on the worker.
     """
     
     if not IS_WORKER:
-        # --- LOGIQUE CÔTÉ BACKEND (Messager) ---
         import requests
-        logger.info(f"[BACKEND] Délégation de la tâche Unique3D au Worker distant...")
+        logger.info(f"[BACKEND] Delegating Unique3D task to remote worker...")
         
         try:
             # En Docker: unique3d-worker:8000, en local: localhost:8001
@@ -39,22 +35,21 @@ def generate_mesh_from_image_unique3d(
                     "resolution": resolution,
                     "task_id": task_id
                 },
-                timeout=1800 # 30min — premier lancement charge les modèles GPU
+                timeout=1800  # 30min: first run loads GPU models
             )
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.error(f"[BACKEND] Échec de communication avec le worker: {e}")
-            return {"success": False, "error": f"Worker IA injoignable: {e}"}
+            logger.error(f"[BACKEND] Failed to communicate with worker: {e}")
+            return {"success": False, "error": f"AI worker unreachable: {e}"}
 
     else:
-        # --- LOGIQUE RÉELLE DU WORKER ---
+        # Worker logic
         UNIQUE3D_ROOT = "/workspace/Unique3D"
         PYTHON_PATH = "/workspace/miniconda3/envs/unique3d/bin/python"
         
-        # 1. Définition des chemins de bibliothèques (vérifiés via ton installation)
-        SITE_PACKAGES = "/workspace/miniconda3/envs/unique3d/lib/python3.10/site-packages"     
-        # Chemins vers les bibliothèques Nvidia installées via pip
+        SITE_PACKAGES = "/workspace/miniconda3/envs/unique3d/lib/python3.10/site-packages"
+        # Nvidia library paths installed via pip
         NV_LIBS = [
             f"{SITE_PACKAGES}/torch/lib",
             f"{SITE_PACKAGES}/nvidia/cublas/lib",
@@ -68,11 +63,10 @@ def generate_mesh_from_image_unique3d(
             start_time = time.time()
             logger.info(f"[UNIQUE3D] Starting real generation via official scripts")
 
-            # Préparation de l'environnement global pour les scripts
+            # Prepare environment for subprocess
             my_env = os.environ.copy()
             
-            # 2. On fusionne tous ces chemins dans le LD_LIBRARY_PATH
-            # C'est cette ligne qui permet à ONNX et Torch de trouver leurs fichiers .so
+            # Merge all lib paths into LD_LIBRARY_PATH so ONNX and Torch find their .so files
             current_ld = my_env.get("LD_LIBRARY_PATH", "")
             my_env["LD_LIBRARY_PATH"] = ":".join(NV_LIBS) + (f":{current_ld}" if current_ld else "")
             
@@ -82,8 +76,8 @@ def generate_mesh_from_image_unique3d(
             my_env["CUDA_MODULE_LOADING"] = "LAZY"
             my_env["ORT_CUDA_FLAGS"] = "1"
             
-            # Conversion des chemins relatifs (du backend) en absolus (dans le worker)
-            # image_path arrive comme "data/input_images/session_.../image_000.png"
+            # Convert relative paths (from backend) to absolute paths (in worker)
+            # image_path arrives as e.g. "data/input_images/session_.../image_000.png"
             def to_workspace_path(p):
                 s = str(p).replace("\\", "/").lstrip("/")
                 if s.startswith("workspace"):
@@ -97,10 +91,10 @@ def generate_mesh_from_image_unique3d(
             temp_work_dir.mkdir(parents=True, exist_ok=True)
 
             if not abs_input.exists():
-                logger.error(f"[UNIQUE3D] Image introuvable : {abs_input}")
-                return {'success': False, 'error': f"Fichier source introuvable : {abs_input}"}
+                logger.error(f"[UNIQUE3D] Image not found: {abs_input}")
+                return {'success': False, 'error': f"Source file not found: {abs_input}"}
 
-            # --- GÉNÉRATION COMPLÈTE (multiview + reconstruction + export GLB) ---
+            # Full generation: multiview + reconstruction + GLB export
             logger.info("  -> Running full Unique3D pipeline (multiview + reconstruction)...")
             cmd = [
                 PYTHON_PATH,
@@ -111,7 +105,7 @@ def generate_mesh_from_image_unique3d(
             ]
 
             logger.info(f"  -> Executing: {' '.join(cmd)}")
-            result = subprocess.run(cmd, check=True, env=my_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=UNIQUE3D_ROOT, text=True)
+            result = subprocess.run(cmd, check=True, env=my_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=UNIQUE3D_ROOT, text=True, timeout=1800)
             logger.info(f"--- UNIQUE3D OUTPUT ---\n{result.stdout}")
 
             return {
@@ -121,7 +115,15 @@ def generate_mesh_from_image_unique3d(
                 'method': 'unique3d_official_scripts'
             }
 
+        except subprocess.TimeoutExpired:
+            logger.error(f"[UNIQUE3D] Script timed out after 1800s")
+            return {'success': False, 'error': "Inference script timed out after 30 minutes"}
+
         except subprocess.CalledProcessError as e:
             output = e.output or e.stderr or ""
             logger.error(f"[UNIQUE3D] Script failed (exit {e.returncode}):\n{output}")
             return {'success': False, 'error': f"Inference script failed (exit {e.returncode}): {output[-500:] if output else 'no output'}"}
+
+        except Exception as e:
+            logger.error(f"[UNIQUE3D] Unexpected error: {e}")
+            return {'success': False, 'error': f"Unexpected error: {e}"}

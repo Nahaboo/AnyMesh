@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { API_BASE_URL, generateTexture, pollTaskStatus } from '../utils/api'
 
 const EXAMPLE_PROMPTS = [
@@ -15,6 +15,11 @@ function TexturingControls({ meshInfo, onApplyTexture, onResetTexture, isProcess
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
   const [textureScale, setTextureScale] = useState(3)
+  const pollCancelRef = useRef(null)
+
+  useEffect(() => {
+    return () => { pollCancelRef.current?.() }
+  }, [])
 
   const handleGenerateTexture = async () => {
     if (!prompt.trim()) {
@@ -29,7 +34,7 @@ function TexturingControls({ meshInfo, onApplyTexture, onResetTexture, isProcess
       const response = await generateTexture({ prompt: prompt.trim() })
       const taskId = response.task_id
 
-      await pollTaskStatus(
+      const poll = pollTaskStatus(
         taskId,
         (task) => {
           if (task.status === 'completed' && task.result) {
@@ -44,6 +49,8 @@ function TexturingControls({ meshInfo, onApplyTexture, onResetTexture, isProcess
         },
         1000
       )
+      pollCancelRef.current = poll.cancel
+      await poll
     } catch (err) {
       setError(err.message || 'Erreur de generation')
     } finally {

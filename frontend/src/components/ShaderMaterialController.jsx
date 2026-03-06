@@ -1,8 +1,9 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Center } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useMouseRaycast } from '../hooks/useMouseRaycast'
+import { disposeObject } from '../utils/dispose'
 
 /**
  * Adds barycentric coordinates to a geometry for wireframe rendering
@@ -49,6 +50,8 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
 
   // Store reference to processed model for animation updates
   const processedModelRef = useRef(null)
+  // Track previous model for dispose on change
+  const prevModelRef = useRef(null)
 
   // Check if this is an organic shader that needs mouse interaction
   const isOrganicShader = shaderId?.startsWith('organic-')
@@ -61,6 +64,12 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
 
   // Process model with custom shader
   const processedModel = useMemo(() => {
+    // Dispose previous clone before building a new one
+    if (prevModelRef.current) {
+      disposeObject(prevModelRef.current)
+      prevModelRef.current = null
+    }
+
     if (!model || !shader) return null
 
     // Log only when shader is applied (useMemo ensures this runs only on dependency change)
@@ -256,11 +265,22 @@ function ShaderMaterialController({ model, shader, params = {}, uploadId }) {
       }
     })
 
+    prevModelRef.current = cloned
     return cloned
   }, [model, shaderId, paramsKey, uploadId])
 
   // Update reference when processed model changes
   processedModelRef.current = processedModel
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (prevModelRef.current) {
+        disposeObject(prevModelRef.current)
+        prevModelRef.current = null
+      }
+    }
+  }, [])
 
   // Animation loop: update uTime and uMousePosition uniforms every frame
   useFrame((state) => {

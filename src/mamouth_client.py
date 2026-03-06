@@ -1,8 +1,9 @@
 """
-Mamouth.ai text-to-image generation client
-Genere des images a partir de prompts textuels via l'API Mamouth.ai (OpenAI-compatible)
+Mamouth.ai text-to-image generation client.
+Generates images from text prompts via the Mamouth.ai API (OpenAI-compatible).
 """
 
+import json
 import time
 import base64
 from pathlib import Path
@@ -24,7 +25,7 @@ RESOLUTION_PARAMS = {
 
 
 class MamouthAPIError(Exception):
-    """Exception personnalisee pour les erreurs API Mamouth"""
+    """Raised when the Mamouth API returns an error."""
     def __init__(self, status_code: int, message: str):
         self.status_code = status_code
         self.message = message
@@ -32,23 +33,14 @@ class MamouthAPIError(Exception):
 
 
 def _translate_error(status_code: int, api_message: str) -> str:
-    """
-    Convertit les erreurs API en messages utilisateur francais
-
-    Args:
-        status_code: Code HTTP de l'erreur
-        api_message: Message original de l'API
-
-    Returns:
-        Message d'erreur traduit
-    """
+    """Return a user-facing error message for the given API status code."""
     ERROR_MESSAGES = {
-        400: "Prompt invalide ou rejete par le filtre de contenu",
-        401: "Cle API invalide - Verifiez MAMOUTH_API_KEY dans .env",
-        402: "Credits API insuffisants - Rechargez votre compte Mamouth",
-        429: "Limite de debit atteinte - Reessayez dans quelques secondes",
-        500: "Erreur serveur Mamouth.ai - Reessayez plus tard",
-        503: "Service Mamouth.ai temporairement indisponible"
+        400: "Invalid prompt or rejected by content filter",
+        401: "Invalid API key - check MAMOUTH_API_KEY in .env",
+        402: "Insufficient API credits - top up your Mamouth account",
+        429: "Rate limit reached - retry in a few seconds",
+        500: "Mamouth.ai server error - retry later",
+        503: "Mamouth.ai service temporarily unavailable"
     }
 
     user_message = ERROR_MESSAGES.get(status_code, f"Erreur API ({status_code})")
@@ -62,23 +54,10 @@ def _call_mamouth_api(
     suffix: str = ""
 ) -> bytes:
     """
-    Appel API Mamouth de bas niveau - retourne les bytes de l'image
+    Low-level Mamouth API call. Returns raw PNG bytes.
 
-    L'API Mamouth utilise un format OpenAI-compatible (chat.completions)
-    avec les images retournees en base64 dans le champ images[].image_url.url
-
-    Args:
-        prompt: Description textuelle de l'image
-        model: Nom du modele Mamouth
-        api_key: Cle API Mamouth
-
-    Returns:
-        bytes: Contenu de l'image PNG
-
-    Raises:
-        MamouthAPIError: L'API a retourne une erreur
-        httpx.TimeoutException: La requete a expire
-        httpx.NetworkError: Erreur de connexion reseau
+    Uses OpenAI-compatible chat completions. Images are returned as base64
+    in choices[0].message.images[0].image_url.url.
     """
     print(f"  [MAMOUTH-API] Calling text-to-image API")
     print(f"    Model: {model}")
@@ -89,7 +68,6 @@ def _call_mamouth_api(
         'Content-Type': 'application/json'
     }
 
-    # Format OpenAI-compatible chat completions
     # Append suffix directly in user prompt (system role may be ignored by some models)
     full_prompt = f"{prompt}. {suffix}" if suffix else prompt
     payload = {
@@ -112,21 +90,18 @@ def _call_mamouth_api(
     if response.status_code == 200:
         data = response.json()
 
-        # Extraire l'image depuis la reponse
-        # Format: choices[0].message.images[0].image_url.url = "data:image/png;base64,..."
         try:
             message = data['choices'][0]['message']
             images = message.get('images', [])
 
             if not images:
-                # Debug: log what the model actually returned
                 content = message.get('content', '')
                 print(f"  [DEBUG] No images in response. Content: {content[:200]}")
-                raise MamouthAPIError(500, "Pas d'image dans la reponse API")
+                raise MamouthAPIError(500, "No image in API response")
 
             image_url = images[0]['image_url']['url']
 
-            # Decoder le base64 (retirer le prefixe data:image/png;base64,)
+            # Strip data:image/png;base64, prefix if present
             if ',' in image_url:
                 image_data = image_url.split(',', 1)[1]
             else:
@@ -137,7 +112,7 @@ def _call_mamouth_api(
             return image_bytes
 
         except (KeyError, IndexError) as e:
-            raise MamouthAPIError(500, f"Format de reponse inattendu: {e}")
+            raise MamouthAPIError(500, f"Unexpected response format: {e}")
 
     else:
         try:
@@ -158,63 +133,37 @@ def generate_image_from_prompt(
     resolution: str = "medium",
     api_key: Optional[str] = None
 ) -> Dict:
-    """
-    Genere une image a partir d'un prompt textuel via Mamouth.ai
-
-    Args:
-        prompt: Description textuelle de l'image souhaitee
-        output_path: Chemin de sortie pour sauvegarder l'image PNG
-        resolution: 'low', 'medium', ou 'high'
-        api_key: Cle API Mamouth (requis)
-
-    Returns:
-        Dict avec resultats de generation:
-        {
-            'success': bool,
-            'output_file': str,
-            'prompt': str,
-            'resolution': str,
-            'image_width': int,
-            'image_height': int,
-            'generation_time_ms': float,
-            'method': 'mamouth_text2img',
-            'error': str (si echec)
-        }
-    """
+    """Generate an image from a text prompt via Mamouth.ai and save it as PNG."""
     start_time = time.time()
 
-    # Valider la cle API
     if not api_key:
         return {
             'success': False,
-            'error': 'MAMOUTH_API_KEY manquante - Verifiez votre fichier .env'
+            'error': 'MAMOUTH_API_KEY missing - check your .env file'
         }
 
-    # Valider la resolution
     if resolution not in RESOLUTION_PARAMS:
         return {
             'success': False,
-            'error': f"Resolution invalide: {resolution}. Utilisez 'low', 'medium', ou 'high'"
+            'error': f"Invalid resolution: {resolution}. Use 'low', 'medium', or 'high'"
         }
 
-    # Valider le prompt
     if not prompt or len(prompt.strip()) == 0:
         return {
             'success': False,
-            'error': 'Le prompt ne peut pas etre vide'
+            'error': 'Prompt cannot be empty'
         }
 
     if len(prompt) > 1000:
         return {
             'success': False,
-            'error': 'Le prompt est trop long (max 1000 caracteres)'
+            'error': 'Prompt too long (max 1000 characters)'
         }
 
     print(f"\n[MAMOUTH-IMAGE] Generating image from prompt")
     print(f"  Resolution: {resolution} ({RESOLUTION_PARAMS[resolution]}px)")
 
     try:
-        # Appeler l'API Mamouth
         image_bytes = _call_mamouth_api(
             prompt=prompt,
             model=DEFAULT_MODEL,
@@ -222,11 +171,9 @@ def generate_image_from_prompt(
             suffix="Plain white background, subject centered and isolated, no environment, no shadows."
         )
 
-        # Sauvegarder sur disque
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(image_bytes)
 
-        # Valider l'image sauvegardee
         img = Image.open(output_path)
         img_width, img_height = img.size
 
@@ -251,13 +198,13 @@ def generate_image_from_prompt(
     except httpx.TimeoutException:
         return {
             'success': False,
-            'error': "Timeout: L'API Mamouth n'a pas repondu en 2 minutes"
+            'error': "Timeout: Mamouth API did not respond within 2 minutes"
         }
 
     except httpx.NetworkError as e:
         return {
             'success': False,
-            'error': f"Erreur reseau: {str(e)}"
+            'error': f"Network error: {str(e)}"
         }
 
     except MamouthAPIError as e:
@@ -269,7 +216,7 @@ def generate_image_from_prompt(
     except Exception as e:
         return {
             'success': False,
-            'error': f"Erreur inattendue: {str(e)}",
+            'error': f"Unexpected error: {str(e)}",
             'error_type': type(e).__name__
         }
 
@@ -280,33 +227,31 @@ def generate_texture_from_prompt(
     resolution: str = "medium",
     api_key: Optional[str] = None
 ) -> Dict:
-    """
-    Genere une texture seamless a partir d'un prompt via Mamouth.ai
-    """
+    """Generate a seamless tileable texture from a text prompt via Mamouth.ai."""
     start_time = time.time()
 
     if not api_key:
         return {
             'success': False,
-            'error': 'MAMOUTH_API_KEY manquante - Verifiez votre fichier .env'
+            'error': 'MAMOUTH_API_KEY missing - check your .env file'
         }
 
     if resolution not in RESOLUTION_PARAMS:
         return {
             'success': False,
-            'error': f"Resolution invalide: {resolution}. Utilisez 'low', 'medium', ou 'high'"
+            'error': f"Invalid resolution: {resolution}. Use 'low', 'medium', or 'high'"
         }
 
     if not prompt or len(prompt.strip()) == 0:
         return {
             'success': False,
-            'error': 'Le prompt ne peut pas etre vide'
+            'error': 'Prompt cannot be empty'
         }
 
     if len(prompt) > 1000:
         return {
             'success': False,
-            'error': 'Le prompt est trop long (max 1000 caracteres)'
+            'error': 'Prompt too long (max 1000 characters)'
         }
 
     print(f"\n[MAMOUTH-TEXTURE] Generating texture from prompt")
@@ -347,13 +292,13 @@ def generate_texture_from_prompt(
     except httpx.TimeoutException:
         return {
             'success': False,
-            'error': "Timeout: L'API Mamouth n'a pas repondu en 2 minutes"
+            'error': "Timeout: Mamouth API did not respond within 2 minutes"
         }
 
     except httpx.NetworkError as e:
         return {
             'success': False,
-            'error': f"Erreur reseau: {str(e)}"
+            'error': f"Network error: {str(e)}"
         }
 
     except MamouthAPIError as e:
@@ -365,18 +310,16 @@ def generate_texture_from_prompt(
     except Exception as e:
         return {
             'success': False,
-            'error': f"Erreur inattendue: {str(e)}",
+            'error': f"Unexpected error: {str(e)}",
             'error_type': type(e).__name__
         }
 
 
 def infer_physics_from_prompt(prompt: str, api_key: str) -> Dict:
     """
-    Infere les proprietes physiques d'un materiau via LLM (text-only, cheap).
-    Retourne { mass, restitution, damping } ou des valeurs par defaut si echec.
+    Infer physical properties of a material from its name via LLM (text-only).
+    Returns {mass, restitution, damping} or defaults on failure.
     """
-    import json
-
     DEFAULTS = {'mass': 1.0, 'restitution': 0.3, 'damping': 0.5}
 
     if not api_key:
@@ -416,7 +359,7 @@ def infer_physics_from_prompt(prompt: str, api_key: str) -> Dict:
         data = response.json()
         content = data['choices'][0]['message']['content'].strip()
 
-        # Extraire le JSON du contenu (parfois entoure de ```json ... ```)
+        # Strip ```json ... ``` wrapper if present
         if '```' in content:
             content = content.split('```')[1]
             if content.startswith('json'):

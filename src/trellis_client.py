@@ -9,17 +9,18 @@ import base64
 import time
 import logging
 import requests
+import trimesh
 from pathlib import Path
 from typing import List
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-MAX_IMAGE_SIZE = 1024  # TRELLIS reduit a 518px en interne, 1024 suffit
+MAX_IMAGE_SIZE = 1024  # TRELLIS internally reduces to 518px; 1024 is sufficient
 
 
 def _encode_image_b64(image_path: Path, max_size: int = MAX_IMAGE_SIZE) -> str:
-    """Encode une image en base64, redimensionnee si > max_size px."""
+    """Encode an image as base64, resizing it if larger than max_size px."""
     img = Image.open(image_path)
     if max(img.size) > max_size:
         img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
@@ -41,7 +42,7 @@ def generate_mesh_from_image_trellis(
     if not endpoint_id or not api_key:
         return {
             "success": False,
-            "error": "RUNPOD_TRELLIS_ENDPOINT_ID ou RUNPOD_API_KEY manquant dans .env",
+            "error": "RUNPOD_TRELLIS_ENDPOINT_ID or RUNPOD_API_KEY missing in .env",
         }
 
     # Map resolution to TRELLIS texture_size + simplify ratio
@@ -118,8 +119,6 @@ def generate_mesh_from_image_trellis(
             output_path.write_bytes(glb_bytes)
 
             # Get mesh stats
-            import trimesh
-
             mesh = trimesh.load(str(output_path), force="mesh")
 
             return {
@@ -140,4 +139,4 @@ def generate_mesh_from_image_trellis(
             )
             return {"success": False, "error": f"RunPod FAILED: {error}"}
 
-    return {"success": False, "error": f"Timeout apres {timeout_s}s"}
+    return {"success": False, "error": f"Timeout after {timeout_s}s"}
