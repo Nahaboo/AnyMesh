@@ -172,7 +172,7 @@ class GenerateMeshRequest(BaseModel):
     session_id: str
     resolution: str = "medium"  # 'low', 'medium', 'high'
     remesh_option: str = "quad"  # 'none', 'triangle', 'quad' (Stability AI only)
-    provider: str = "unique3d"  # 'unique3d' (Docker GPU), 'triposr' (local GPU), 'stability' (cloud API)
+    provider: str = "unique3d"  # 'unique3d', 'triposr', 'stability', 'trellis', 'trellis2'
 
 class GenerateImageRequest(BaseModel):
     """Image generation parameters for Mamouth.ai text-to-image."""
@@ -1012,6 +1012,13 @@ def generate_mesh_task_handler(task: Task):
             output_path=output_path,
             resolution=resolution,
             extra_images=extra,
+        )
+    elif provider == "trellis2":
+        from .trellis2_client import generate_mesh_from_image_trellis2
+        result = generate_mesh_from_image_trellis2(
+            image_path=first_image,
+            output_path=output_path,
+            resolution=resolution,
         )
     else:
         # unique3d (default)

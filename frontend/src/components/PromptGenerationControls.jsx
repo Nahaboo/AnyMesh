@@ -22,7 +22,11 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
   const providerInfo = {
     trellis: {
       name: 'TRELLIS',
-      description: 'Meilleure qualite, RunPod GPU'
+      description: 'RunPod GPU, rapide'
+    },
+    trellis2: {
+      name: 'TRELLIS 2',
+      description: 'Haute qualite, full PBR'
     },
     triposr: {
       name: 'TripoSR (Local)',
@@ -138,8 +142,8 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
           }}>
             Moteur 3D
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
-            {['trellis', 'triposr'].map((p) => (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
+            {['trellis', 'trellis2', 'triposr'].map((p) => (
               <button
                 key={p}
                 onClick={() => setProvider(p)}

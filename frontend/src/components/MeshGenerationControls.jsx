@@ -18,8 +18,13 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
   const providerInfo = {
     trellis: {
       name: 'TRELLIS',
-      description: 'Meilleure qualite, RunPod GPU',
+      description: 'RunPod GPU, rapide',
       time: { low: '15-25 sec', medium: '20-35 sec', high: '30-60 sec' }
+    },
+    trellis2: {
+      name: 'TRELLIS 2',
+      description: 'Haute qualite, full PBR',
+      time: { low: '30-60 sec', medium: '60-120 sec', high: '2-4 min' }
     },
     triposr: {
       name: 'TripoSR (Local)',
@@ -124,8 +129,8 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
           }}>
             Moteur de generation
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
-            {['trellis', 'triposr'].map((p) => (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
+            {['trellis', 'trellis2', 'triposr'].map((p) => (
               <button
                 key={p}
                 onClick={() => setProvider(p)}
