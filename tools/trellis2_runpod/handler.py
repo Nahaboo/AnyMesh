@@ -122,7 +122,7 @@ def handler(job):
 
         # Serialize GLB to bytes
         tmp_path = Path("/tmp/trellis2_output.glb")
-        glb.export(str(tmp_path))
+        glb.export(str(tmp_path), extension_webp=True)
         glb_bytes = tmp_path.read_bytes()
         tmp_path.unlink(missing_ok=True)
 

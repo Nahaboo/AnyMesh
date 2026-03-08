@@ -14,6 +14,9 @@ ENV PYTHONUNBUFFERED=1
 ENV CUDA_HOME=/usr/local/cuda
 ENV PATH="${CUDA_HOME}/bin:${PATH}"
 ENV LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
+# GPU arch for build-time CUDA compilation (no GPU visible during docker build)
+# 8.0 = A100, 8.6 = A5000/RTX3090
+ENV TORCH_CUDA_ARCH_LIST="8.0;8.6"
 
 # System dependencies
 RUN apt-get update && apt-get install -y \
@@ -21,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     git wget curl build-essential ninja-build \
     libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 \
     libxrender-dev libgomp1 ffmpeg \
+    libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Make python3.10 the default
@@ -31,7 +35,7 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 &
 WORKDIR /workspace
 
 # Clone TRELLIS.2
-RUN git clone --depth=1 https://github.com/microsoft/TRELLIS.2 /workspace/TRELLIS.2
+RUN git clone --depth=1 --recursive https://github.com/microsoft/TRELLIS.2 /workspace/TRELLIS.2
 
 WORKDIR /workspace/TRELLIS.2
 
@@ -47,17 +51,29 @@ RUN pip install --no-cache-dir \
     tensorboard pandas lpips zstandard \
     runpod huggingface_hub
 
-# utils3d (required by TRELLIS.2, not on PyPI)
-RUN pip install --no-cache-dir git+https://github.com/EasternJournalist/utils3d.git
+# utils3d (pinned to same commit as setup.sh)
+RUN pip install --no-cache-dir git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
 
 # flash-attn (long compile, keep separate layer)
-RUN pip install --no-cache-dir flash-attn==2.7.3 --no-build-isolation
+RUN pip install --no-cache-dir psutil && \
+    pip install --no-cache-dir flash-attn==2.7.3 --no-build-isolation
 
-# nvdiffrast
-RUN pip install --no-cache-dir git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0
+# nvdiffrast (requires setuptools/wheel/ninja before build)
+RUN pip install --no-cache-dir setuptools wheel ninja && \
+    pip install --no-cache-dir git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0 --no-build-isolation
 
-# Build TRELLIS.2 custom CUDA extensions
-RUN bash setup.sh --o-voxel --flexgemm --cumesh
+# CUDA extensions — installed directly (no conda needed)
+# o-voxel: copied from the cloned repo (local dir)
+RUN pip install --no-cache-dir /workspace/TRELLIS.2/o-voxel --no-build-isolation
+
+# cumesh + flexgemm: cloned from GitHub
+RUN git clone https://github.com/JeffreyXiang/CuMesh.git --recursive /tmp/CuMesh && \
+    pip install --no-cache-dir /tmp/CuMesh --no-build-isolation && \
+    rm -rf /tmp/CuMesh
+
+RUN git clone https://github.com/JeffreyXiang/FlexGEMM.git --recursive /tmp/FlexGEMM && \
+    pip install --no-cache-dir /tmp/FlexGEMM --no-build-isolation && \
+    rm -rf /tmp/FlexGEMM
 
 # Pre-download model weights into a cache dir (baked into image)
 # To skip baking weights (use RunPod network volume instead), comment out this block
@@ -68,6 +84,8 @@ snapshot_download('microsoft/TRELLIS.2-4B', local_dir='/workspace/models/TRELLIS
 
 ENV HF_HOME=/workspace/models
 ENV TRANSFORMERS_CACHE=/workspace/models
+# trellis2 is not pip-installed — expose it via PYTHONPATH
+ENV PYTHONPATH=/workspace/TRELLIS.2
 
 # Copy handler
 COPY tools/trellis2_runpod/handler.py /workspace/handler.py
