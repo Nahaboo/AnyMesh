@@ -58,9 +58,9 @@ RUN pip install --no-cache-dir git+https://github.com/EasternJournalist/utils3d.
 RUN pip install --no-cache-dir psutil && \
     pip install --no-cache-dir flash-attn==2.7.3 --no-build-isolation
 
-# nvdiffrast
-RUN pip install --no-cache-dir --upgrade setuptools wheel ninja && \
-    pip install --no-cache-dir git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0
+# nvdiffrast (needs --no-build-isolation for PyTorch, but needs recent setuptools first)
+RUN pip install --no-cache-dir --upgrade setuptools>=68 wheel ninja && \
+    pip install --no-cache-dir git+https://github.com/NVlabs/nvdiffrast.git@v0.4.0 --no-build-isolation
 
 # CUDA extensions — installed directly (no conda needed)
 # o-voxel: copied from the cloned repo (local dir)
