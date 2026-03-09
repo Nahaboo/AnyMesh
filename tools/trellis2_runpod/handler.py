@@ -25,12 +25,22 @@ Deployment:
     RunPod: create serverless endpoint with this image, GPU >= A5000 (24 GB)
 """
 
+import os
 import runpod
 import base64
 import io
 import traceback
 from pathlib import Path
 from PIL import Image
+from huggingface_hub import login
+
+# Authenticate with HuggingFace if token is provided
+hf_token = os.environ.get("HF_TOKEN")
+if hf_token:
+    login(token=hf_token)
+    print("[TRELLIS2] HuggingFace login successful.")
+else:
+    print("[TRELLIS2] Warning: HF_TOKEN not set.")
 
 # Load pipeline at cold start (outside handler to reuse across jobs)
 print("[TRELLIS2] Loading pipeline...")

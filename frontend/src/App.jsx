@@ -422,7 +422,8 @@ function App() {
             console.log('[App] Switched to file mode with generated GLB:', generatedMeshInfo)
           }
         },
-        1000
+        1000,
+        900  // 15 min max for TRELLIS.2 cold start + generation
       )
 
       setIsProcessing(false)
