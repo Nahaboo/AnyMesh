@@ -15,8 +15,8 @@ ENV CUDA_HOME=/usr/local/cuda
 ENV PATH="${CUDA_HOME}/bin:${PATH}"
 ENV LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
 # GPU arch for build-time CUDA compilation (no GPU visible during docker build)
-# 8.0 = A100, 8.6 = A5000/RTX3090
-ENV TORCH_CUDA_ARCH_LIST="8.0;8.6"
+# 8.0 = A100, 8.6 = A5000/RTX3090, 8.9 = RTX4090
+ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9"
 
 # System dependencies
 RUN apt-get update && apt-get install -y \
