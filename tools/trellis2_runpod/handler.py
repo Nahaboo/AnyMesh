@@ -32,6 +32,32 @@ import io
 import traceback
 from pathlib import Path
 from PIL import Image
+
+# Patch: intercept transformers dynamic module loading to fix device_map="auto" bug in birefnet.py.
+# RMBG-2.0 custom code (birefnet.py) uses device_map="auto" which puts tensors on meta device,
+# causing Tensor.item() to fail. transformers re-downloads this file at runtime even if patched
+# in the image cache. We intercept the load and patch in-place before execution.
+try:
+    import transformers.dynamic_module_utils as _dmu
+    _orig_get_class_in_module = _dmu.get_class_in_module
+
+    def _patched_get_class_in_module(class_name, module_path, *args, **kwargs):
+        try:
+            with open(module_path, "r") as f:
+                src = f.read()
+            if 'device_map="auto"' in src:
+                with open(module_path, "w") as f:
+                    f.write(src.replace('device_map="auto"', 'device_map=None'))
+                print(f"[TRELLIS2] Patched device_map in {module_path}")
+        except Exception:
+            pass
+        return _orig_get_class_in_module(class_name, module_path, *args, **kwargs)
+
+    _dmu.get_class_in_module = _patched_get_class_in_module
+    print("[TRELLIS2] transformers dynamic module patch installed")
+except Exception as e:
+    print(f"[TRELLIS2] Warning: could not install dynamic module patch: {e}")
+
 # Load pipeline at cold start (outside handler to reuse across jobs)
 print("[TRELLIS2] Loading pipeline...")
 try:
