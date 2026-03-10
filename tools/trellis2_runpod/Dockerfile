@@ -37,6 +37,10 @@ WORKDIR /workspace
 # Clone TRELLIS.2
 RUN git clone --depth=1 --recursive https://github.com/microsoft/TRELLIS.2 /workspace/TRELLIS.2
 
+# Fix: RMBG-2.0 BiRefNet uses device_map="auto" which puts tensors on meta device,
+# causing Tensor.item() to fail during __init__. Force device_map=None.
+RUN grep -rl 'device_map="auto"' /workspace/TRELLIS.2 | xargs -r sed -i 's/device_map="auto"/device_map=None/g'
+
 WORKDIR /workspace/TRELLIS.2
 
 # Core Python deps (before CUDA extensions to cache them separately)
@@ -75,15 +79,23 @@ RUN git clone https://github.com/JeffreyXiang/FlexGEMM.git --recursive /tmp/Flex
     pip install --no-cache-dir /tmp/FlexGEMM --no-build-isolation && \
     rm -rf /tmp/FlexGEMM
 
-# Pre-download model weights into a cache dir (baked into image)
-# To skip baking weights (use RunPod network volume instead), comment out this block
-# and set HF_HOME env var to point to the network volume mount path at runtime.
+# Pre-download model weights into the image (baked at build time)
+# Pass token via: --build-arg HF_TOKEN=hf_xxx (not stored in ENV, not exposed in final image)
+ENV HF_HOME=/workspace/models
+
+ARG HF_TOKEN
 RUN python -c "\
 from huggingface_hub import snapshot_download; \
-snapshot_download('microsoft/TRELLIS.2-4B', local_dir='/workspace/models/TRELLIS.2-4B')"
+snapshot_download('microsoft/TRELLIS.2-4B', token='${HF_TOKEN}')"
 
-ENV HF_HOME=/workspace/models
-ENV TRANSFORMERS_CACHE=/workspace/models
+RUN python -c "\
+from huggingface_hub import snapshot_download; \
+snapshot_download('facebook/dinov3-vitl16-pretrain-lvd1689m', token='${HF_TOKEN}')"
+
+RUN python -c "\
+from huggingface_hub import snapshot_download; \
+snapshot_download('briaai/RMBG-2.0', token='${HF_TOKEN}')"
+
 # trellis2 is not pip-installed — expose it via PYTHONPATH
 ENV PYTHONPATH=/workspace/TRELLIS.2
 

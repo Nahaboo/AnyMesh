@@ -42,6 +42,23 @@ if hf_token:
 else:
     print("[TRELLIS2] Warning: HF_TOKEN not set.")
 
+# Pre-download RMBG-2.0 custom code and patch device_map="auto" -> device_map=None
+# birefnet.py is a custom_code model — transformers downloads it at runtime and executes it.
+# device_map="auto" causes Tensor.item() to fail on meta tensors during __init__.
+import subprocess
+subprocess.run([
+    "python", "-c",
+    "from huggingface_hub import snapshot_download; snapshot_download('briaai/RMBG-2.0')"
+], check=False)
+import glob
+for f in glob.glob("/workspace/models/modules/transformers_modules/briaai/**/*.py", recursive=True):
+    with open(f, "r") as fh:
+        content = fh.read()
+    if 'device_map="auto"' in content:
+        with open(f, "w") as fh:
+            fh.write(content.replace('device_map="auto"', 'device_map=None'))
+        print(f"[TRELLIS2] Patched device_map in {f}")
+
 # Load pipeline at cold start (outside handler to reuse across jobs)
 print("[TRELLIS2] Loading pipeline...")
 try:
