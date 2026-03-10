@@ -38,9 +38,7 @@ try:
     from trellis2.pipelines import Trellis2ImageTo3DPipeline
     from o_voxel import postprocess as o_voxel_postprocess
 
-    pipeline = Trellis2ImageTo3DPipeline.from_pretrained(
-        "/workspace/models/hub/models--microsoft--TRELLIS.2-4B/snapshots/af44b45f2e35a493886929c6d786e563ec68364d"
-    )
+    pipeline = Trellis2ImageTo3DPipeline.from_pretrained("microsoft/TRELLIS.2-4B")
     pipeline.cuda()
     print("[TRELLIS2] Pipeline loaded successfully.")
 except Exception as e:

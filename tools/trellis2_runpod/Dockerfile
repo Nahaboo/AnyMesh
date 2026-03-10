@@ -107,10 +107,6 @@ RUN find /workspace/models/modules/transformers_modules/briaai -name '*.py' \
     | xargs -r sed -i 's/device_map="auto"/device_map=None/g' && \
     echo "Patched birefnet device_map"
 
-# Force HF to use local cache only — prevents re-downloading custom code (birefnet.py)
-# which would overwrite our device_map patch at runtime
-ENV HF_HUB_OFFLINE=1
-
 # trellis2 is not pip-installed — expose it via PYTHONPATH
 ENV PYTHONPATH=/workspace/TRELLIS.2
 
