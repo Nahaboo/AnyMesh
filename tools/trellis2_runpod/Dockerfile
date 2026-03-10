@@ -107,10 +107,22 @@ RUN find /workspace/models/modules/transformers_modules/briaai -name '*.py' \
     | xargs -r sed -i 's/device_map="auto"/device_map=None/g' && \
     echo "Patched birefnet device_map"
 
+# Also patch directly in the HF snapshot so transformers uses our patched version
+# even if it re-downloads into transformers_modules from the local snapshot
+RUN find /workspace/models/hub/models--briaai--RMBG-2.0 -name '*.py' \
+    -exec grep -l 'device_map="auto"' {} \; \
+    | xargs -r sed -i 's/device_map="auto"/device_map=None/g' && \
+    echo "Patched birefnet in HF snapshot"
+
 # trellis2 is not pip-installed — expose it via PYTHONPATH
 ENV PYTHONPATH=/workspace/TRELLIS.2
 
 # Copy handler
 COPY tools/trellis2_runpod/handler.py /workspace/handler.py
 
-CMD ["python", "/workspace/handler.py"]
+# Entrypoint: re-patch birefnet at container start before any import
+# This ensures the patch survives even if transformers re-copies from the snapshot
+COPY tools/trellis2_runpod/entrypoint.sh /workspace/entrypoint.sh
+RUN chmod +x /workspace/entrypoint.sh
+
+CMD ["/workspace/entrypoint.sh"]
