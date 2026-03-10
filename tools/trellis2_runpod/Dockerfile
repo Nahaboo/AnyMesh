@@ -43,16 +43,8 @@ RUN git clone --depth=1 --recursive https://github.com/microsoft/TRELLIS.2 /work
 # Patch 1: replace any device_map="auto" in TRELLIS.2 source
 RUN grep -rl 'device_map="auto"' /workspace/TRELLIS.2 | xargs -r sed -i 's/device_map="auto"/device_map=None/g'
 # Patch 2: add device_map=None to the BiRefNet from_pretrained call explicitly
-RUN python -c "
-path = '/workspace/TRELLIS.2/trellis2/pipelines/rembg/BiRefNet.py'
-src = open(path).read()
-src = src.replace(
-    'AutoModelForImageSegmentation.from_pretrained(\n            model_name, trust_remote_code=True\n        )',
-    'AutoModelForImageSegmentation.from_pretrained(\n            model_name, trust_remote_code=True, device_map=None\n        )'
-)
-open(path, 'w').write(src)
-print('Patched BiRefNet.py')
-"
+COPY tools/trellis2_runpod/patch_birefnet.py /tmp/patch_birefnet.py
+RUN python /tmp/patch_birefnet.py
 
 WORKDIR /workspace/TRELLIS.2
 
