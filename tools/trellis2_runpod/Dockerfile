@@ -96,6 +96,21 @@ RUN python -c "\
 from huggingface_hub import snapshot_download; \
 snapshot_download('briaai/RMBG-2.0', token='${HF_TOKEN}')"
 
+# Trigger transformers to download the custom code (birefnet.py) into transformers_modules cache
+# then patch device_map="auto" -> device_map=None before it is ever executed at runtime
+RUN python -c "\
+import os; os.environ['HF_TOKEN']='${HF_TOKEN}'; \
+from transformers import AutoConfig; \
+AutoConfig.from_pretrained('briaai/RMBG-2.0', trust_remote_code=True, token='${HF_TOKEN}')" || true
+RUN find /workspace/models/modules/transformers_modules/briaai -name '*.py' \
+    -exec grep -l 'device_map="auto"' {} \; \
+    | xargs -r sed -i 's/device_map="auto"/device_map=None/g' && \
+    echo "Patched birefnet device_map"
+
+# Force HF to use local cache only — prevents re-downloading custom code (birefnet.py)
+# which would overwrite our device_map patch at runtime
+ENV HF_HUB_OFFLINE=1
+
 # trellis2 is not pip-installed — expose it via PYTHONPATH
 ENV PYTHONPATH=/workspace/TRELLIS.2
 
