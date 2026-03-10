@@ -37,9 +37,22 @@ WORKDIR /workspace
 # Clone TRELLIS.2
 RUN git clone --depth=1 --recursive https://github.com/microsoft/TRELLIS.2 /workspace/TRELLIS.2
 
-# Fix: RMBG-2.0 BiRefNet uses device_map="auto" which puts tensors on meta device,
-# causing Tensor.item() to fail during __init__. Force device_map=None.
+# Fix: BiRefNet wrapper in TRELLIS.2 calls AutoModelForImageSegmentation.from_pretrained
+# with trust_remote_code=True. The ZhengPeng7/BiRefNet custom code has device_map="auto"
+# which puts tensors on meta device, causing Tensor.item() to fail.
+# Patch 1: replace any device_map="auto" in TRELLIS.2 source
 RUN grep -rl 'device_map="auto"' /workspace/TRELLIS.2 | xargs -r sed -i 's/device_map="auto"/device_map=None/g'
+# Patch 2: add device_map=None to the BiRefNet from_pretrained call explicitly
+RUN python -c "
+path = '/workspace/TRELLIS.2/trellis2/pipelines/rembg/BiRefNet.py'
+src = open(path).read()
+src = src.replace(
+    'AutoModelForImageSegmentation.from_pretrained(\n            model_name, trust_remote_code=True\n        )',
+    'AutoModelForImageSegmentation.from_pretrained(\n            model_name, trust_remote_code=True, device_map=None\n        )'
+)
+open(path, 'w').write(src)
+print('Patched BiRefNet.py')
+"
 
 WORKDIR /workspace/TRELLIS.2
 
