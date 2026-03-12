@@ -101,23 +101,19 @@ RUN python -c "\
 from huggingface_hub import snapshot_download; \
 snapshot_download('briaai/RMBG-2.0', token='${HF_TOKEN}')"
 
-# Trigger transformers to download the custom code (birefnet.py) into transformers_modules cache
-# then patch device_map="auto" -> device_map=None before it is ever executed at runtime
+# Trigger transformers to cache birefnet.py into transformers_modules
 RUN python -c "\
 import os; os.environ['HF_TOKEN']='${HF_TOKEN}'; \
 from transformers import AutoConfig; \
 AutoConfig.from_pretrained('briaai/RMBG-2.0', trust_remote_code=True, token='${HF_TOKEN}')" || true
-RUN find /workspace/models/modules/transformers_modules/briaai -name '*.py' \
-    -exec grep -l 'device_map="auto"' {} \; \
-    | xargs -r sed -i 's/device_map="auto"/device_map=None/g' && \
-    echo "Patched birefnet device_map"
 
-# Also patch directly in the HF snapshot so transformers uses our patched version
-# even if it re-downloads into transformers_modules from the local snapshot
-RUN find /workspace/models/hub/models--briaai--RMBG-2.0 -name '*.py' \
-    -exec grep -l 'device_map="auto"' {} \; \
-    | xargs -r sed -i 's/device_map="auto"/device_map=None/g' && \
-    echo "Patched birefnet in HF snapshot"
+# Patch birefnet.py: .item() fails on meta tensors (low_cpu_mem_usage=True default in transformers).
+# .tolist() works on meta tensors. Patch both snapshot and transformers_modules cache.
+RUN find /workspace/models -name 'birefnet.py' \
+    -exec sed -i \
+    's/dpr = \[x\.item() for x in torch\.linspace(0, drop_path_rate, sum(depths))\]/dpr = torch.linspace(0, drop_path_rate, sum(depths)).tolist()/g' \
+    {} \; && \
+    echo "Patched birefnet.py .item() -> .tolist()"
 
 # trellis2 is not pip-installed — expose it via PYTHONPATH
 ENV PYTHONPATH=/workspace/TRELLIS.2
