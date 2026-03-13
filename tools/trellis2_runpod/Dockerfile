@@ -37,12 +37,9 @@ WORKDIR /workspace
 # Clone TRELLIS.2
 RUN git clone --depth=1 --recursive https://github.com/microsoft/TRELLIS.2 /workspace/TRELLIS.2
 
-# Fix: BiRefNet wrapper in TRELLIS.2 calls AutoModelForImageSegmentation.from_pretrained
-# with trust_remote_code=True. The ZhengPeng7/BiRefNet custom code has device_map="auto"
-# which puts tensors on meta device, causing Tensor.item() to fail.
-# Patch 1: replace any device_map="auto" in TRELLIS.2 source
-RUN grep -rl 'device_map="auto"' /workspace/TRELLIS.2 | xargs -r sed -i 's/device_map="auto"/device_map=None/g'
-# Patch 2: add device_map=None to the BiRefNet from_pretrained call explicitly
+# Fix: briaai/RMBG-2.0 custom birefnet.py calls .item() in __init__, which fails
+# on meta tensors created by transformers init_empty_weights context.
+# Patch BiRefNet.py to disable init_empty_weights only during RMBG-2.0 load.
 COPY tools/trellis2_runpod/patch_birefnet.py /tmp/patch_birefnet.py
 RUN python /tmp/patch_birefnet.py
 
@@ -56,7 +53,7 @@ RUN pip install --no-cache-dir \
 RUN pip install --no-cache-dir \
     imageio imageio-ffmpeg tqdm easydict \
     opencv-python-headless ninja trimesh \
-    transformers pillow kornia timm \
+    transformers==4.57.3 pillow kornia timm \
     tensorboard pandas lpips zstandard \
     runpod huggingface_hub
 

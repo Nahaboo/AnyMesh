@@ -33,15 +33,6 @@ import traceback
 from pathlib import Path
 from PIL import Image
 
-# Force low_cpu_mem_usage=False globally to prevent meta tensor errors
-# with custom model code (briaai/RMBG-2.0 birefnet.py calls .item() during __init__)
-import transformers.modeling_utils as _mu
-_original_from_pretrained = _mu.PreTrainedModel.from_pretrained.__func__
-@classmethod
-def _patched_from_pretrained(cls, *args, **kwargs):
-    kwargs["low_cpu_mem_usage"] = False
-    return _original_from_pretrained(cls, *args, **kwargs)
-_mu.PreTrainedModel.from_pretrained = _patched_from_pretrained
 
 # Load pipeline at cold start (outside handler to reuse across jobs)
 print("[TRELLIS2] Loading pipeline...")
