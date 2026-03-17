@@ -2,6 +2,10 @@
 RunPod Serverless handler for TRELLIS.2.
 Receives an image as base64, generates a 3D mesh, returns the GLB as base64.
 
+BiRefNet (background removal) is disabled: images are preprocessed manually
+(resize to 1024x1024, RGBA) and passed with preprocess_image=False.
+This avoids the meta tensor crash caused by briaai/RMBG-2.0 loading.
+
 Input:
     image_base64:                str  (required)
     resolution:                  str  "512" | "1024" | "1536" (default: "1024")
@@ -34,6 +38,28 @@ from pathlib import Path
 from PIL import Image
 
 
+# Patch: skip BiRefNet load entirely.
+# from_pretrained calls BiRefNet(**args) which immediately runs
+# AutoModelForImageSegmentation.from_pretrained with trust_remote_code=True,
+# loading briaai/RMBG-2.0. That model's birefnet.py calls .item() in __init__
+# on meta tensors (low_cpu_mem_usage=True default) → NotImplementedError crash.
+# Fix: replace BiRefNet.__init__ with a no-op before from_pretrained runs.
+# At runtime we use preprocess_image=False so rembg_model is never called.
+print("[TRELLIS2] Patching BiRefNet to skip load...")
+try:
+    from trellis2.pipelines import rembg as _rembg
+
+    def _noop_birefnet_init(self, model_name="ZhengPeng7/BiRefNet"):
+        self.model = None
+        print("[TRELLIS2] BiRefNet skipped (no-op patch active)")
+
+    _rembg.BiRefNet.__init__ = _noop_birefnet_init
+    print("[TRELLIS2] BiRefNet patch applied.")
+except Exception as e:
+    print(f"[TRELLIS2] WARNING: BiRefNet patch failed: {e}")
+    traceback.print_exc()
+
+
 # Load pipeline at cold start (outside handler to reuse across jobs)
 print("[TRELLIS2] Loading pipeline...")
 try:
@@ -49,6 +75,22 @@ except Exception as e:
     pipeline = None
 
 
+def preprocess_image(image: Image.Image, size: int = 1024) -> Image.Image:
+    """
+    Resize image to size x size (LANCZOS), convert to RGBA.
+    Replaces the pipeline's preprocess_image step (which requires BiRefNet).
+    Keeps aspect ratio by padding with transparency.
+    """
+    image = image.convert("RGBA")
+    image.thumbnail((size, size), Image.Resampling.LANCZOS)
+
+    # Pad to exact square with transparent background
+    result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    offset = ((size - image.width) // 2, (size - image.height) // 2)
+    result.paste(image, offset)
+    return result
+
+
 def handler(job):
     if pipeline is None:
         return {"success": False, "error": "Pipeline not loaded (cold start failure)"}
@@ -58,12 +100,14 @@ def handler(job):
     if "image_base64" not in job_input:
         return {"success": False, "error": "Missing image_base64 in input"}
 
-    # Decode image
+    # Decode and preprocess image manually (BiRefNet disabled)
     try:
         img_bytes = base64.b64decode(job_input["image_base64"])
-        image = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+        image = Image.open(io.BytesIO(img_bytes))
+        image = preprocess_image(image, size=1024)
+        print(f"[TRELLIS2] Image preprocessed: {image.size}, mode={image.mode}")
     except Exception as e:
-        return {"success": False, "error": f"Failed to decode image: {e}"}
+        return {"success": False, "error": f"Failed to decode/preprocess image: {e}"}
 
     # Parse params
     resolution = str(job_input.get("resolution", "1024"))
@@ -80,11 +124,12 @@ def handler(job):
     print(f"[TRELLIS2] Generating: resolution={resolution}, decimation_target={decimation_target}, texture_size={texture_size}")
 
     try:
-        # Run pipeline
+        # preprocess_image=False: image already preprocessed manually above
         outputs = pipeline.run(
             image,
             seed=seed,
             resolution=resolution,
+            preprocess_image=False,
             ss_guidance_strength=ss_guidance_strength,
             ss_guidance_rescale=0.0,
             ss_sampling_steps=ss_sampling_steps,
