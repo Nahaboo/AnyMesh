@@ -112,7 +112,11 @@ def handler(job):
         return {"success": False, "error": f"Failed to decode/preprocess image: {e}"}
 
     # Parse params
-    pipeline_type = str(job_input.get("pipeline_type", "1024"))
+    pipeline_type = {
+        "512": "512",
+        "1024": "1024_cascade",
+        "1536": "1536_cascade",
+    }.get(str(job_input.get("pipeline_type", "1024")), "1024_cascade")
     decimation_target = int(job_input.get("decimation_target", 500000))
     texture_size = int(job_input.get("texture_size", 2048))
     seed = int(job_input.get("seed", 0))
@@ -133,16 +137,22 @@ def handler(job):
             pipeline_type=pipeline_type,
             preprocess_image=False,
             sparse_structure_sampler_params={
+                "steps": ss_sampling_steps,
                 "guidance_strength": ss_guidance_strength,
-                "num_steps": ss_sampling_steps,
+                "guidance_rescale": 0.7,
+                "rescale_t": 5.0,
             },
             shape_slat_sampler_params={
+                "steps": shape_slat_sampling_steps,
                 "guidance_strength": shape_slat_guidance_strength,
-                "num_steps": shape_slat_sampling_steps,
+                "guidance_rescale": 0.5,
+                "rescale_t": 3.0,
             },
             tex_slat_sampler_params={
+                "steps": tex_slat_sampling_steps,
                 "guidance_strength": tex_slat_guidance_strength,
-                "num_steps": tex_slat_sampling_steps,
+                "guidance_rescale": 0.0,
+                "rescale_t": 3.0,
             },
         )
         mesh = outputs[0]
