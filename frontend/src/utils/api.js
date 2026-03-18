@@ -27,6 +27,11 @@ export const checkHealth = async () => {
   return response.data
 }
 
+export const fetchConfig = async () => {
+  const response = await api.get('/config')
+  return response.data
+}
+
 /**
  * Liste tous les maillages disponibles
  */

@@ -31,6 +31,8 @@ Deployment:
 
 import os
 import runpod
+
+print(f"[TRELLIS2] HF_HOME={os.environ.get('HF_HOME', 'NOT SET')}")
 import base64
 import io
 import traceback

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ConfigSidebar from './components/ConfigSidebar'
 import ViewerLayout from './components/ViewerLayout'
-import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, compareMeshes, visualizeQuality, unwrapMeshUV, generateLod, pollTaskStatus } from './utils/api'
+import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, compareMeshes, visualizeQuality, unwrapMeshUV, generateLod, pollTaskStatus, fetchConfig } from './utils/api'
 import './styles/v2-theme.css'
 
 /**
@@ -24,6 +24,12 @@ function App() {
   // Task management
   const [currentTask, setCurrentTask] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // Feature flags
+  const [trellis2Enabled, setTrellis2Enabled] = useState(false)
+  useEffect(() => {
+    fetchConfig().then(cfg => setTrellis2Enabled(cfg.trellis2_enabled)).catch(() => {})
+  }, [])
 
   // Handler when config is complete
   const handleConfigComplete = (config) => {
@@ -665,6 +671,7 @@ function App() {
           currentTask={currentTask}
           isProcessing={isProcessing}
           initialMeshInfo={initialMeshInfo}
+          trellis2Enabled={trellis2Enabled}
         />
       )}
     </div>

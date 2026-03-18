@@ -6,10 +6,49 @@ import { API_BASE_URL, generateImageFromPrompt, pollTaskStatus } from '../utils/
  * Step 1: User enters prompt → Mamouth.ai generates image
  * Step 2: User previews image → confirms → existing 3D generation via onGenerate
  */
-function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
+const STYLE_PRESETS = [
+  {
+    id: 'none',
+    label: 'Aucun',
+    suffix: ''
+  },
+  {
+    id: 'clay',
+    label: 'Clay',
+    suffix: 'clay render, matte finish, no specular highlights, uniform diffuse lighting, soft ambient occlusion, toy figurine style, white background'
+  },
+  {
+    id: 'stylized',
+    label: 'Stylized 3D',
+    suffix: 'stylized 3D render, cel-shaded, clean silhouette, game asset, vibrant colors, flat shading, Blender render, white background'
+  },
+  {
+    id: 'cartoon',
+    label: 'Cartoon',
+    suffix: 'cartoon style, vibrant colors, clean outlines, simple shapes, white background, soft lighting'
+  },
+  {
+    id: 'lowpoly',
+    label: 'Low Poly',
+    suffix: 'low poly 3D render, geometric, flat shading, minimal detail, game asset style, white background'
+  },
+  {
+    id: 'lego',
+    label: 'Lego',
+    suffix: 'made entirely of LEGO bricks, plastic toy, colorful, white background, studio lighting'
+  },
+  {
+    id: 'product',
+    label: 'Product',
+    suffix: 'product render, photorealistic, white background, softbox lighting, commercial photography, 85mm lens, sharp focus'
+  },
+]
+
+function PromptGenerationControls({ onGenerate, isProcessing, currentTask, trellis2Enabled }) {
   const [prompt, setPrompt] = useState('')
   const [resolution, setResolution] = useState('medium')
   const [provider, setProvider] = useState('trellis')
+  const [stylePreset, setStylePreset] = useState('clay')
   const [generatedImage, setGeneratedImage] = useState(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [error, setError] = useState('')
@@ -44,7 +83,9 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
     setIsGeneratingImage(true)
 
     try {
-      const response = await generateImageFromPrompt({ prompt: prompt.trim(), resolution })
+      const preset = STYLE_PRESETS.find(p => p.id === stylePreset)
+      const fullPrompt = preset?.suffix ? `${prompt.trim()}, ${preset.suffix}` : prompt.trim()
+      const response = await generateImageFromPrompt({ prompt: fullPrompt, resolution })
       const taskId = response.task_id
 
       const poll = pollTaskStatus(
@@ -142,8 +183,8 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
           }}>
             Moteur 3D
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
-            {['trellis', 'trellis2', 'triposr'].map((p) => (
+          <div style={{ display: 'grid', gridTemplateColumns: trellis2Enabled ? '1fr 1fr 1fr' : '1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
+            {['trellis', ...(trellis2Enabled ? ['trellis2'] : []), 'triposr'].map((p) => (
               <button
                 key={p}
                 onClick={() => setProvider(p)}
@@ -268,6 +309,42 @@ function PromptGenerationControls({ onGenerate, isProcessing, currentTask }) {
           <span style={{ color: charCount > 900 ? '#f59e0b' : 'var(--v2-text-muted)' }}>
             {charCount}/1000
           </span>
+        </div>
+      </div>
+
+      {/* Style preset */}
+      <div>
+        <label style={{
+          display: 'block',
+          fontSize: '0.875rem',
+          fontWeight: 500,
+          color: 'var(--v2-text-secondary)',
+          marginBottom: 'var(--v2-spacing-xs)'
+        }}>
+          Style
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--v2-spacing-xs)' }}>
+          {STYLE_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              onClick={() => setStylePreset(preset.id)}
+              disabled={busy}
+              style={{
+                padding: 'var(--v2-spacing-xs) var(--v2-spacing-xs)',
+                borderRadius: 'var(--v2-radius-lg)',
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                transition: 'all var(--v2-transition-base)',
+                background: stylePreset === preset.id ? 'var(--v2-accent-primary)' : 'var(--v2-bg-tertiary)',
+                color: stylePreset === preset.id ? '#ffffff' : 'var(--v2-text-secondary)',
+                border: 'none',
+                cursor: busy ? 'not-allowed' : 'pointer',
+                opacity: busy ? 0.5 : 1
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
+function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing, trellis2Enabled }) {
   const [resolution, setResolution] = useState('medium')
   const [provider, setProvider] = useState('trellis')
 
@@ -129,8 +129,8 @@ function MeshGenerationControls({ sessionInfo, onGenerate, isProcessing }) {
           }}>
             Moteur de generation
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
-            {['trellis', 'trellis2', 'triposr'].map((p) => (
+          <div style={{ display: 'grid', gridTemplateColumns: trellis2Enabled ? '1fr 1fr 1fr' : '1fr 1fr', gap: 'var(--v2-spacing-xs)' }}>
+            {['trellis', ...(trellis2Enabled ? ['trellis2'] : []), 'triposr'].map((p) => (
               <button
                 key={p}
                 onClick={() => setProvider(p)}

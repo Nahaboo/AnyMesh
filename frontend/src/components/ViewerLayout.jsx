@@ -50,7 +50,8 @@ function ViewerLayout({
   onMeshSaved,
   currentTask,
   isProcessing,
-  initialMeshInfo
+  initialMeshInfo,
+  trellis2Enabled
 }) {
 
   const [renderMode, setRenderMode] = useState(meshInfo?.has_textures ? 'textured' : 'solid')
@@ -468,12 +469,14 @@ function ViewerLayout({
                 sessionInfo={sessionInfo}
                 onGenerate={onGenerate}
                 isProcessing={isProcessing}
+                trellis2Enabled={trellis2Enabled}
               />
             ) : configData?.type === 'prompt' ? (
               <PromptGenerationControls
                 onGenerate={onGenerate}
                 isProcessing={isProcessing}
                 currentTask={currentTask}
+                trellis2Enabled={trellis2Enabled}
               />
             ) : (
               <div style={{

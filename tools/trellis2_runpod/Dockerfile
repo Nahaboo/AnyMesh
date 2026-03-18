@@ -81,36 +81,11 @@ RUN git clone https://github.com/JeffreyXiang/FlexGEMM.git --recursive /tmp/Flex
     pip install --no-cache-dir /tmp/FlexGEMM --no-build-isolation && \
     rm -rf /tmp/FlexGEMM
 
-# Pre-download model weights into the image (baked at build time)
-# Pass token via: --build-arg HF_TOKEN=hf_xxx (not stored in ENV, not exposed in final image)
-ENV HF_HOME=/workspace/models
-
-ARG HF_TOKEN
-RUN python -c "\
-from huggingface_hub import snapshot_download; \
-snapshot_download('microsoft/TRELLIS.2-4B', token='${HF_TOKEN}')"
-
-RUN python -c "\
-from huggingface_hub import snapshot_download; \
-snapshot_download('facebook/dinov3-vitl16-pretrain-lvd1689m', token='${HF_TOKEN}')"
-
-RUN python -c "\
-from huggingface_hub import snapshot_download; \
-snapshot_download('briaai/RMBG-2.0', token='${HF_TOKEN}')"
-
-# Trigger transformers to cache birefnet.py into transformers_modules
-RUN python -c "\
-import os; os.environ['HF_TOKEN']='${HF_TOKEN}'; \
-from transformers import AutoConfig; \
-AutoConfig.from_pretrained('briaai/RMBG-2.0', trust_remote_code=True, token='${HF_TOKEN}')" || true
-
-# Patch birefnet.py: .item() fails on meta tensors (low_cpu_mem_usage=True default in transformers).
-# .tolist() works on meta tensors. Patch both snapshot and transformers_modules cache.
-RUN find /workspace/models -name 'birefnet.py' \
-    -exec sed -i \
-    's/dpr = \[x\.item() for x in torch\.linspace(0, drop_path_rate, sum(depths))\]/dpr = torch.linspace(0, drop_path_rate, sum(depths)).tolist()/g' \
-    {} \; && \
-    echo "Patched birefnet.py .item() -> .tolist()"
+# Models are NOT baked into the image.
+# They are downloaded at cold start into the RunPod network volume (HF_HOME env var).
+# Set these env vars on the RunPod endpoint:
+#   HF_HOME=/runpod-volume/models
+#   HF_TOKEN=hf_xxx
 
 # trellis2 is not pip-installed — expose it via PYTHONPATH
 ENV PYTHONPATH=/workspace/TRELLIS.2

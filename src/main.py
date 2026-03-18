@@ -51,11 +51,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.info(f"Stability API key loaded: {api_key[:10]}...")
 
-    mamouth_key = os.getenv('MAMOUTH_API_KEY')
-    if mamouth_key:
-        logger.info(f"Mamouth API key loaded: {mamouth_key[:10]}...")
+    gemini_key = os.getenv('GEMINI_API_KEY')
+    if gemini_key:
+        logger.info(f"Gemini API key loaded: {gemini_key[:10]}...")
     else:
-        logger.warning("MAMOUTH_API_KEY not set - prompt generation disabled")
+        logger.warning("GEMINI_API_KEY not set - prompt generation disabled")
 
     task_manager.register_handler("simplify", simplify_task_handler)
     task_manager.register_handler("generate_mesh", generate_mesh_task_handler)
@@ -283,6 +283,13 @@ async def health_check():
             "free_gb": round(disk_free_gb, 2),
             "warning": disk_free_gb < 1.0
         }
+    }
+
+@app.get("/config")
+async def get_config():
+    """Feature flags based on environment variables."""
+    return {
+        "trellis2_enabled": bool(os.getenv("RUNPOD_TRELLIS2_ENDPOINT_ID"))
     }
 
 @app.post("/upload")
@@ -1074,7 +1081,7 @@ def generate_image_task_handler(task: Task):
     session_path.mkdir(parents=True, exist_ok=True)
 
     output_path = session_path / "prompt_generated.png"
-    api_key = os.getenv('MAMOUTH_API_KEY')
+    api_key = os.getenv('GEMINI_API_KEY')
 
     logger.info(f"[GENERATE-IMAGE] Starting (session={session_id}, resolution={resolution})")
 
@@ -1106,7 +1113,7 @@ def generate_texture_task_handler(task: Task):
     texture_dir.mkdir(parents=True, exist_ok=True)
 
     output_path = texture_dir / "color.png"
-    api_key = os.getenv('MAMOUTH_API_KEY')
+    api_key = os.getenv('GEMINI_API_KEY')
 
     logger.info(f"[GENERATE-TEXTURE] Starting (texture_id={texture_id}, resolution={resolution})")
 
@@ -1579,8 +1586,8 @@ async def process_worker_task(payload: dict):
 @app.post("/generate-image-from-prompt")
 async def generate_image_from_prompt_endpoint(request: GenerateImageRequest):
     """Start an async image generation task from a text prompt via Mamouth.ai. Returns task_id."""
-    if not os.getenv('MAMOUTH_API_KEY'):
-        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY not configured in .env")
+    if not os.getenv('GEMINI_API_KEY'):
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured in .env")
 
     if not request.prompt or not request.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
@@ -1611,8 +1618,8 @@ async def generate_image_from_prompt_endpoint(request: GenerateImageRequest):
 @app.post("/generate-texture")
 async def generate_texture_endpoint(request: GenerateTextureRequest):
     """Start an async seamless texture generation task via Mamouth.ai."""
-    if not os.getenv('MAMOUTH_API_KEY'):
-        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY not configured in .env")
+    if not os.getenv('GEMINI_API_KEY'):
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured in .env")
 
     if not request.prompt or not request.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
@@ -1662,7 +1669,7 @@ def generate_material_task_handler(task: Task):
     texture_dir.mkdir(parents=True, exist_ok=True)
 
     output_path = texture_dir / "color.png"
-    api_key = os.getenv('MAMOUTH_API_KEY')
+    api_key = os.getenv('GEMINI_API_KEY')
 
     logger.info(f"[GENERATE-MATERIAL] Starting (texture_id={texture_id})")
 
@@ -1703,8 +1710,8 @@ def generate_material_task_handler(task: Task):
 @app.post("/generate-material")
 async def generate_material_endpoint(request: GenerateMaterialRequest):
     """Start an async AI material generation task (texture + physics) via Mamouth.ai."""
-    if not os.getenv('MAMOUTH_API_KEY'):
-        raise HTTPException(status_code=503, detail="MAMOUTH_API_KEY not configured in .env")
+    if not os.getenv('GEMINI_API_KEY'):
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured in .env")
 
     if not request.prompt or not request.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
