@@ -112,7 +112,7 @@ def handler(job):
         return {"success": False, "error": f"Failed to decode/preprocess image: {e}"}
 
     # Parse params
-    resolution = str(job_input.get("resolution", "1024"))
+    pipeline_type = str(job_input.get("pipeline_type", "1024"))
     decimation_target = int(job_input.get("decimation_target", 500000))
     texture_size = int(job_input.get("texture_size", 2048))
     seed = int(job_input.get("seed", 0))
@@ -123,27 +123,27 @@ def handler(job):
     tex_slat_guidance_strength = float(job_input.get("tex_slat_guidance_strength", 3.0))
     tex_slat_sampling_steps = int(job_input.get("tex_slat_sampling_steps", 12))
 
-    print(f"[TRELLIS2] Generating: resolution={resolution}, decimation_target={decimation_target}, texture_size={texture_size}")
+    print(f"[TRELLIS2] Generating: pipeline_type={pipeline_type}, decimation_target={decimation_target}, texture_size={texture_size}")
 
     try:
         # preprocess_image=False: image already preprocessed manually above
         outputs = pipeline.run(
             image,
             seed=seed,
-            resolution=resolution,
+            pipeline_type=pipeline_type,
             preprocess_image=False,
-            ss_guidance_strength=ss_guidance_strength,
-            ss_guidance_rescale=0.0,
-            ss_sampling_steps=ss_sampling_steps,
-            ss_rescale_t=0.7,
-            shape_slat_guidance_strength=shape_slat_guidance_strength,
-            shape_slat_guidance_rescale=0.0,
-            shape_slat_sampling_steps=shape_slat_sampling_steps,
-            shape_slat_rescale_t=0.7,
-            tex_slat_guidance_strength=tex_slat_guidance_strength,
-            tex_slat_guidance_rescale=0.0,
-            tex_slat_sampling_steps=tex_slat_sampling_steps,
-            tex_slat_rescale_t=0.7,
+            sparse_structure_sampler_params={
+                "guidance_strength": ss_guidance_strength,
+                "num_steps": ss_sampling_steps,
+            },
+            shape_slat_sampler_params={
+                "guidance_strength": shape_slat_guidance_strength,
+                "num_steps": shape_slat_sampling_steps,
+            },
+            tex_slat_sampler_params={
+                "guidance_strength": tex_slat_guidance_strength,
+                "num_steps": tex_slat_sampling_steps,
+            },
         )
         mesh = outputs[0]
 
