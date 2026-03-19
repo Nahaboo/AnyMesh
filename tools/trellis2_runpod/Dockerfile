@@ -55,7 +55,8 @@ RUN pip install --no-cache-dir \
     opencv-python-headless ninja trimesh \
     transformers==4.57.3 pillow kornia timm \
     tensorboard pandas lpips zstandard \
-    runpod huggingface_hub
+    runpod huggingface_hub \
+    rembg[gpu]
 
 # utils3d (pinned to same commit as setup.sh)
 RUN pip install --no-cache-dir git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
@@ -86,6 +87,7 @@ RUN git clone https://github.com/JeffreyXiang/FlexGEMM.git --recursive /tmp/Flex
 # Set these env vars on the RunPod endpoint:
 #   HF_HOME=/runpod-volume/models
 #   HF_TOKEN=hf_xxx
+#   U2NET_HOME=/runpod-volume/models/u2net  (rembg model cache)
 
 # trellis2 is not pip-installed — expose it via PYTHONPATH
 ENV PYTHONPATH=/workspace/TRELLIS.2

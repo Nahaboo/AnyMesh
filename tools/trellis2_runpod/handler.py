@@ -46,6 +46,15 @@ from collections import deque
 from pathlib import Path
 from PIL import Image
 
+# Try to load rembg — fallback to flood-fill if unavailable
+try:
+    from rembg import remove as _rembg_remove
+    _REMBG_AVAILABLE = True
+    print("[TRELLIS2] rembg loaded successfully.")
+except Exception as e:
+    _REMBG_AVAILABLE = False
+    print(f"[TRELLIS2] rembg not available, falling back to flood-fill: {e}")
+
 
 # Patch: skip BiRefNet load entirely.
 # from_pretrained calls BiRefNet(**args) which immediately runs
@@ -84,7 +93,7 @@ except Exception as e:
     pipeline = None
 
 
-def remove_background_floodfill(image: Image.Image, threshold: int = 240) -> Image.Image:
+def _remove_background_floodfill(image: Image.Image, threshold: int = 240) -> Image.Image:
     """
     Flood-fill from image edges to remove uniform background.
     Only pixels connected to the border and brighter than threshold are made transparent.
@@ -123,16 +132,33 @@ def remove_background_floodfill(image: Image.Image, threshold: int = 240) -> Ima
 
     data[mask, 3] = 0
     removed = int(mask.sum())
-    print(f"[TRELLIS2] Background removed: {removed} pixels made transparent")
+    print(f"[TRELLIS2] Flood-fill removed: {removed} pixels made transparent")
     return Image.fromarray(data)
+
+
+def remove_background(image: Image.Image) -> Image.Image:
+    """
+    Remove background using rembg (U2Net) if available, else fall back to flood-fill.
+    """
+    if _REMBG_AVAILABLE:
+        try:
+            buf = io.BytesIO()
+            image.save(buf, format="PNG")
+            result = _rembg_remove(buf.getvalue())
+            out = Image.open(io.BytesIO(result)).convert("RGBA")
+            print("[TRELLIS2] rembg background removal done.")
+            return out
+        except Exception as e:
+            print(f"[TRELLIS2] rembg failed, falling back to flood-fill: {e}")
+    return _remove_background_floodfill(image)
 
 
 def preprocess_image(image: Image.Image, size: int = 1024) -> Image.Image:
     """
-    Remove background via flood-fill, resize to size x size (LANCZOS), pad to square.
+    Remove background, resize to size x size (LANCZOS), pad to square.
     Replaces the pipeline's preprocess_image step (which requires BiRefNet).
     """
-    image = remove_background_floodfill(image)
+    image = remove_background(image)
     image.thumbnail((size, size), Image.Resampling.LANCZOS)
 
     result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
