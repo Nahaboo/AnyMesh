@@ -20,7 +20,7 @@ logging.basicConfig(
     datefmt='%H:%M:%S'
 )
 logger = logging.getLogger(__name__)
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -871,6 +871,17 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
         filename=output_filename,
         media_type="application/octet-stream"
     )
+
+@app.post("/upload-glb-result")
+async def upload_glb_result(file: UploadFile = File(...), job_id: str = Form(...)):
+    """Receive a GLB from RunPod worker, save it, return absolute download URL."""
+    filename = f"trellis2_{job_id}.glb"
+    path = DATA_GENERATED_MESHES / filename
+    path.write_bytes(await file.read())
+    logger.info(f"[TRELLIS2] GLB received from worker: {filename} ({path.stat().st_size / 1024 / 1024:.1f} MB)")
+    base_url = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+    return {"url": f"{base_url}/download/{filename}"}
+
 
 @app.post("/upload-images")
 async def upload_images(files: list[UploadFile] = File(...)):

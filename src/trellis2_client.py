@@ -106,10 +106,24 @@ def generate_mesh_from_image_trellis2(
                     "error": output.get("error", "Unknown error from worker"),
                 }
 
-            # Decode and save GLB
-            glb_bytes = base64.b64decode(output["glb_base64"])
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(glb_bytes)
+            # GLB was uploaded directly to backend by the worker - file is already local
+            glb_url = output.get("glb_url")
+            if not glb_url:
+                return {"success": False, "error": "Worker returned no glb_url"}
+            # Extract filename and find the file locally
+            filename = glb_url.rstrip("/").split("/")[-1]
+            local_path = Path("data/generated_meshes") / filename
+            if local_path.exists():
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                if output_path != local_path:
+                    import shutil
+                    shutil.copy2(local_path, output_path)
+            else:
+                # Fallback: download from URL
+                r = requests.get(glb_url, timeout=60)
+                r.raise_for_status()
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(r.content)
 
             # Get mesh stats
             mesh = trimesh.load(str(output_path), force="mesh")

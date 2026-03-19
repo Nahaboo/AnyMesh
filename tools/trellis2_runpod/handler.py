@@ -1,6 +1,6 @@
 """
 RunPod Serverless handler for TRELLIS.2.
-Receives an image as base64, generates a 3D mesh, returns the GLB as base64.
+Receives an image as base64, generates a 3D mesh, uploads GLB to backend.
 
 BiRefNet (background removal) is disabled: images are preprocessed manually
 (resize to 1024x1024, RGBA) and passed with preprocess_image=False.
@@ -8,6 +8,7 @@ This avoids the meta tensor crash caused by briaai/RMBG-2.0 loading.
 
 Input:
     image_base64:                str  (required)
+    job_id:                      str  (required, used as filename)
     resolution:                  str  "512" | "1024" | "1536" (default: "1024")
     decimation_target:           int  target face count (default: 500000)
     texture_size:                int  1024 | 2048 | 4096 (default: 2048)
@@ -20,8 +21,11 @@ Input:
     tex_slat_sampling_steps:     int   (default: 12)
 
 Output:
-    { "success": true, "glb_base64": "...", "size_mb": 12.3 }
+    { "success": true, "glb_url": "http://...", "size_mb": 12.3 }
     { "success": false, "error": "..." }
+
+Env vars:
+    BACKEND_UPLOAD_URL  URL to POST the GLB (e.g. http://VPS_IP/upload-glb-result)
 
 Deployment:
     docker build -f tools/trellis2_runpod/Dockerfile -t youruser/trellis2-worker:latest .
@@ -36,6 +40,7 @@ print(f"[TRELLIS2] HF_HOME={os.environ.get('HF_HOME', 'NOT SET')}")
 import base64
 import io
 import traceback
+import requests
 from pathlib import Path
 from PIL import Image
 
@@ -185,11 +190,26 @@ def handler(job):
         glb_bytes = tmp_path.read_bytes()
         tmp_path.unlink(missing_ok=True)
 
-        glb_b64 = base64.b64encode(glb_bytes).decode()
         size_mb = round(len(glb_bytes) / (1024 * 1024), 1)
         print(f"[TRELLIS2] Done. GLB size: {size_mb} MB")
 
-        return {"success": True, "glb_base64": glb_b64, "size_mb": size_mb}
+        # Upload GLB to backend
+        upload_url = os.environ.get("BACKEND_UPLOAD_URL")
+        if not upload_url:
+            return {"success": False, "error": "BACKEND_UPLOAD_URL not set"}
+
+        job_id = job.get("id", "unknown")
+        resp = requests.post(
+            upload_url,
+            files={"file": ("result.glb", glb_bytes, "model/gltf-binary")},
+            data={"job_id": job_id},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        glb_url = resp.json()["url"]
+        print(f"[TRELLIS2] GLB uploaded: {glb_url}")
+
+        return {"success": True, "glb_url": glb_url, "size_mb": size_mb}
 
     except Exception as e:
         traceback.print_exc()
