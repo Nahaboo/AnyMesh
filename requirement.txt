@@ -29,3 +29,5 @@ scikit-learn>=1.3.0  # Pour k-means clustering (curvature method)
 pyvista
 vtk
 pymeshfix
+pyfqmr
+requests
