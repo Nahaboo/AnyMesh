@@ -41,6 +41,8 @@ import base64
 import io
 import traceback
 import requests
+import numpy as np
+from collections import deque
 from pathlib import Path
 from PIL import Image
 
@@ -82,16 +84,57 @@ except Exception as e:
     pipeline = None
 
 
+def remove_background_floodfill(image: Image.Image, threshold: int = 240) -> Image.Image:
+    """
+    Flood-fill from image edges to remove uniform background.
+    Only pixels connected to the border and brighter than threshold are made transparent.
+    Preserves bright areas inside the object.
+    """
+    rgba = image.convert("RGBA")
+    data = np.array(rgba)
+    h, w = data.shape[:2]
+    visited = np.zeros((h, w), dtype=bool)
+    mask = np.zeros((h, w), dtype=bool)
+
+    queue = deque()
+    for x in range(w):
+        for y in [0, h - 1]:
+            r, g, b = data[y, x, :3]
+            if r >= threshold and g >= threshold and b >= threshold and not visited[y, x]:
+                queue.append((y, x))
+                visited[y, x] = True
+    for y in range(h):
+        for x in [0, w - 1]:
+            r, g, b = data[y, x, :3]
+            if r >= threshold and g >= threshold and b >= threshold and not visited[y, x]:
+                queue.append((y, x))
+                visited[y, x] = True
+
+    while queue:
+        y, x = queue.popleft()
+        mask[y, x] = True
+        for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < h and 0 <= nx < w and not visited[ny, nx]:
+                r, g, b = data[ny, nx, :3]
+                if r >= threshold and g >= threshold and b >= threshold:
+                    visited[ny, nx] = True
+                    queue.append((ny, nx))
+
+    data[mask, 3] = 0
+    removed = int(mask.sum())
+    print(f"[TRELLIS2] Background removed: {removed} pixels made transparent")
+    return Image.fromarray(data)
+
+
 def preprocess_image(image: Image.Image, size: int = 1024) -> Image.Image:
     """
-    Resize image to size x size (LANCZOS), convert to RGBA.
+    Remove background via flood-fill, resize to size x size (LANCZOS), pad to square.
     Replaces the pipeline's preprocess_image step (which requires BiRefNet).
-    Keeps aspect ratio by padding with transparency.
     """
-    image = image.convert("RGBA")
+    image = remove_background_floodfill(image)
     image.thumbnail((size, size), Image.Resampling.LANCZOS)
 
-    # Pad to exact square with transparent background
     result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     offset = ((size - image.width) // 2, (size - image.height) // 2)
     result.paste(image, offset)
