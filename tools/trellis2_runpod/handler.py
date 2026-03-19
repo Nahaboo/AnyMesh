@@ -195,6 +195,7 @@ def handler(job):
 
         # Upload GLB to backend
         upload_url = os.environ.get("BACKEND_UPLOAD_URL")
+        print(f"[TRELLIS2] BACKEND_UPLOAD_URL={upload_url}")
         if not upload_url:
             return {"success": False, "error": "BACKEND_UPLOAD_URL not set"}
 
@@ -205,6 +206,7 @@ def handler(job):
             data={"job_id": job_id},
             timeout=60,
         )
+        print(f"[TRELLIS2] Upload response: {resp.status_code} {resp.text[:200]}")
         resp.raise_for_status()
         glb_url = resp.json()["url"]
         print(f"[TRELLIS2] GLB uploaded: {glb_url}")
