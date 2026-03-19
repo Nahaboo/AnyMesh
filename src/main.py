@@ -880,7 +880,7 @@ async def upload_glb_result(file: UploadFile = File(...), job_id: str = Form(...
     path.write_bytes(await file.read())
     logger.info(f"[TRELLIS2] GLB received from worker: {filename} ({path.stat().st_size / 1024 / 1024:.1f} MB)")
     base_url = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
-    return {"url": f"{base_url}/download/{filename}"}
+    return {"url": f"{base_url}/mesh/generated/{filename}"}
 
 
 @app.post("/upload-images")
