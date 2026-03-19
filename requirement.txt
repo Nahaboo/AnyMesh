@@ -31,3 +31,5 @@ vtk
 pymeshfix
 pyfqmr
 requests
+httpx
+google-generativeai
