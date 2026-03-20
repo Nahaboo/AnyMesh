@@ -31,12 +31,8 @@ def unwrap_uv(input_path: Path, output_path: Path) -> dict:
     if not mesh.is_winding_consistent:
         logger.warning(f"[UV_UNWRAP] Mesh winding inconsistent: {input_path.name}")
 
-    if not mesh.is_manifold:
-        non_manifold = len(mesh.edges) - len(mesh.edges_unique)
-        return {
-            'success': False,
-            'error': f'Non-manifold mesh ({non_manifold} edges). Run retopology first.'
-        }
+    if not mesh.is_watertight:
+        logger.warning(f"[UV_UNWRAP] Mesh is not watertight, unwrap may have seams: {input_path.name}")
 
     logger.info(f"[UV_UNWRAP] Starting LSCM unwrap: {input_path.name} ({n_verts}v / {n_faces}f)")
 

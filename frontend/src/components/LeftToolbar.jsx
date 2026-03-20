@@ -8,6 +8,7 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
   // Visualization meshes are view-only — lock other tools
   const isComparedMesh = meshInfo?.isCompared === true
   const isQualityMesh = meshInfo?.isQuality === true
+  const isWatertight = meshInfo ? meshInfo.is_watertight === true : true
 
   const tools = [
     {
@@ -50,7 +51,8 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
         </svg>
       ),
-      enabled: true
+      enabled: isWatertight,
+      disabledReason: 'Retopology requires a watertight mesh'
     },
     {
       id: 'physics',
@@ -100,7 +102,8 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
         </svg>
       ),
-      enabled: true
+      enabled: isWatertight,
+      disabledReason: 'UV unwrap requires a watertight mesh'
     },
     {
       id: 'lod',
