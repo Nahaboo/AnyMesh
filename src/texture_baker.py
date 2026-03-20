@@ -10,7 +10,6 @@ import trimesh
 from pathlib import Path
 from typing import Dict, Any
 from PIL import Image
-from scipy.spatial import cKDTree
 
 
 def _sample_texture(tex_arr: np.ndarray, uv: np.ndarray) -> np.ndarray:
@@ -120,13 +119,17 @@ def bake_texture(
 
         low_uv = np.array(low_unwrapped.visual.uv)       # (M, 2)
 
-        # 3. KDTree: find nearest high-poly vertex for each low-poly vertex
-        print(f"[BAKING] Building KDTree on {len(high_mesh.vertices)} vertices...")
-        tree = cKDTree(high_mesh.vertices)
-        _, indices = tree.query(low_poly_mesh.vertices)   # indices shape (M,)
+        # 3. Project each low-poly vertex onto the nearest high-poly triangle
+        # Use low_unwrapped.vertices (not low_poly_mesh.vertices) — unwrap() may duplicate
+        # vertices on UV seams, so low_unwrapped can have more vertices than low_poly_mesh.
+        print(f"[BAKING] Projecting {len(low_unwrapped.vertices)} low-poly vertices onto high-poly surface...")
+        closest_pts, _, triangle_ids = trimesh.proximity.closest_point(high_mesh, low_unwrapped.vertices)
+        tri_vertices = high_mesh.triangles[triangle_ids]                            # (M, 3, 3)
+        bary = trimesh.triangles.points_to_barycentric(tri_vertices, closest_pts)  # (M, 3)
+        face_uvs = high_uv[high_mesh.faces[triangle_ids]]                          # (M, 3, 2)
 
-        # 4. Sample high-poly vertex colors via their UVs
-        high_uv_for_low = high_uv[indices]                # (M, 2) corresponding high-poly UVs
+        # 4. Interpolate UVs via barycentric coordinates, then sample texture
+        high_uv_for_low = (bary[:, :, np.newaxis] * face_uvs).sum(axis=1)         # (M, 2)
         vertex_colors = _sample_texture(tex_arr, high_uv_for_low).astype(np.float32)  # (M, 3)
 
         # 5. Rasterize baked texture triangle by triangle

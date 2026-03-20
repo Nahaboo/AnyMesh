@@ -14,6 +14,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
   const [bakeTextures, setBakeTextures] = useState(false)
 
   const isGenerated = meshInfo?.isGenerated === true
+  const hasTextures = isGenerated || meshInfo?.has_textures === true
 
   // Vérifier si on visualise un mesh déjà retopologisé
   const isRetopologizedMesh = meshInfo?.isRetopologized === true
@@ -85,7 +86,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
       )}
 
       {/* G10: Avertissement perte de textures pour mesh généré */}
-      {isGenerated && !isRetopologizedMesh && !bakeTextures && (
+      {hasTextures && !isRetopologizedMesh && !bakeTextures && (
         <div style={{
           background: 'var(--v2-warning-bg)',
           border: '1px solid var(--v2-warning-border)',
@@ -267,7 +268,7 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
             Préserver les bordures (meshes ouverts)
           </label>
 
-          {isGenerated && (
+          {hasTextures && (
             <label style={{
               display: 'flex',
               alignItems: 'center',
