@@ -63,7 +63,7 @@ function ViewerLayout({
   const [debugMode, setDebugMode] = useState(false)
   const [qualityOverlays, setQualityOverlays] = useState([]) // [{ positions: [...], color: '#ff3333', type: 'boundary' }, ...]
   const [autoRotate, setAutoRotate] = useState(false)
-  const [hdriPreset, setHdriPreset] = useState('studio')
+  const [hdriPreset, setHdriPreset] = useState('sunset')
   const [uvCheckerMode, setUVCheckerMode] = useState(false)
 
   // Physics state

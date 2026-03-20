@@ -7,16 +7,7 @@ import SaveButton from './SaveButton'
  * Right side: Mesh info (Faces, Vertices) + 3D axes widget
  */
 const HDRI_PRESETS = [
-  { id: 'studio', label: 'Studio' },
-  { id: 'sunset', label: 'Sunset' },
-  { id: 'dawn', label: 'Dawn' },
-  { id: 'city', label: 'City' },
-  { id: 'forest', label: 'Forest' },
-  { id: 'night', label: 'Night' },
-  { id: 'warehouse', label: 'Warehouse' },
-  { id: 'apartment', label: 'Apartment' },
-  { id: 'lobby', label: 'Lobby' },
-  { id: 'park', label: 'Park' }
+  { id: 'sunset', label: 'Sunset' }
 ]
 
 function BottomToolbar({ meshInfo, onExport, onMeshSaved, autoRotate, onAutoRotateToggle, hdriPreset, onHdriChange, axesWidget }) {
