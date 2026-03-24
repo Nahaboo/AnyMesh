@@ -22,6 +22,18 @@ function CameraSync({ onCameraUpdate }) {
   return null
 }
 
+
+/**
+ * RendererConfig - Sets renderer tone mapping to match Khronos glTF Sample Viewer defaults
+ * KHR PBR Neutral tone mapping, exposure 1.0
+ */
+function RendererConfig() {
+  const { gl } = useThree()
+  gl.toneMapping = THREE.LinearToneMapping
+  gl.toneMappingExposure = 1.0
+  return null
+}
+
 /**
  * GpuStatsBridge - Reads gl.info inside Canvas and pushes stats to parent via callback
  */
@@ -95,7 +107,8 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
     <div className="v2-viewer-container" style={{
       width: '100%',
       height: '100%',
-      position: 'relative'
+      position: 'relative',
+      background: hdriPreset ? undefined : 'linear-gradient(to bottom, #e0e0e0 0%, #888888 100%)'
     }}>
       {/* GPU monitor overlay - rendered outside Canvas as plain HTML */}
       {debugMode && (
@@ -118,7 +131,10 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
           <div>DRAW: {gpuStats.calls} | TRI: {gpuStats.triangles.toLocaleString()}</div>
         </div>
       )}
-      <Canvas shadows={{ type: THREE.PCFSoftShadowMap }} camera={{ position: [3, 3, 3], fov: 50 }}>
+      <Canvas camera={{ position: [3, 3, 3], fov: 50 }} gl={{ alpha: true }}>
+        {/* Renderer config - Khronos PBR Neutral tone mapping */}
+        <RendererConfig />
+
         {/* Camera sync for axes widget */}
         <CameraSync onCameraUpdate={onCameraUpdate} />
 
@@ -129,21 +145,22 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
         {meshInfo.bounding_box && <CameraController boundingBox={meshInfo.bounding_box} />}
 
         {/* Lighting - physics mode has its own lights in PhysicsPlayground */}
-        {!physicsMode && hdriPreset && (
+        {!physicsMode && (
           <>
-            <ambientLight intensity={materialPreset ? 0.3 : renderMode === 'textured' ? 1.5 : 1.0} />
-            <Environment preset={hdriPreset} background environmentIntensity={(materialPreset || renderMode === 'textured') ? (renderMode === 'textured' && !materialPreset ? 1.2 : 0.4) : 0.3} />
-            {(materialPreset || renderMode === 'textured') && meshInfo.bounding_box && (
+            {hdriPreset ? (
+              <Environment preset={hdriPreset} background environmentIntensity={1.0} />
+            ) : (
+              // Studio fallback: 3-point lighting, no shadows
+              <>
+                <ambientLight intensity={0.15} />
+                <directionalLight position={[1, 2, 3]} intensity={3.0} castShadow={false} />
+                <directionalLight position={[-2, 1, -1]} intensity={1.6} castShadow={false} />
+                <directionalLight position={[0, -1, -2]} intensity={0.6} castShadow={false} />
+              </>
+            )}
+            {hdriPreset && (materialPreset || renderMode === 'textured') && meshInfo.bounding_box && (
               <ContactShadows position={[0, -(meshInfo.bounding_box.diagonal * 0.5), 0]} scale={meshInfo.bounding_box.diagonal * 2} blur={2} opacity={0.4} far={meshInfo.bounding_box.diagonal * 2} />
             )}
-          </>
-        )}
-        {!physicsMode && !hdriPreset && (
-          <>
-            <color attach="background" args={['#868686']} />
-            <ambientLight intensity={1.0} />
-            <directionalLight position={[-1, 2, 2]} intensity={2.0} castShadow={false} />
-            <directionalLight position={[1, 1, -1]} intensity={1.0} castShadow={false} />
           </>
         )}
 

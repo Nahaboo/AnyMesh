@@ -457,6 +457,16 @@ export const getUnwrappedMeshUrl = (filename) => {
   return `${API_BASE_URL}/mesh/unwrapped/${filename}`
 }
 
+export const getMeshSubpath = (meshInfo) => {
+  if (meshInfo.isBaked) return `baked/${meshInfo.filename}`
+  if (meshInfo.isUVUnwrapped) return `unwrapped/${meshInfo.filename}`
+  if (meshInfo.isSegmented) return `segmented/${meshInfo.filename}`
+  if (meshInfo.isRetopologized) return `retopo/${meshInfo.filename}`
+  if (meshInfo.isSimplified) return `output/${meshInfo.filename}`
+  if (meshInfo.isGenerated) return `generated_meshes/${meshInfo.filename}`
+  return `input/${meshInfo.filename}`
+}
+
 export const bakeTexture = async (params) => {
   const response = await api.post('/bake-texture', {
     filename: params.filename,

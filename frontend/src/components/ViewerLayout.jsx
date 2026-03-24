@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { API_BASE_URL } from '../utils/api'
+import { API_BASE_URL, getMeshSubpath } from '../utils/api'
 import TopToolbar from './TopToolbar'
 import LeftToolbar from './LeftToolbar'
 import BottomToolbar from './BottomToolbar'
@@ -228,12 +228,8 @@ function ViewerLayout({
     if (!meshInfo) return
 
     // Build export URL with format conversion
-    const isGenerated = meshInfo.isGenerated || false
-    const isSimplified = meshInfo.isSimplified || false
-    const isRetopologized = meshInfo.isRetopologized || false
-    const isSegmented = meshInfo.isSegmented || false
-    const isBaked = meshInfo.isBaked || false
-    const exportUrl = `${API_BASE_URL}/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}&is_simplified=${isSimplified}&is_retopologized=${isRetopologized}&is_segmented=${isSegmented}&is_baked=${isBaked}`
+    const subpath = getMeshSubpath(meshInfo)
+    const exportUrl = `${API_BASE_URL}/export/${subpath}?format=${format.id}`
 
     console.log(`[ViewerLayout] Exporting ${meshInfo.filename} as ${format.label}`)
 

@@ -808,30 +808,22 @@ async def download_mesh(filename: str):
         media_type="application/octet-stream"
     )
 
-@app.get("/export/{filename}")
-async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False, is_simplified: bool = False, is_retopologized: bool = False, is_segmented: bool = False, is_baked: bool = False):
+@app.get("/export/{subpath:path}")
+async def export_mesh(subpath: str, format: str = "obj"):
     """
     Export a mesh file in the requested format.
-
+    subpath is relative to data/ (e.g. 'baked/bunny.glb', 'input/bunny.glb').
     GLB-First: source files are always GLB. Converts to the target format on the fly.
     """
-    if is_baked:
-        source_dir = DATA_BAKED
-    elif is_segmented:
-        source_dir = DATA_SEGMENTED
-    elif is_retopologized:
-        source_dir = DATA_RETOPO
-    elif is_simplified:
-        source_dir = DATA_OUTPUT
-    elif is_generated:
-        source_dir = DATA_GENERATED_MESHES
-    else:
-        source_dir = DATA_INPUT
+    if ".." in subpath:
+        raise HTTPException(status_code=400, detail="Invalid path")
 
-    source_path = source_dir / filename
+    source_path = Path("data") / subpath
+    filename = source_path.name
 
     if not source_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+        raise HTTPException(status_code=404, detail=f"File not found: {subpath}")
+
     source_ext = source_path.suffix.lower().lstrip('.')
     target_format = format.lower()
 
@@ -845,7 +837,7 @@ async def export_mesh(filename: str, format: str = "obj", is_generated: bool = F
     output_filename = f"{source_path.stem}.{target_format}"
     output_path = DATA_OUTPUT / output_filename
 
-    logger.info(f"[EXPORT] Converting {filename} to {target_format.upper()}")
+    logger.info(f"[EXPORT] Converting {subpath} to {target_format.upper()}")
 
     result = convert_mesh_format(source_path, output_path, target_format)
 
