@@ -13,7 +13,6 @@ function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, on
     { id: 'flat', label: 'Flat' },
     { id: 'textured', label: 'Textured' },
     { id: 'shader:toon', label: 'Toon', isShader: true },
-    { id: 'shader:organic-solid', label: 'Organic', isShader: true },
     { id: 'shader:point-cloud', label: 'Point Cloud', isShader: true }
   ]
 
