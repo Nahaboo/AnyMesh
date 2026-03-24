@@ -64,7 +64,7 @@ function makeCheckerTexture() {
   return tex
 }
 
-function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, isCompared = false, isUVUnwrapped = false, uvCheckerMode = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null, qualityOverlays = null }) {
+function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, isCompared = false, isUVUnwrapped = false, isBaked = false, uvCheckerMode = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null, qualityOverlays = null }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
   const prevModelRef = useRef(null)
   const originalMaterialsRef = useRef(new Map())
@@ -77,7 +77,9 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
   // Q4: Build URL - handle different mesh sources (utilise API_BASE_URL configurable)
   // Add uploadId as cache-busting parameter to force browser to reload file
   let meshUrl
-  if (isUVUnwrapped) {
+  if (isBaked) {
+    meshUrl = `${API_BASE_URL}/mesh/baked/${filename}?v=${uploadId || Date.now()}`
+  } else if (isUVUnwrapped) {
     meshUrl = `${API_BASE_URL}/mesh/unwrapped/${filename}?v=${uploadId || Date.now()}`
   } else if (isCompared) {
     meshUrl = `${API_BASE_URL}/mesh/compared/${filename}?v=${uploadId || Date.now()}`
@@ -212,7 +214,7 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
               color: v.color,
               metalness: v.metalness,
               roughness: v.roughness,
-              opacity: v.opacity,
+              ...(v.opacity !== undefined && { opacity: v.opacity }),
               side: THREE.DoubleSide,
               envMapIntensity: 1.0
             })

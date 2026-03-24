@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import ConfigSidebar from './components/ConfigSidebar'
 import ViewerLayout from './components/ViewerLayout'
-import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, compareMeshes, visualizeQuality, unwrapMeshUV, generateLod, pollTaskStatus, fetchConfig } from './utils/api'
+import { simplifyMesh, generateMesh, segmentMesh, retopologizeMesh, compareMeshes, unwrapMeshUV, bakeTexture, generateLod, pollTaskStatus, fetchConfig } from './utils/api'
 import './styles/v2-theme.css'
 
 /**
@@ -144,6 +144,7 @@ function App() {
       bounding_box: meshInfo.bounding_box,
       uploadId: Date.now(),
       isSimplified: true,  // Flag to indicate this is from /mesh/output
+      isUVUnwrapped: false,
       originalFilename: originalName  // Fichier source simplifié (bunny_simplified.glb)
     }
 
@@ -170,6 +171,7 @@ function App() {
     })
     // Reset originalMeshInfo to initial for future operations
     setOriginalMeshInfo(initialMeshInfo)
+    setCurrentTask(null)
   }
 
   const handleLoadParent = () => {
@@ -359,23 +361,6 @@ function App() {
     setMeshInfo(retopologizedMeshInfo)
   }
 
-  // Handler to load the sanitized mesh (intermediate step before retopology)
-  const handleLoadSanitized = () => {
-    if (!currentTask?.result?.sanitized_filename) return
-    const sanitizedMeshInfo = {
-      filename: currentTask.result.sanitized_filename,
-      displayFilename: currentTask.result.sanitized_filename,
-      vertices_count: currentTask.result.original_vertices,
-      faces_count: currentTask.result.original_faces,
-      triangles_count: currentTask.result.original_faces,
-      bounding_box: meshInfo.bounding_box,
-      uploadId: Date.now(),
-      isRetopologized: true,  // Servi depuis /mesh/retopo/
-      originalFilename: currentTask.result.sanitized_filename
-    }
-    console.log('[App] Loading sanitized mesh:', sanitizedMeshInfo)
-    setMeshInfo(sanitizedMeshInfo)
-  }
 
   // Handler for mesh generation
   const handleGenerate = async (params) => {
@@ -502,39 +487,6 @@ function App() {
     setMeshInfo(comparedMeshInfo)
   }
 
-  // Handler for mesh quality visualization
-  const handleVisualizeQuality = async (params) => {
-    console.log('[App] Starting quality visualization:', params)
-    setIsProcessing(true)
-
-    try {
-      const response = await visualizeQuality(params)
-      const taskId = response.task_id
-
-      await pollTaskStatus(
-        taskId,
-        (task) => {
-          setCurrentTask({ ...task, taskType: 'quality_visualize' })
-          if (task.status === 'completed' && task.result?.success) {
-            console.log('[App] Quality visualization completed:', task.result)
-          }
-        },
-        1000
-      )
-
-      setIsProcessing(false)
-    } catch (error) {
-      console.error('[App] Quality visualization error:', error)
-      setIsProcessing(false)
-      setCurrentTask({
-        id: 'error',
-        status: 'failed',
-        error: error.message || 'An error occurred',
-        taskType: 'quality_visualize'
-      })
-    }
-  }
-
   // Handler for UV unwrapping
   const handleUnwrapUV = async (params) => {
     setIsProcessing(true)
@@ -559,9 +511,13 @@ function App() {
   const handleLoadUnwrapped = () => {
     if (!currentTask || currentTask.status !== 'completed' || !currentTask.result) return
     const result = currentTask.result
+    console.log('[handleLoadUnwrapped] result:', result)
+    console.log('[handleLoadUnwrapped] meshInfo.filename:', meshInfo?.filename, 'isUVUnwrapped:', meshInfo?.isUVUnwrapped)
     if (!result.output_filename) return
     setMeshInfo({
+      ...meshInfo,
       filename: result.output_filename,
+      displayFilename: null,
       file_size: 0,
       format: '.glb',
       vertices_count: result.vertices_count || 0,
@@ -570,8 +526,46 @@ function App() {
       bounding_box: meshInfo?.bounding_box,
       uploadId: Date.now(),
       isUVUnwrapped: true,
+      originalFilename: meshInfo?.originalFilename || meshInfo?.filename,
     })
   }
+
+  // Handler for texture baking — auto-loads the baked mesh on completion
+  const handleBakeTexture = async (params) => {
+    setIsProcessing(true)
+    try {
+      const response = await bakeTexture(params)
+      const taskId = response.task_id
+      await pollTaskStatus(
+        taskId,
+        (task) => {
+          setCurrentTask({ ...task, taskType: 'bake_texture' })
+          if (task.status === 'completed' && task.result?.output_filename) {
+            const result = task.result
+            setMeshInfo((prev) => ({
+              ...prev,
+              filename: result.output_filename,
+              displayFilename: null,
+              vertices_count: result.vertices_count || 0,
+              faces_count: result.faces_count || 0,
+              triangles_count: result.faces_count || 0,
+              uploadId: Date.now(),
+              isBaked: true,
+              has_textures: true,
+              originalFilename: prev?.originalFilename || prev?.filename,
+            }))
+          }
+        },
+        1000
+      )
+      setIsProcessing(false)
+    } catch (error) {
+      setIsProcessing(false)
+      setCurrentTask({ id: 'error', status: 'failed', error: error.message || 'An error occurred', taskType: 'bake_texture' })
+    }
+  }
+
+  const handleLoadBaked = () => {} // kept for prop compat, auto-load now happens in handleBakeTexture
 
   // Handler for Auto-LOD generation
   const handleGenerateLod = async (params) => {
@@ -615,30 +609,6 @@ function App() {
     })
   }
 
-  // Handler to load the quality visualization GLB
-  const handleLoadQuality = () => {
-    if (!currentTask || currentTask.status !== 'completed' || !currentTask.result) return
-
-    const result = currentTask.result
-    if (!result.output_filename) return
-
-    const qualityMeshInfo = {
-      filename: result.output_filename,
-      file_size: 0,
-      format: '.glb',
-      vertices_count: result.total_vertices || 0,
-      faces_count: meshInfo?.faces_count || 0,
-      triangles_count: meshInfo?.faces_count || 0,
-      bounding_box: meshInfo?.bounding_box,
-      uploadId: Date.now(),
-      isQuality: true,
-      diagnosticType: result.diagnostic_type
-    }
-
-    console.log('[App] Loading quality visualization:', qualityMeshInfo)
-    setMeshInfo(qualityMeshInfo)
-  }
-
   return (
     <div className="v2-app">
       {currentView === 'config' ? (
@@ -656,17 +626,16 @@ function App() {
           onLoadSimplified={handleLoadSimplified}
           onLoadSegmented={handleLoadSegmented}
           onLoadRetopologized={handleLoadRetopologized}
-          onLoadSanitized={handleLoadSanitized}
           onLoadOriginal={handleLoadOriginal}
           onLoadParent={handleLoadParent}
           onCompare={handleCompare}
           onLoadCompared={handleLoadCompared}
           onUnwrapUV={handleUnwrapUV}
           onLoadUnwrapped={handleLoadUnwrapped}
+          onBakeTexture={handleBakeTexture}
+          onLoadBaked={handleLoadBaked}
           onGenerateLod={handleGenerateLod}
           onLoadLod={handleLoadLod}
-          onVisualizeQuality={handleVisualizeQuality}
-          onLoadQuality={handleLoadQuality}
           onMeshSaved={(result) => console.log('[App] Mesh saved:', result)}
           currentTask={currentTask}
           isProcessing={isProcessing}

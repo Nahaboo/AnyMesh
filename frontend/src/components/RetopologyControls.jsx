@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onLoadSanitized, onLoadOriginal, currentTask, isProcessing }) {
+function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onLoadOriginal, currentTask, isProcessing }) {
   // Range proportionnel : 5% → 50% du nombre de faces original
   // La retopo vise un mesh LOW POLY avec topologie optimisée
   const currentFaces = meshInfo?.triangles_count || meshInfo?.faces_count || 0
@@ -422,30 +422,6 @@ function RetopologyControls({ meshInfo, onRetopologize, onLoadRetopologized, onL
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
               <span>Charger le résultat retopologisé</span>
-            </button>
-          )}
-
-          {/* Bouton pour visualiser le mesh sanitizé (étape intermédiaire) */}
-          {currentTask && currentTask.taskType === 'retopology' && currentTask.status === 'completed' && currentTask.result?.sanitized_filename && (
-            <button
-              type="button"
-              onClick={onLoadSanitized}
-              className="v2-btn v2-btn-secondary"
-              style={{
-                width: '100%',
-                padding: 'var(--v2-spacing-sm) var(--v2-spacing-md)',
-                borderRadius: 'var(--v2-radius-lg)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 'var(--v2-spacing-xs)',
-                fontWeight: 500
-              }}
-            >
-              <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Voir le mesh sanitizé</span>
             </button>
           )}
 

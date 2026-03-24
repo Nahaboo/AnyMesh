@@ -18,8 +18,9 @@ function TaskStatus({ task, onComplete, activeTool }) {
     'segment': 'segmentation',
     'retopology': 'retopoly',
     'generate': 'generation',
-    'quality_visualize': 'quality',
-    'unwrap_uv': 'uv_unwrap',
+    'unwrap_uv': 'texturing',
+    'bake_texture': 'texturing',
+    'generate_texture': 'texturing',
     'generate_lod': 'lod'
   }
 
@@ -376,20 +377,16 @@ function TaskStatus({ task, onComplete, activeTool }) {
                 </div>
               </div>
             </div>
-          ) : task.taskType === 'quality_visualize' ? (
-            // Affichage pour la visualisation qualité
+          ) : task.taskType === 'bake_texture' || task.taskType === 'generate_texture' ? (
+            // Affichage pour le baking / generation de texture
             <div style={{
               background: 'var(--v2-success-bg)',
               borderRadius: 'var(--v2-radius-lg)',
               padding: 'var(--v2-spacing-md)'
             }}>
-              <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)', marginBottom: '8px' }}>Heatmap générée</p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                <span style={{ color: 'var(--v2-success-text)' }}>Vertices colorisés:</span>
-                <span style={{ fontWeight: 600, color: 'var(--v2-success-text)' }}>
-                  {task.result.total_vertices?.toLocaleString()}
-                </span>
-              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--v2-success-text)' }}>
+                {task.taskType === 'bake_texture' ? 'Texture baked avec succes' : 'Texture generee avec succes'}
+              </p>
             </div>
           ) : (
             // Affichage pour la simplification/retopologie

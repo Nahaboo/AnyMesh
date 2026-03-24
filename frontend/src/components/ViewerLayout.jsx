@@ -13,7 +13,6 @@ import PromptGenerationControls from './PromptGenerationControls'
 import PhysicsControls, { MATERIAL_PRESETS } from './PhysicsControls'
 import TexturingControls from './TexturingControls'
 import QualityControls from './QualityControls'
-import UVUnwrapControls from './UVUnwrapControls'
 import LodControls from './LodControls'
 import TaskStatus from './TaskStatus'
 import * as THREE from 'three'
@@ -42,6 +41,8 @@ function ViewerLayout({
   onLoadCompared,
   onUnwrapUV,
   onLoadUnwrapped,
+  onBakeTexture,
+  onLoadBaked,
   onGenerateLod,
   onLoadLod,
   onMeshSaved,
@@ -61,7 +62,7 @@ function ViewerLayout({
   const [qualityOverlays, setQualityOverlays] = useState([]) // [{ positions: [...], color: '#ff3333', type: 'boundary' }, ...]
   const [autoRotate, setAutoRotate] = useState(false)
   const [hdriPreset, setHdriPreset] = useState(null)
-  const [uvCheckerMode, setUVCheckerMode] = useState(false)
+  // const [uvCheckerMode, setUVCheckerMode] = useState(false) // kept for debug — UV checker via TexturingControls
 
   // Physics state
   const [physicsGravity, setPhysicsGravity] = useState(-9.81)
@@ -98,7 +99,8 @@ function ViewerLayout({
 
   const handleToolChange = (tool) => {
     setActiveTool(tool)
-    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing' || tool === 'quality' || tool === 'uv_unwrap' || tool === 'lod')
+    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing' || tool === 'quality' || tool === 'lod')
+    // if (tool !== 'texturing') setUVCheckerMode(false) // kept for debug
   }
 
   const isPhysicsMode = activeTool === 'physics'
@@ -230,7 +232,8 @@ function ViewerLayout({
     const isSimplified = meshInfo.isSimplified || false
     const isRetopologized = meshInfo.isRetopologized || false
     const isSegmented = meshInfo.isSegmented || false
-    const exportUrl = `${API_BASE_URL}/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}&is_simplified=${isSimplified}&is_retopologized=${isRetopologized}&is_segmented=${isSegmented}`
+    const isBaked = meshInfo.isBaked || false
+    const exportUrl = `${API_BASE_URL}/export/${meshInfo.filename}?format=${format.id}&is_generated=${isGenerated}&is_simplified=${isSimplified}&is_retopologized=${isRetopologized}&is_segmented=${isSegmented}&is_baked=${isBaked}`
 
     console.log(`[ViewerLayout] Exporting ${meshInfo.filename} as ${format.label}`)
 
@@ -292,7 +295,7 @@ function ViewerLayout({
             physicsMode={isPhysicsMode}
             qualityOverlays={qualityOverlays}
             hdriPreset={hdriPreset}
-            uvCheckerMode={uvCheckerMode}
+            uvCheckerMode={false}
             materialPreset={renderMode === 'textured' ? (activePresetObj || texturePreset || lastMaterialPreset) : null}
             physicsProps={isPhysicsMode ? {
               meshInfo,
@@ -350,9 +353,8 @@ function ViewerLayout({
                  activeTool === 'segmentation' ? 'Segmentation' :
                  activeTool === 'retopoly' ? 'Retopology' :
                  activeTool === 'physics' ? 'Physics Simulation' :
-                 activeTool === 'texturing' ? 'AI Texturing' :
+                 activeTool === 'texturing' ? 'Texturing' :
                  activeTool === 'quality' ? 'Quality Analysis' :
-                 activeTool === 'uv_unwrap' ? 'UV Unwrapping' :
                  activeTool === 'lod' ? 'Auto-LOD' :
                  activeTool === 'generation' ? 'Generate 3D Mesh' :
                  activeTool === 'prompt-generation' ? 'Generate from Prompt' : 'Tool'}
@@ -420,24 +422,19 @@ function ViewerLayout({
               ) : activeTool === 'texturing' ? (
                 <TexturingControls
                   meshInfo={meshInfo}
+                  // onUnwrapUV={onUnwrapUV}       // kept for debug
+                  // onLoadUnwrapped={onLoadUnwrapped} // kept for debug
+                  // onUVCheckerChange={setUVCheckerMode} // kept for debug
                   onApplyTexture={handleTextureApply}
-                  onResetTexture={meshInfo?.has_textures ? handleResetMaterial : null}
+                  onBakeTexture={onBakeTexture}
+                  onLoadBaked={onLoadBaked}
+                  currentTask={currentTask}
                   isProcessing={isProcessing}
                 />
               ) : activeTool === 'quality' ? (
                 <QualityControls
                   meshInfo={meshInfo}
                   onOverlayChange={setQualityOverlays}
-                />
-              ) : activeTool === 'uv_unwrap' ? (
-                <UVUnwrapControls
-                  meshInfo={meshInfo}
-                  onUnwrapUV={onUnwrapUV}
-                  onLoadUnwrapped={onLoadUnwrapped}
-                  onLoadOriginal={onLoadParent}
-                  onUVCheckerChange={setUVCheckerMode}
-                  currentTask={currentTask}
-                  isProcessing={isProcessing}
                 />
               ) : activeTool === 'lod' ? (
                 <LodControls

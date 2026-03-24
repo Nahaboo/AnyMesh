@@ -180,6 +180,7 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
                 isSegmented={meshInfo.isSegmented || false}
                 isCompared={meshInfo.isCompared || false}
                 isUVUnwrapped={meshInfo.isUVUnwrapped || false}
+                isBaked={meshInfo.isBaked || false}
                 uvCheckerMode={uvCheckerMode}
                 renderMode={renderMode}
                 shaderParams={shaderParams}

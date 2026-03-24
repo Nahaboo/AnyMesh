@@ -64,10 +64,9 @@ async def lifespan(app: FastAPI):
     task_manager.register_handler("generate_image", generate_image_task_handler)
     task_manager.register_handler("generate_texture", generate_texture_task_handler)
     task_manager.register_handler("generate_material", generate_material_task_handler)
-    task_manager.register_handler("sanitize", sanitize_task_handler)
     task_manager.register_handler("compare", compare_task_handler)
-    task_manager.register_handler("quality_visualize", quality_visualize_task_handler)
     task_manager.register_handler("unwrap_uv", unwrap_uv_task_handler)
+    task_manager.register_handler("bake_texture", bake_texture_task_handler)
     task_manager.register_handler("generate_lod", generate_lod_task_handler)
     task_manager.start()
 
@@ -114,8 +113,8 @@ DATA_GENERATED_TEXTURES = Path("data/generated_textures")
 DATA_TEMP = Path("data/temp")   # Temp files for format conversions
 DATA_SAVED = Path("data/saved")  # User-saved meshes
 DATA_COMPARED = Path("data/compared")
-DATA_QUALITY = Path("data/quality")
 DATA_UNWRAPPED = Path("data/unwrapped")
+DATA_BAKED = Path("data/baked")
 DATA_INPUT.mkdir(parents=True, exist_ok=True)
 DATA_OUTPUT.mkdir(parents=True, exist_ok=True)
 DATA_INPUT_IMAGES.mkdir(parents=True, exist_ok=True)
@@ -125,8 +124,8 @@ DATA_SEGMENTED.mkdir(parents=True, exist_ok=True)
 DATA_GENERATED_TEXTURES.mkdir(parents=True, exist_ok=True)
 DATA_TEMP.mkdir(parents=True, exist_ok=True)
 DATA_COMPARED.mkdir(parents=True, exist_ok=True)
-DATA_QUALITY.mkdir(parents=True, exist_ok=True)
 DATA_UNWRAPPED.mkdir(parents=True, exist_ok=True)
+DATA_BAKED.mkdir(parents=True, exist_ok=True)
 
 # Supported file formats
 SUPPORTED_FORMATS = {".obj", ".stl", ".ply", ".off", ".gltf", ".glb"}
@@ -223,21 +222,22 @@ class CompareRequest(BaseModel):
     is_retopo_comp: bool = False
 
 
-class QualityVisualizeRequest(BaseModel):
-    """Mesh quality visualization parameters."""
-    filename: str
-    diagnostic_type: str  # "boundary" | "non_manifold" | "face_quality"
-    is_generated: bool = False
-    is_simplified: bool = False
-    is_retopologized: bool = False
-
-
 class UnwrapUVRequest(BaseModel):
     """UV unwrap parameters."""
     filename: str
     is_generated: bool = False
     is_simplified: bool = False
     is_retopologized: bool = False
+
+
+class BakeTextureRequest(BaseModel):
+    """Texture baking parameters."""
+    filename: str
+    texture_id: str
+    is_generated: bool = False
+    is_simplified: bool = False
+    is_retopologized: bool = False
+    is_uv_unwrapped: bool = False
 
 
 class SaveMeshRequest(BaseModel):
@@ -417,7 +417,6 @@ async def upload_mesh(file: UploadFile = File(...)):
             "is_watertight": is_watertight,
             "is_orientable": is_winding_consistent,
             "is_manifold": None,
-            "euler_number": int(mesh.euler_number) if hasattr(mesh, 'euler_number') else None,
             "volume": volume,
             "bounding_box": bounding_box
         }
@@ -511,7 +510,6 @@ async def analyze_mesh(filename: str):
             "is_watertight": is_watertight,
             "is_orientable": is_winding_consistent,
             "is_manifold": None,
-            "euler_number": int(mesh.euler_number) if hasattr(mesh, 'euler_number') else None,
             "volume": volume
         }
 
@@ -706,15 +704,6 @@ async def simplify_mesh_async(request: SimplifyRequest):
     }
 
 
-def sanitize_task_handler(task: Task):
-    params = task.params
-    input_path = Path(params["input_file"])
-    output_path = Path(params["output_file"])
-
-    from .geometry_engine import MeshSanitizer
-    sanitizer = MeshSanitizer()
-    return sanitizer.sanitize_pipeline(input_path, output_path)
-
 @app.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
     """Return the status of a task."""
@@ -820,13 +809,15 @@ async def download_mesh(filename: str):
     )
 
 @app.get("/export/{filename}")
-async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False, is_simplified: bool = False, is_retopologized: bool = False, is_segmented: bool = False):
+async def export_mesh(filename: str, format: str = "obj", is_generated: bool = False, is_simplified: bool = False, is_retopologized: bool = False, is_segmented: bool = False, is_baked: bool = False):
     """
     Export a mesh file in the requested format.
 
     GLB-First: source files are always GLB. Converts to the target format on the fly.
     """
-    if is_segmented:
+    if is_baked:
+        source_dir = DATA_BAKED
+    elif is_segmented:
         source_dir = DATA_SEGMENTED
     elif is_retopologized:
         source_dir = DATA_RETOPO
@@ -1207,8 +1198,6 @@ def retopologize_task_handler(task: Task):
                 'retopo_faces': result.get('retopo_faces', 0),
                 'had_textures': result.get('had_textures', False),
                 'textures_lost': result.get('textures_lost', False),
-                'sanitized': result.get('sanitized', False),
-                'sanitized_filename': result.get('sanitized_filename', None),
                 'texture_baked': result.get('texture_baked', False),
                 'baked_texture_filename': result.get('baked_texture_filename', None)
             }
@@ -1411,31 +1400,6 @@ def compare_task_handler(task: Task):
     return result
 
 
-def quality_visualize_task_handler(task: Task):
-    """Generate a mesh quality visualization."""
-    from .mesh_quality import generate_quality_visualization
-
-    params = task.params
-    mesh_path = _resolve_mesh_path(
-        params["filename"],
-        params.get("is_generated", False),
-        params.get("is_simplified", False),
-        params.get("is_retopologized", False)
-    )
-
-    diagnostic_type = params["diagnostic_type"]
-    base_name = Path(params["filename"]).stem
-    output_filename = f"{base_name}_quality_{diagnostic_type}.glb"
-    output_path = DATA_QUALITY / output_filename
-
-    logger.info(f"[QUALITY] Visualizing {diagnostic_type} for {mesh_path.name}")
-
-    result = generate_quality_visualization(mesh_path, output_path, diagnostic_type)
-    if result.get("success"):
-        result["output_filename"] = output_filename
-    return result
-
-
 def unwrap_uv_task_handler(task: Task):
     """Execute LSCM UV unwrapping."""
     from .uv_unwrap import unwrap_uv
@@ -1460,6 +1424,96 @@ def unwrap_uv_task_handler(task: Task):
     if result.get('success'):
         result['output_filename'] = output_filename
     return result
+
+
+def bake_texture_task_handler(task: Task):
+    """Embed an Imagen-generated texture PNG into a mesh GLB via UV coordinates."""
+    import copy
+    from PIL import Image as PILImage
+    import numpy as np
+
+    params = task.params
+    filename = params["filename"]
+    texture_id = params["texture_id"]
+    is_uv_unwrapped = params.get("is_uv_unwrapped", False)
+
+    # Resolve mesh path
+    if is_uv_unwrapped:
+        mesh_path = DATA_UNWRAPPED / filename
+    else:
+        mesh_path = _resolve_mesh_path(
+            filename,
+            params.get("is_generated", False),
+            params.get("is_simplified", False),
+            params.get("is_retopologized", False)
+        )
+
+    if not mesh_path.exists():
+        return {'success': False, 'error': f'Mesh not found: {filename}'}
+
+    texture_path = DATA_GENERATED_TEXTURES / texture_id / "color.png"
+    if not texture_path.exists():
+        return {'success': False, 'error': f'Texture not found: {texture_id}'}
+
+    logger.info(f"[BAKE_TEXTURE] Starting: {mesh_path.name} + {texture_id}")
+
+    try:
+        scene = trimesh.load(str(mesh_path), force='scene')
+        if isinstance(scene, trimesh.Trimesh):
+            scene = trimesh.scene.scene.Scene(geometry={'mesh': scene})
+
+        img = PILImage.open(str(texture_path)).convert('RGB')
+
+        baked_geometries = {}
+        for name, geom in scene.geometry.items():
+            mesh = copy.deepcopy(geom)
+
+            # Ensure UVs exist
+            if not (hasattr(mesh.visual, 'uv') and mesh.visual.uv is not None):
+                try:
+                    unwrapped = mesh.unwrap()
+                    if unwrapped is not None and hasattr(unwrapped.visual, 'uv') and unwrapped.visual.uv is not None:
+                        mesh = unwrapped
+                    else:
+                        logger.warning(f"[BAKE_TEXTURE] Cannot unwrap {name}, skipping")
+                        baked_geometries[name] = mesh
+                        continue
+                except Exception as e:
+                    logger.warning(f"[BAKE_TEXTURE] Unwrap failed for {name}: {e}")
+                    baked_geometries[name] = mesh
+                    continue
+
+            material = trimesh.visual.material.PBRMaterial(
+                baseColorTexture=img,
+                metallicFactor=0.0,
+                roughnessFactor=0.8
+            )
+            mesh.visual = trimesh.visual.TextureVisuals(uv=mesh.visual.uv, material=material)
+            baked_geometries[name] = mesh
+
+        baked_scene = trimesh.scene.scene.Scene(geometry=baked_geometries)
+
+        stem = Path(filename).stem
+        # Remove _unwrapped suffix if present to keep name clean
+        if stem.endswith('_unwrapped'):
+            stem = stem[:-len('_unwrapped')]
+        output_filename = f"{stem}_baked.glb"
+        output_path = DATA_BAKED / output_filename
+        baked_scene.export(str(output_path), file_type='glb')
+
+        logger.info(f"[BAKE_TEXTURE] Done: {output_filename}")
+        return {
+            'success': True,
+            'output_filename': output_filename,
+            'vertices_count': sum(len(g.vertices) for g in baked_geometries.values()),
+            'faces_count': sum(len(g.faces) for g in baked_geometries.values()),
+        }
+
+    except Exception as e:
+        logger.error(f"[BAKE_TEXTURE] Failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
 
 
 def _resolve_mesh_path(filename, is_generated, is_simplified, is_retopologized):
@@ -1656,18 +1710,6 @@ async def generate_texture_endpoint(request: GenerateTextureRequest):
         "status": "pending",
         "message": "Texture generation in progress"
     }
-
-@app.post("/sanitize")
-async def sanitize_mesh_endpoint(filename: str):
-    input_path = DATA_INPUT / filename # Ou DATA_GENERATED_MESHES
-    output_filename = f"{Path(filename).stem}_clean.glb"
-    output_path = DATA_OUTPUT / output_filename
-
-    task_id = task_manager.create_task(
-        "sanitize", 
-        {"input_file": str(input_path), "output_file": str(output_path)}
-    )
-    return {"task_id": task_id, "output_filename": output_filename}
 
 def generate_material_task_handler(task: Task):
     """Generate a full material: texture + physics parameters, in parallel."""
@@ -2015,42 +2057,6 @@ async def get_quality_stats(
     return compute_quality_stats(mesh_path)
 
 
-@app.post("/quality-visualize")
-async def quality_visualize_endpoint(request: QualityVisualizeRequest):
-    """Generate a quality visualization GLB (async task)."""
-    mesh_path = _resolve_mesh_path(
-        request.filename, request.is_generated,
-        request.is_simplified, request.is_retopologized
-    )
-    if not mesh_path.exists():
-        raise HTTPException(status_code=404, detail=f"Fichier introuvable: {request.filename}")
-
-    if request.diagnostic_type not in ("boundary", "non_manifold", "face_quality"):
-        raise HTTPException(status_code=400, detail=f"Invalid diagnostic type: {request.diagnostic_type}")
-
-    task_id = task_manager.create_task(
-        task_type="quality_visualize",
-        params={
-            "filename": request.filename,
-            "diagnostic_type": request.diagnostic_type,
-            "is_generated": request.is_generated,
-            "is_simplified": request.is_simplified,
-            "is_retopologized": request.is_retopologized,
-        }
-    )
-
-    return {"task_id": task_id, "message": "Quality analysis started"}
-
-
-@app.get("/mesh/quality/{filename}")
-async def get_quality_mesh(filename: str):
-    """Serve a quality visualization GLB from data/quality/."""
-    file_path = DATA_QUALITY / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Quality file not found")
-    return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
-
-
 @app.post("/unwrap-uv")
 async def unwrap_uv_endpoint(request: UnwrapUVRequest):
     """Start an async LSCM UV unwrapping task. Returns task_id."""
@@ -2081,6 +2087,45 @@ async def get_unwrapped_mesh(filename: str):
     file_path = DATA_UNWRAPPED / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Unwrapped file not found")
+    return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
+
+
+@app.post("/bake-texture")
+async def bake_texture_endpoint(request: BakeTextureRequest):
+    """Start an async texture baking task. Embeds Imagen texture PNG into mesh GLB via UV coords."""
+    if request.is_uv_unwrapped:
+        mesh_path = DATA_UNWRAPPED / request.filename
+    else:
+        mesh_path = _resolve_mesh_path(
+            request.filename, request.is_generated, request.is_simplified, request.is_retopologized
+        )
+    if not mesh_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
+
+    texture_path = DATA_GENERATED_TEXTURES / request.texture_id / "color.png"
+    if not texture_path.exists():
+        raise HTTPException(status_code=404, detail=f"Texture not found: {request.texture_id}")
+
+    task_id = task_manager.create_task(
+        task_type="bake_texture",
+        params={
+            "filename": request.filename,
+            "texture_id": request.texture_id,
+            "is_generated": request.is_generated,
+            "is_simplified": request.is_simplified,
+            "is_retopologized": request.is_retopologized,
+            "is_uv_unwrapped": request.is_uv_unwrapped,
+        }
+    )
+    return {"task_id": task_id, "message": "Texture baking started"}
+
+
+@app.get("/mesh/baked/{filename}")
+async def get_baked_mesh(filename: str):
+    """Serve a baked mesh from data/baked/."""
+    file_path = DATA_BAKED / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Baked file not found")
     return FileResponse(path=str(file_path), media_type="application/octet-stream", filename=filename)
 
 

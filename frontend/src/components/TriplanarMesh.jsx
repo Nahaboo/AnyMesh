@@ -92,7 +92,7 @@ function TriplanarMesh({ model, presetId, visualConfig, proceduralConfig, upload
 
     prevModelRef.current = cloned
     return cloned
-  }, [model, presetId, uploadId])
+  }, [model, presetId, uploadId, proceduralConfig?.scale, proceduralConfig?.blendSharpness])
 
   // Cleanup au démontage
   useEffect(() => {

@@ -359,7 +359,7 @@ function PhysicsPlayground({ meshInfo, gravity, density, restitution, damping, h
       <ShadowLight diagonal={diagonal} />
       <directionalLight position={[-diagonal * 2, diagonal * 2, -diagonal * 2]} intensity={0.5} />
       <directionalLight position={[diagonal * 0.5, diagonal * 0.5, -diagonal * 3]} intensity={0.2} />
-      <Environment preset={hdriPreset} environmentIntensity={0.4} />
+      {hdriPreset && <Environment preset={hdriPreset} environmentIntensity={0.4} />}
 
       {/* Ground - thick slab like official demos (thin slabs cause instabilities) */}
       <RigidBody type="fixed" colliders="cuboid">

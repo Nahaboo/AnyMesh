@@ -442,20 +442,6 @@ export const getQualityStats = async (filename, flags = {}) => {
   return response.data
 }
 
-export const visualizeQuality = async (params) => {
-  const response = await api.post('/quality-visualize', {
-    filename: params.filename,
-    diagnostic_type: params.diagnosticType,
-    is_generated: params.isGenerated || false,
-    is_simplified: params.isSimplified || false,
-    is_retopologized: params.isRetopologized || false,
-  })
-  return response.data
-}
-
-export const getQualityMeshUrl = (filename) => {
-  return `${API_BASE_URL}/mesh/quality/${filename}`
-}
 
 export const unwrapMeshUV = async (params) => {
   const response = await api.post('/unwrap-uv', {
@@ -469,6 +455,18 @@ export const unwrapMeshUV = async (params) => {
 
 export const getUnwrappedMeshUrl = (filename) => {
   return `${API_BASE_URL}/mesh/unwrapped/${filename}`
+}
+
+export const bakeTexture = async (params) => {
+  const response = await api.post('/bake-texture', {
+    filename: params.filename,
+    texture_id: params.textureId,
+    is_generated: params.isGenerated || false,
+    is_simplified: params.isSimplified || false,
+    is_retopologized: params.isRetopologized || false,
+    is_uv_unwrapped: params.isUVUnwrapped || false,
+  })
+  return response.data
 }
 
 // ===== AUTO-LOD =====

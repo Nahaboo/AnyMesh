@@ -5,9 +5,6 @@
 function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
   // Vérifier si on visualise un mesh retopologisé
   const isRetopologizedMesh = meshInfo?.isRetopologized === true
-  // Visualization meshes are view-only — lock other tools
-  const isComparedMesh = meshInfo?.isCompared === true
-  const isQualityMesh = meshInfo?.isQuality === true
   const isWatertight = meshInfo ? meshInfo.is_watertight === true : true
 
   const tools = [
@@ -65,16 +62,6 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
       enabled: true
     },
     {
-      id: 'compare',
-      label: 'Compare',
-      icon: (
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-      ),
-      enabled: true
-    },
-    {
       id: 'texturing',
       label: 'Texturing',
       icon: (
@@ -93,17 +80,6 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
         </svg>
       ),
       enabled: true
-    },
-    {
-      id: 'uv_unwrap',
-      label: 'UV',
-      icon: (
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-        </svg>
-      ),
-      enabled: isWatertight,
-      disabledReason: 'UV unwrap requires a watertight mesh'
     },
     {
       id: 'lod',
@@ -141,17 +117,14 @@ function LeftToolbar({ activeTool, onToolChange, meshInfo }) {
       gap: 'var(--v2-spacing-xs)'
     }}>
       {tools.map(tool => {
-        // When viewing visualization, only the active tool tab is accessible
-        const lockedByVisu = (isComparedMesh && tool.id !== 'compare') ||
-                             (isQualityMesh && tool.id !== 'quality')
-        const isEnabled = tool.enabled && !lockedByVisu
+        const isEnabled = tool.enabled
         return (
         <button
           key={tool.id}
           onClick={() => isEnabled && onToolChange(tool.id)}
           disabled={!isEnabled}
           className={`v2-tool-button ${activeTool === tool.id ? 'active' : ''}`}
-          title={lockedByVisu ? 'Retournez au mesh pour utiliser cet outil' : (tool.enabled ? tool.label : (tool.disabledReason || `${tool.label} (Coming soon)`))}
+          title={tool.enabled ? tool.label : (tool.disabledReason || `${tool.label} (Coming soon)`)}
         >
           {tool.icon}
           <span>{tool.label}</span>

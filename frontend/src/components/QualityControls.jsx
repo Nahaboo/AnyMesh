@@ -76,7 +76,7 @@ const ToggleRow = ({ label, isOn, onSetOn, onSetOff, disabled, color }) => (
  * On/Off toggles for each diagnostic overlay (boundary edges, non-manifold, etc.)
  * Face Quality heatmap uses vertex-colored GLB.
  */
-function QualityControls({ meshInfo, onVisualize, onLoadQuality, onLoadOriginal, onOverlayChange, currentTask, isProcessing }) {
+function QualityControls({ meshInfo, onOverlayChange }) {
   const [stats, setStats] = useState(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState(null)
@@ -87,12 +87,7 @@ function QualityControls({ meshInfo, onVisualize, onLoadQuality, onLoadOriginal,
     non_manifold: false,
   })
 
-  const canAnalyze = meshInfo && !meshInfo.isQuality
-
-  const taskCompleted = currentTask?.taskType === 'quality_visualize' &&
-    currentTask?.status === 'completed' && currentTask?.result?.success
-
-  const busy = isProcessing || (currentTask?.taskType === 'quality_visualize' && currentTask?.status === 'processing')
+  const canAnalyze = !!meshInfo
 
   // Build overlays array from active toggles and push to parent
   const syncOverlays = useCallback((overlays, currentStats) => {
@@ -152,23 +147,6 @@ function QualityControls({ meshInfo, onVisualize, onLoadQuality, onLoadOriginal,
     syncOverlays(newOverlays, stats)
   }
 
-  const handleVisualizeFaceQuality = () => {
-    if (!meshInfo) return
-    onVisualize({
-      filename: meshInfo.filename,
-      diagnosticType: 'face_quality',
-      isGenerated: meshInfo.isGenerated || false,
-      isSimplified: meshInfo.isSimplified || false,
-      isRetopologized: meshInfo.isRetopologized || false,
-    })
-  }
-
-  const handleLoadFaceQuality = () => {
-    setActiveOverlays({ boundary: false, non_manifold: false })
-    if (onOverlayChange) onOverlayChange([])
-    onLoadQuality()
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-md)' }}>
       {/* Info */}
@@ -181,7 +159,7 @@ function QualityControls({ meshInfo, onVisualize, onLoadQuality, onLoadOriginal,
       </div>
 
       {/* Current mesh info */}
-      {meshInfo && !meshInfo.isQuality && (
+      {meshInfo && (
         <div style={{
           padding: 'var(--v2-spacing-sm)',
           background: 'var(--v2-bg-tertiary)',
@@ -193,14 +171,13 @@ function QualityControls({ meshInfo, onVisualize, onLoadQuality, onLoadOriginal,
             {meshInfo.displayFilename || meshInfo.filename}
           </div>
           <div style={{ color: 'var(--v2-text-muted)', marginTop: '2px' }}>
-            {(meshInfo.faces_count || 0).toLocaleString()} faces / {(meshInfo.vertices_count || 0).toLocaleString()} vertices
+            {(meshInfo.faces_count || meshInfo.triangles_count || 0).toLocaleString()} faces / {(meshInfo.vertices_count || 0).toLocaleString()} vertices
           </div>
         </div>
       )}
 
       {/* Analyze button */}
-      {!meshInfo?.isQuality && (
-        <button
+      <button
           onClick={handleAnalyze}
           disabled={!canAnalyze || isAnalyzing}
           className="v2-btn"
@@ -235,15 +212,14 @@ function QualityControls({ meshInfo, onVisualize, onLoadQuality, onLoadOriginal,
               <span>Analyser la qualite</span>
             </>
           )}
-        </button>
-      )}
+      </button>
 
       {error && (
         <div style={{ fontSize: '0.75rem', color: '#ef4444', textAlign: 'center' }}>{error}</div>
       )}
 
       {/* MeshLab-style On/Off toggles */}
-      {stats && !meshInfo?.isQuality && (
+      {stats && (
         <div style={{
           padding: 'var(--v2-spacing-md)',
           background: 'var(--v2-bg-tertiary)',
@@ -296,107 +272,6 @@ function QualityControls({ meshInfo, onVisualize, onLoadQuality, onLoadOriginal,
           </div>
           <StatRow label="Watertight" value={stats.is_watertight ? 'Yes' : 'No'} warn={!stats.is_watertight} />
           <StatRow label="Consistent Normals" value={stats.is_winding_consistent ? 'Yes' : 'No'} warn={!stats.is_winding_consistent} />
-          <StatRow label="Euler Number" value={stats.euler_number} warn={stats.euler_number !== 2} />
-
-          <div style={{ height: '1px', background: 'var(--v2-border-secondary)', margin: '4px 0' }} />
-
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--v2-text-secondary)', marginBottom: '4px' }}>
-            Face Quality
-          </div>
-          <StatRow label="Avg Min Angle" value={`${stats.avg_min_angle}\u00B0`} warn={stats.avg_min_angle < 20} />
-          <StatRow label="Worst Min Angle" value={`${stats.worst_min_angle}\u00B0`} warn={stats.worst_min_angle < 5} />
-        </div>
-      )}
-
-      {/* Face quality heatmap (GLB) */}
-      {stats && !meshInfo?.isQuality && (
-        <div>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--v2-text-secondary)', marginBottom: '6px' }}>
-            Face Quality Heatmap
-          </div>
-          <button
-            onClick={handleVisualizeFaceQuality}
-            disabled={busy}
-            className="v2-btn v2-btn-secondary"
-            style={{
-              width: '100%',
-              padding: 'var(--v2-spacing-sm)',
-              borderRadius: 'var(--v2-radius-lg)',
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 'var(--v2-spacing-xs)'
-            }}
-          >
-            {busy ? (
-              <>
-                <svg style={{ animation: 'spin 1s linear infinite', width: '16px', height: '16px' }} fill="none" viewBox="0 0 24 24">
-                  <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Generation...
-              </>
-            ) : (
-              'Visualiser Face Quality'
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* Load face quality GLB button */}
-      {taskCompleted && !meshInfo?.isQuality && (
-        <button
-          onClick={handleLoadFaceQuality}
-          className="v2-btn v2-btn-secondary"
-          style={{
-            width: '100%',
-            padding: 'var(--v2-spacing-sm)',
-            borderRadius: 'var(--v2-radius-lg)',
-            fontWeight: 500,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 'var(--v2-spacing-xs)'
-          }}
-        >
-          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-          </svg>
-          Voir la heatmap
-        </button>
-      )}
-
-      {/* Back to mesh (when viewing face quality GLB) */}
-      {meshInfo?.isQuality && (
-        <button
-          onClick={onLoadOriginal}
-          className="v2-btn v2-btn-secondary"
-          style={{
-            width: '100%',
-            padding: 'var(--v2-spacing-sm)',
-            borderRadius: 'var(--v2-radius-lg)',
-            fontWeight: 500
-          }}
-        >
-          Retour au mesh
-        </button>
-      )}
-
-      {/* Legend */}
-      {meshInfo?.isQuality && (
-        <div style={{ marginTop: 'var(--v2-spacing-xs)' }}>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--v2-text-muted)', marginBottom: '4px' }}>Legende</div>
-          <div style={{
-            height: '12px',
-            borderRadius: '6px',
-            background: 'linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000)'
-          }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.625rem', color: 'var(--v2-text-muted)', marginTop: '2px' }}>
-            <span>Bon (60{'\u00B0'})</span>
-            <span>Mauvais (0{'\u00B0'})</span>
-          </div>
         </div>
       )}
 

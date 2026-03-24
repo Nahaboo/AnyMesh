@@ -67,7 +67,9 @@ def _generate_imagen(prompt: str, api_key: str) -> bytes:
         data = response.json()
         predictions = data.get("predictions", [])
         if not predictions:
-            raise GeminiAPIError(500, "No predictions in Imagen response")
+            extra = data.get("error") or data.get("filters") or data.get("safetyAttributes") or data
+            print(f"  [IMAGEN] Empty predictions. Full response: {extra}")
+            raise GeminiAPIError(500, f"No predictions in Imagen response | Details: {extra}")
 
         image_bytes = base64.b64decode(predictions[0]["bytesBase64Encoded"])
         print(f"  [OK] Image received: {len(image_bytes) / 1024:.1f} KB")
@@ -162,6 +164,7 @@ def generate_texture_from_prompt(
 
     try:
         texture_prompt = f"Seamless tileable texture of {prompt.strip()}. Top-down flat view, uniform lighting, no perspective, no 3D objects, suitable for repeating tile pattern."
+        print(f"  [IMAGEN-TEXTURE] Full prompt sent: {texture_prompt}")
         image_bytes = _generate_imagen(prompt=texture_prompt, api_key=api_key)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)

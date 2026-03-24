@@ -17,7 +17,6 @@ else:
 
 import numpy as np
 import pymeshlab
-import pymeshfix
 from .temp_utils import get_temp_path, safe_delete
 
 
@@ -148,24 +147,18 @@ def retopologize_mesh_glb(
     deterministic: bool = True,
     preserve_boundaries: bool = True,
     temp_dir: Path = None,
-    sanitize: bool = False,
     bake_textures: bool = False
 ) -> Dict[str, Any]:
     """
     Retopologize a GLB via a temporary PLY conversion.
 
-    Pipeline: GLB -> PLY (temp) -> [optional sanitize] -> Instant Meshes -> PLY (temp) -> GLB
-
-    sanitize is disabled by default because TRELLIS meshes are multi-component by design
-    (700+ components for a single object). pymeshfix closes each border separately and
-    destroys the shape. Enable only for single-component meshes (scans, manual models).
+    Pipeline: GLB -> PLY (temp) -> Instant Meshes -> PLY (temp) -> GLB
     """
     if temp_dir is None:
         temp_dir = Path("data/temp")
 
     temp_in = None
     temp_out = None
-    temp_sanitized = None
 
     try:
         if not input_glb.exists():
@@ -196,44 +189,7 @@ def retopologize_mesh_glb(
         mesh.export(str(temp_in), file_type='ply')
         print(f"[RETOPOLOGY-GLB] Temp PLY created: {temp_in.name}")
 
-        san_result = {"success": False}
-        sanitized_glb = None
-        if sanitize:
-            components = len(mesh.split(only_watertight=False))
-            if components > 10:
-                print(f"[RETOPOLOGY-GLB] Sanitization skipped: {components} components (multi-component mesh)")
-                sanitize = False
-            try:
-                meshfix = pymeshfix.MeshFix(
-                    np.array(mesh.vertices),
-                    np.array(mesh.faces)
-                )
-                meshfix.repair()
-                san_mesh = trimesh.Trimesh(
-                    vertices=meshfix.points,
-                    faces=meshfix.faces,
-                    process=False
-                )
-                san_result = {
-                    "success": True,
-                    "is_watertight": san_mesh.is_watertight,
-                    "faces": len(san_mesh.faces)
-                }
-                print(f"[RETOPOLOGY-GLB] Sanitized: watertight={san_mesh.is_watertight}, faces={len(san_mesh.faces)}")
-
-                temp_sanitized = get_temp_path("retopo_sanitized", ".ply", temp_dir)
-                san_mesh.export(str(temp_sanitized), file_type='ply')
-                actual_input = temp_sanitized
-
-                sanitized_glb = output_glb.parent / (output_glb.stem.replace("_retopo", "") + "_sanitized.glb")
-                san_mesh.export(str(sanitized_glb), file_type='glb')
-                print(f"[RETOPOLOGY-GLB] Sanitized mesh saved: {sanitized_glb.name}")
-
-            except Exception as e:
-                print(f"[RETOPOLOGY-GLB] Sanitization failed ({e}), using original PLY")
-                actual_input = temp_in
-        else:
-            actual_input = temp_in
+        actual_input = temp_in
 
         temp_out = get_temp_path("retopo_out", ".ply", temp_dir)
 
@@ -297,8 +253,6 @@ def retopologize_mesh_glb(
             "retopo_faces": retopo_faces,
             "had_textures": had_textures,
             "textures_lost": had_textures and not bake_result.get("success", False),
-            "sanitized": san_result.get("is_watertight", False) if sanitize and san_result.get("success") else False,
-            "sanitized_filename": sanitized_glb.name if sanitized_glb else None,
             "texture_baked": bake_result.get("success", False),
             "baked_texture_filename": bake_result.get("texture_filename", None)
         }
@@ -310,6 +264,5 @@ def retopologize_mesh_glb(
         }
     finally:
         safe_delete(temp_in)
-        safe_delete(temp_sanitized)
         safe_delete(temp_out)
         print(f"[RETOPOLOGY-GLB] Temp files cleaned up")
