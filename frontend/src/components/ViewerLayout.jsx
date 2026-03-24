@@ -12,7 +12,6 @@ import RetopologyControls from './RetopologyControls'
 import PromptGenerationControls from './PromptGenerationControls'
 import PhysicsControls, { MATERIAL_PRESETS } from './PhysicsControls'
 import TexturingControls from './TexturingControls'
-import CompareControls from './CompareControls'
 import QualityControls from './QualityControls'
 import UVUnwrapControls from './UVUnwrapControls'
 import LodControls from './LodControls'
@@ -41,8 +40,6 @@ function ViewerLayout({
   onLoadParent,
   onCompare,
   onLoadCompared,
-  onVisualizeQuality,
-  onLoadQuality,
   onUnwrapUV,
   onLoadUnwrapped,
   onGenerateLod,
@@ -63,7 +60,7 @@ function ViewerLayout({
   const [debugMode, setDebugMode] = useState(false)
   const [qualityOverlays, setQualityOverlays] = useState([]) // [{ positions: [...], color: '#ff3333', type: 'boundary' }, ...]
   const [autoRotate, setAutoRotate] = useState(false)
-  const [hdriPreset, setHdriPreset] = useState('sunset')
+  const [hdriPreset, setHdriPreset] = useState(null)
   const [uvCheckerMode, setUVCheckerMode] = useState(false)
 
   // Physics state
@@ -101,7 +98,7 @@ function ViewerLayout({
 
   const handleToolChange = (tool) => {
     setActiveTool(tool)
-    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing' || tool === 'compare' || tool === 'quality' || tool === 'uv_unwrap' || tool === 'lod')
+    setShowRefinePanel(tool === 'simplification' || tool === 'segmentation' || tool === 'retopoly' || tool === 'physics' || tool === 'texturing' || tool === 'quality' || tool === 'uv_unwrap' || tool === 'lod')
   }
 
   const isPhysicsMode = activeTool === 'physics'
@@ -317,7 +314,7 @@ function ViewerLayout({
             autoRotate={autoRotate}
             onAutoRotateToggle={() => setAutoRotate(prev => !prev)}
             hdriPreset={hdriPreset}
-            onHdriChange={setHdriPreset}
+            onHdriChange={() => setHdriPreset(prev => prev ? null : 'sunset')}
             axesWidget={<AxesWidget mainCameraQuaternion={cameraQuaternion} />}
           />
         </div>
@@ -354,7 +351,6 @@ function ViewerLayout({
                  activeTool === 'retopoly' ? 'Retopology' :
                  activeTool === 'physics' ? 'Physics Simulation' :
                  activeTool === 'texturing' ? 'AI Texturing' :
-                 activeTool === 'compare' ? 'Mesh Comparison' :
                  activeTool === 'quality' ? 'Quality Analysis' :
                  activeTool === 'uv_unwrap' ? 'UV Unwrapping' :
                  activeTool === 'lod' ? 'Auto-LOD' :
@@ -377,9 +373,12 @@ function ViewerLayout({
               activeTool === 'simplification' ? (
                 <SimplificationControls
                   meshInfo={meshInfo}
+                  initialMeshInfo={initialMeshInfo}
                   onSimplify={onSimplify}
                   onLoadSimplified={onLoadSimplified}
                   onLoadOriginal={onLoadOriginal}
+                  onCompare={onCompare}
+                  onLoadCompared={onLoadCompared}
                   currentTask={currentTask}
                   isProcessing={isProcessing}
                 />
@@ -425,25 +424,10 @@ function ViewerLayout({
                   onResetTexture={meshInfo?.has_textures ? handleResetMaterial : null}
                   isProcessing={isProcessing}
                 />
-              ) : activeTool === 'compare' ? (
-                <CompareControls
-                  meshInfo={meshInfo}
-                  initialMeshInfo={initialMeshInfo}
-                  onCompare={onCompare}
-                  onLoadCompared={onLoadCompared}
-                  onLoadOriginal={onLoadParent}
-                  currentTask={currentTask}
-                  isProcessing={isProcessing}
-                />
               ) : activeTool === 'quality' ? (
                 <QualityControls
                   meshInfo={meshInfo}
-                  onVisualize={onVisualizeQuality}
-                  onLoadQuality={onLoadQuality}
-                  onLoadOriginal={onLoadParent}
                   onOverlayChange={setQualityOverlays}
-                  currentTask={currentTask}
-                  isProcessing={isProcessing}
                 />
               ) : activeTool === 'uv_unwrap' ? (
                 <UVUnwrapControls

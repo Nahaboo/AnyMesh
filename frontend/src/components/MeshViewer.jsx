@@ -129,10 +129,22 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
         {meshInfo.bounding_box && <CameraController boundingBox={meshInfo.bounding_box} />}
 
         {/* Lighting - physics mode has its own lights in PhysicsPlayground */}
-        {!physicsMode && <ambientLight intensity={materialPreset ? 0.3 : renderMode === 'textured' ? 1.5 : 1.0} />}
-        {!physicsMode && <Environment preset={hdriPreset} background environmentIntensity={(materialPreset || renderMode === 'textured') ? (renderMode === 'textured' && !materialPreset ? 1.2 : 0.4) : 0.3} />}
-        {!physicsMode && (materialPreset || renderMode === 'textured') && meshInfo.bounding_box && (
-          <ContactShadows position={[0, -(meshInfo.bounding_box.diagonal * 0.5), 0]} scale={meshInfo.bounding_box.diagonal * 2} blur={2} opacity={0.4} far={meshInfo.bounding_box.diagonal * 2} />
+        {!physicsMode && hdriPreset && (
+          <>
+            <ambientLight intensity={materialPreset ? 0.3 : renderMode === 'textured' ? 1.5 : 1.0} />
+            <Environment preset={hdriPreset} background environmentIntensity={(materialPreset || renderMode === 'textured') ? (renderMode === 'textured' && !materialPreset ? 1.2 : 0.4) : 0.3} />
+            {(materialPreset || renderMode === 'textured') && meshInfo.bounding_box && (
+              <ContactShadows position={[0, -(meshInfo.bounding_box.diagonal * 0.5), 0]} scale={meshInfo.bounding_box.diagonal * 2} blur={2} opacity={0.4} far={meshInfo.bounding_box.diagonal * 2} />
+            )}
+          </>
+        )}
+        {!physicsMode && !hdriPreset && (
+          <>
+            <color attach="background" args={['#868686']} />
+            <ambientLight intensity={1.0} />
+            <directionalLight position={[-1, 2, 2]} intensity={2.0} castShadow={false} />
+            <directionalLight position={[1, 1, -1]} intensity={1.0} castShadow={false} />
+          </>
         )}
 
         {physicsMode && physicsProps ? (
@@ -167,7 +179,6 @@ function MeshViewer({ meshInfo, renderMode = 'solid', shaderParams = {}, onCamer
                 isRetopologized={meshInfo.isRetopologized || false}
                 isSegmented={meshInfo.isSegmented || false}
                 isCompared={meshInfo.isCompared || false}
-                isQuality={meshInfo.isQuality || false}
                 isUVUnwrapped={meshInfo.isUVUnwrapped || false}
                 uvCheckerMode={uvCheckerMode}
                 renderMode={renderMode}

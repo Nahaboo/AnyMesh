@@ -6,7 +6,6 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader'
 import { Center } from '@react-three/drei'
 import * as THREE from 'three'
-import { TextureLoader } from 'three'
 import ShaderMaterialController from './ShaderMaterialController'
 import TriplanarMesh from './TriplanarMesh'
 import { getMaterialShader } from '../shaders/materials'
@@ -65,7 +64,7 @@ function makeCheckerTexture() {
   return tex
 }
 
-function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, isCompared = false, isQuality = false, isUVUnwrapped = false, uvCheckerMode = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null, qualityOverlays = null }) {
+function RenderModeController({ filename, isGenerated = false, isSimplified = false, isRetopologized = false, isSegmented = false, isCompared = false, isUVUnwrapped = false, uvCheckerMode = false, renderMode = 'solid', shaderParams = {}, uploadId, materialPreset = null, qualityOverlays = null }) {
   const [needsUpdate, setNeedsUpdate] = useState(0)
   const prevModelRef = useRef(null)
   const originalMaterialsRef = useRef(new Map())
@@ -80,8 +79,6 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
   let meshUrl
   if (isUVUnwrapped) {
     meshUrl = `${API_BASE_URL}/mesh/unwrapped/${filename}?v=${uploadId || Date.now()}`
-  } else if (isQuality) {
-    meshUrl = `${API_BASE_URL}/mesh/quality/${filename}?v=${uploadId || Date.now()}`
   } else if (isCompared) {
     meshUrl = `${API_BASE_URL}/mesh/compared/${filename}?v=${uploadId || Date.now()}`
   } else if (isSegmented) {
@@ -101,10 +98,6 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
 
   // Light blue color for default rendering
   const DEFAULT_COLOR = 0xb3d9ff // Light blue
-
-  // Load matcap texture for solid and flat modes from frontend public folder
-  //const matcapTexture = useLoader(TextureLoader, '/matcap/161B1F.png')
-  const matcapTexture = useLoader(TextureLoader, '/matcap/A9A2A0.png')
 
   // Load model based on format
   let loadedModel
@@ -244,13 +237,13 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
               })
               console.log('[RenderModeController] Applied SOLID mode with VERTEX COLORS (segmented mesh)')
             } else {
-              // Use matcap for performance and uniform lighting
-              child.material = new THREE.MeshMatcapMaterial({
-                matcap: matcapTexture,
+              child.material = new THREE.MeshStandardMaterial({
+                color: DEFAULT_COLOR,
+                metalness: 0.0,
+                roughness: 0.5,
                 side: THREE.DoubleSide,
-                flatShading: false
               })
-              console.log('[RenderModeController] Applied SOLID mode with matcap')
+              console.log('[RenderModeController] Applied SOLID mode with PBR')
             }
             break
 
@@ -294,11 +287,13 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
               }
             }
 
-            child.material = new THREE.MeshMatcapMaterial({
-              matcap: matcapTexture,
-              side: THREE.DoubleSide
+            child.material = new THREE.MeshStandardMaterial({
+              color: DEFAULT_COLOR,
+              metalness: 0.0,
+              roughness: 0.5,
+              side: THREE.DoubleSide,
             })
-            console.log('[RenderModeController] Applied FLAT mode with matcap (faceted normals)')
+            console.log('[RenderModeController] Applied FLAT mode with PBR (faceted normals)')
             break
 
           case 'smooth':
