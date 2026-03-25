@@ -100,7 +100,8 @@ export const simplifyMesh = async (params) => {
       filename: params.filename,
       reduction_ratio: params.reduction_ratio,
       preserve_boundary: params.preserve_boundary,
-      is_generated: params.is_generated || false
+      is_generated: params.is_generated || false,
+      preserve_texture: params.preserve_texture || false
     }
   }
 

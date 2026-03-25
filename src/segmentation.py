@@ -484,7 +484,7 @@ def segment_mesh_glb(
         else:
             mesh = loaded
 
-        had_textures = (
+        has_textures = (
             hasattr(mesh, 'visual') and
             hasattr(mesh.visual, 'material') and
             mesh.visual.material is not None
@@ -545,8 +545,8 @@ def segment_mesh_glb(
             "original_faces": original_faces,
             "vertices_count": final_vertices,
             "faces_count": final_faces,
-            "had_textures": had_textures,
-            "textures_lost": had_textures  # Toujours perdues après segmentation
+            "has_textures": has_textures,
+            "textures_lost": has_textures  # Toujours perdues après segmentation
         }
 
     except Exception as e:

@@ -145,7 +145,9 @@ function App() {
       uploadId: Date.now(),
       isSimplified: true,  // Flag to indicate this is from /mesh/output
       isUVUnwrapped: false,
-      originalFilename: originalName  // Fichier source simplifié (bunny_simplified.glb)
+      originalFilename: originalName,  // Fichier source simplifié (bunny_simplified.glb)
+      has_textures: result.texture_transferred === true,
+      isGenerated: meshInfo.isGenerated || false
     }
 
     console.log('[App] Loading simplified mesh (GLB):', simplifiedMeshInfo)
@@ -400,7 +402,8 @@ function App() {
               faces_count: task.result.faces_count,
               bounding_box: null,
               uploadId: Date.now(),
-              isGenerated: true
+              isGenerated: true,
+              has_textures: true
             }
 
             // Basculer vers le mode fichier (comme si le GLB avait été uploadé)

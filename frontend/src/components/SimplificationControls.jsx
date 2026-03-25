@@ -3,6 +3,7 @@ import { useState } from 'react'
 function SimplificationControls({ meshInfo, initialMeshInfo, onSimplify, onLoadSimplified, onLoadOriginal, onCompare, onLoadCompared, currentTask, isProcessing }) {
   const [simplificationLevel, setSimplificationLevel] = useState(1)
   const [isComparing, setIsComparing] = useState(false)
+  const [preserveTexture, setPreserveTexture] = useState(false)
 
   const levelToRatio = {
     0: 0.3,
@@ -16,6 +17,7 @@ function SimplificationControls({ meshInfo, initialMeshInfo, onSimplify, onLoadS
   const isGenerated = meshInfo?.isGenerated === true
   const isSimplifiedMesh = meshInfo?.isSimplified === true
   const isRetopologizedMesh = false
+  const hasTexture = meshInfo?.has_textures === true || isGenerated
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -25,7 +27,8 @@ function SimplificationControls({ meshInfo, initialMeshInfo, onSimplify, onLoadS
         mode: 'standard',
         filename: filenameForSimplification,
         reduction_ratio: reductionRatio,
-        is_generated: isGenerated
+        is_generated: isGenerated,
+        preserve_texture: hasTexture && preserveTexture
       })
     }
   }
@@ -81,28 +84,49 @@ function SimplificationControls({ meshInfo, initialMeshInfo, onSimplify, onLoadS
         Parametres de simplification
       </h2>
 
-      {/* Warning: texture loss */}
-      {isGenerated && !isSimplifiedMesh && !isRetopologizedMesh && (
-        <div style={{
-          background: 'var(--v2-warning-bg)',
-          border: '1px solid var(--v2-warning-border)',
-          borderRadius: 'var(--v2-radius-lg)',
-          padding: 'var(--v2-spacing-md)',
-          marginBottom: 'var(--v2-spacing-md)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--v2-spacing-sm)' }}>
-            <svg style={{ width: '20px', height: '20px', color: 'var(--v2-warning-text)', marginTop: '2px', flexShrink: 0 }} fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            <div style={{ flex: 1 }}>
-              <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-warning-text)', marginBottom: '4px' }}>
-                Textures seront perdues
-              </h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--v2-warning-text)' }}>
-                La simplification modifie la geometrie. Les textures et materiaux ne seront pas conserves.
-              </p>
+      {/* Texture options */}
+      {hasTexture && !isSimplifiedMesh && !isRetopologizedMesh && (
+        <div style={{ marginBottom: 'var(--v2-spacing-md)' }}>
+          {!preserveTexture && (
+            <div style={{
+              background: 'var(--v2-warning-bg)',
+              border: '1px solid var(--v2-warning-border)',
+              borderRadius: 'var(--v2-radius-lg)',
+              padding: 'var(--v2-spacing-md)',
+              marginBottom: 'var(--v2-spacing-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--v2-spacing-sm)' }}>
+                <svg style={{ width: '20px', height: '20px', color: 'var(--v2-warning-text)', marginTop: '2px', flexShrink: 0 }} fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--v2-warning-text)', marginBottom: '4px' }}>
+                    Textures seront perdues
+                  </h3>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--v2-warning-text)' }}>
+                    La simplification modifie la geometrie. Les textures et materiaux ne seront pas conserves.
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+          <label style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--v2-spacing-sm)',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            color: 'var(--v2-text-secondary)',
+            userSelect: 'none'
+          }}>
+            <input
+              type="checkbox"
+              checked={preserveTexture}
+              onChange={(e) => setPreserveTexture(e.target.checked)}
+              style={{ accentColor: 'var(--v2-accent-primary)', width: '16px', height: '16px', cursor: 'pointer' }}
+            />
+            Conserver la texture (transfert UV)
+          </label>
         </div>
       )}
 

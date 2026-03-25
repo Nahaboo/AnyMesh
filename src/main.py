@@ -165,6 +165,7 @@ class SimplifyRequest(BaseModel):
     target_triangles: Optional[int] = None
     reduction_ratio: Optional[float] = None
     is_generated: bool = False  # If True, looks in data/generated_meshes
+    preserve_texture: bool = False  # If True, transfers UVs via KDTree after simplification
 
 class GenerateMeshRequest(BaseModel):
     """Mesh generation parameters. Output format is always GLB."""
@@ -646,7 +647,9 @@ def simplify_task_handler(task: Task):
         input_path=input_path,
         output_path=output_path,
         target_triangles=params.get("target_triangles"),
-        reduction_ratio=params.get("reduction_ratio", 0.5)
+        reduction_ratio=params.get("reduction_ratio", 0.5),
+        preserve_texture=params.get("preserve_texture", False),
+        temp_dir=DATA_TEMP
     )
 
     if result.get('success'):
@@ -693,7 +696,8 @@ async def simplify_mesh_async(request: SimplifyRequest):
             "output_file": str(output_path),
             "target_triangles": request.target_triangles,
             "reduction_ratio": request.reduction_ratio,
-            "is_generated": request.is_generated
+            "is_generated": request.is_generated,
+            "preserve_texture": request.preserve_texture
         }
     )
 
@@ -1188,7 +1192,7 @@ def retopologize_task_handler(task: Task):
                 'original_faces': result.get('original_faces', 0),
                 'retopo_vertices': result.get('retopo_vertices', 0),
                 'retopo_faces': result.get('retopo_faces', 0),
-                'had_textures': result.get('had_textures', False),
+                'has_textures': result.get('has_textures', False),
                 'textures_lost': result.get('textures_lost', False),
                 'texture_baked': result.get('texture_baked', False),
                 'baked_texture_filename': result.get('baked_texture_filename', None)
@@ -1293,12 +1297,12 @@ def segment_task_handler(task: Task):
                     "method": method,
                     "vertices_count": result.get("vertices_count", 0),
                     "faces_count": result.get("faces_count", 0),
-                    "had_textures": result.get("had_textures", False),
+                    "has_textures": result.get("has_textures", False),
                     "textures_lost": result.get("textures_lost", False),
                     **{k: v for k, v in result.items() if k not in [
                         'success', 'output_filename', 'output_format',
                         'original_vertices', 'original_faces', 'vertices_count',
-                        'faces_count', 'had_textures', 'textures_lost'
+                        'faces_count', 'has_textures', 'textures_lost'
                     ]}
                 }
             return result

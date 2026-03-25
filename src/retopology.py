@@ -176,7 +176,7 @@ def retopologize_mesh_glb(
         else:
             mesh = loaded
 
-        had_textures = (
+        has_textures = (
             hasattr(mesh, 'visual') and
             hasattr(mesh.visual, 'material') and
             mesh.visual.material is not None
@@ -224,7 +224,7 @@ def retopologize_mesh_glb(
         )
 
         bake_result = {"success": False}
-        if bake_textures and had_textures:
+        if bake_textures and has_textures:
             from .texture_baker import bake_texture
             tex_output = output_glb.parent / (output_glb.stem + "_diffuse.png")
             bake_result = bake_texture(
@@ -251,8 +251,8 @@ def retopologize_mesh_glb(
             "original_faces": original_faces,
             "retopo_vertices": retopo_vertices,
             "retopo_faces": retopo_faces,
-            "had_textures": had_textures,
-            "textures_lost": had_textures and not bake_result.get("success", False),
+            "has_textures": has_textures,
+            "textures_lost": has_textures and not bake_result.get("success", False),
             "texture_baked": bake_result.get("success", False),
             "baked_texture_filename": bake_result.get("texture_filename", None)
         }

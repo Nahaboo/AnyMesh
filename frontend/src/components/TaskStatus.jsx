@@ -15,6 +15,7 @@ function TaskStatus({ task, onComplete, activeTool }) {
   // Mapper les taskType vers les tools correspondants
   const taskTypeToTool = {
     'simplify': 'simplification',
+    'compare': 'simplification',
     'segment': 'segmentation',
     'retopology': 'retopoly',
     'generate': 'generation',
@@ -185,7 +186,7 @@ function TaskStatus({ task, onComplete, activeTool }) {
       )}
 
       {/* Resultats */}
-      {task.status === 'completed' && task.result && (
+      {task.status === 'completed' && task.result && task.taskType !== 'compare' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--v2-spacing-md)' }}>
           {task.taskType === 'generate' ? (
             // Affichage pour la génération
@@ -266,7 +267,7 @@ function TaskStatus({ task, onComplete, activeTool }) {
                 </div>
               </div>
 
-              {task.result.had_textures && (
+              {task.result.has_textures && (
                 <div style={{
                   background: 'var(--v2-warning-bg)',
                   borderRadius: 'var(--v2-radius-lg)',
@@ -315,7 +316,7 @@ function TaskStatus({ task, onComplete, activeTool }) {
                 </div>
               </div>
 
-              {task.result.had_textures && (
+              {task.result.has_textures && (
                 <div style={{
                   background: 'var(--v2-warning-bg)',
                   borderRadius: 'var(--v2-radius-lg)',

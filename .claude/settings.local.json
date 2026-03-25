@@ -6,7 +6,10 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebSearch",
-      "WebFetch(domain:blog.datameister.ai)"
+      "WebFetch(domain:blog.datameister.ai)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:meshlib.io)",
+      "WebFetch(domain:odgy.medium.com)"
     ]
   },
   "outputStyle": "senior-dev"

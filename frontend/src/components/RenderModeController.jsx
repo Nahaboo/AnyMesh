@@ -387,6 +387,14 @@ function RenderModeController({ filename, isGenerated = false, isSimplified = fa
     setNeedsUpdate(prev => prev + 1)
   }, [renderMode])
 
+  // When model loads and renderMode is textured, force re-apply materials
+  // (the cache is populated during render, so we need one extra pass)
+  useEffect(() => {
+    if (loadedModel && renderMode === 'textured') {
+      setNeedsUpdate(prev => prev + 1)
+    }
+  }, [loadedModel])
+
   // If procedural material preset is active, use tri-planar shader
   if (materialPreset?.procedural) {
     return (
