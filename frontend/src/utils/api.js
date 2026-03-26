@@ -486,6 +486,7 @@ export const generateLod = async (params) => {
   const response = await api.post('/generate-lod', {
     filename: params.filename,
     is_generated: params.isGenerated || false,
+    preserve_texture: params.preserveTexture || false,
   })
   return response.data
 }

@@ -43,9 +43,20 @@ RUNPOD_POLL_INTERVAL = 10  # seconds between polls
 MAX_IMAGE_SIZE = 1024  # TRELLIS internally reduces to 518px; 1024 is sufficient
 
 
-def encode_image_b64(image_path: Path, max_size: int = MAX_IMAGE_SIZE) -> str:
-    """Encode an image as base64, resizing it if larger than max_size px."""
-    img = Image.open(image_path)
+def encode_image_b64(image_path: Path, max_size: int = MAX_IMAGE_SIZE, remove_bg: bool = False) -> str:
+    """Encode an image as base64, resizing it if larger than max_size px.
+    If remove_bg=True, runs rembg background removal before encoding."""
+    img = Image.open(image_path).convert("RGBA")
+    if remove_bg:
+        try:
+            from rembg import remove as rembg_remove
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            result = rembg_remove(buf.getvalue())
+            img = Image.open(io.BytesIO(result)).convert("RGBA")
+            print(f"    [rembg] background removed")
+        except Exception as e:
+            print(f"    [rembg] failed: {e} — sending original")
     if max(img.size) > max_size:
         img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
     buf = io.BytesIO()
@@ -207,12 +218,12 @@ def generate_one_trellis(image_path: Path, endpoint_id: str, api_key: str,
             return {"success": False, "time": elapsed, "error": "timeout (30 min)"}
 
 
-def generate_one_trellis2(image_path: Path, endpoint_id: str, api_key: str) -> dict:
+def generate_one_trellis2(image_path: Path, endpoint_id: str, api_key: str, remove_bg: bool = False) -> dict:
     """Generate a 3D mesh via RunPod TRELLIS.2 (returns glb_url, not glb_base64)."""
     output_name = f"{image_path.stem}_trellis2.glb"
     output_path = GENERATED_MESHES / output_name
 
-    img_b64 = encode_image_b64(image_path)
+    img_b64 = encode_image_b64(image_path, remove_bg=remove_bg)
     headers = {"Authorization": f"Bearer {api_key}"}
     input_data = {
         "image_base64": img_b64,
@@ -362,6 +373,7 @@ def main():
     parser.add_argument("--trellis", action="store_true", help="TRELLIS v1 via remote RunPod GPU")
     parser.add_argument("--trellis2", action="store_true", help="TRELLIS.2 via remote RunPod GPU")
     parser.add_argument("--multi", action="store_true", help="Multi-image: all images = 1 mesh (TRELLIS v1 only)")
+    parser.add_argument("--rembg", action="store_true", help="Remove background locally via rembg before sending")
     args = parser.parse_args()
 
     if args.multi and not args.trellis:
@@ -455,7 +467,7 @@ def main():
         print(f"\n[{i + 1}/{len(images)}] {img.name}...")
 
         if args.trellis2:
-            result = generate_one_trellis2(img, endpoint_id, api_key)
+            result = generate_one_trellis2(img, endpoint_id, api_key, remove_bg=args.rembg)
         elif args.trellis:
             result = generate_one_trellis(img, endpoint_id, api_key)
         elif args.runpod:

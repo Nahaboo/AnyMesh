@@ -251,6 +251,7 @@ class GenerateLodRequest(BaseModel):
     """Auto-LOD generation parameters."""
     filename: str
     is_generated: bool = False
+    preserve_texture: bool = False
 
 
 @app.get("/")
@@ -2143,13 +2144,17 @@ def generate_lod_task_handler(task: Task):
     original_faces = _count_faces_glb(input_path)
     lods.append({"level": 0, "filename": lod0_path.name, "faces_count": original_faces})
 
+    preserve_texture = params.get("preserve_texture", False)
+
     # LOD1, LOD2, LOD3
     for i, ratio in enumerate([0.5, 0.25, 0.10], start=1):
         lod_path = DATA_OUTPUT / f"{stem}_LOD{i}.glb"
         result = simplify_mesh_glb(
             input_path=input_path,
             output_path=lod_path,
-            reduction_ratio=1.0 - ratio  # ratio = faces kept; reduction = faces removed
+            reduction_ratio=1.0 - ratio,  # ratio = faces kept; reduction = faces removed
+            preserve_texture=preserve_texture,
+            temp_dir=DATA_TEMP
         )
         faces = result.get("simplified_triangles", 0) if result.get("success") else 0
         lods.append({"level": i, "filename": lod_path.name, "faces_count": faces})
@@ -2197,6 +2202,7 @@ async def generate_lod(request: GenerateLodRequest):
         params={
             "input_file": str(input_path),
             "is_generated": request.is_generated,
+            "preserve_texture": request.preserve_texture,
         }
     )
     return {"task_id": task_id, "message": "LOD generation started"}

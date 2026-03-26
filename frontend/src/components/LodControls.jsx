@@ -1,13 +1,19 @@
+import { useState } from 'react'
 import { getLodZipUrl } from '../utils/api'
 
 const LOD_LABELS = ['LOD0 (original)', 'LOD1 (50%)', 'LOD2 (25%)', 'LOD3 (10%)']
 const LOD_COLORS = ['var(--v2-text-primary)', 'var(--v2-accent-primary)', '#f59e0b', 'var(--v2-error-text)']
 
 function LodControls({ meshInfo, onGenerateLod, onLoadLod, currentTask, isProcessing }) {
+  const [preserveTexture, setPreserveTexture] = useState(false)
+
   const isLodTask = currentTask?.taskType === 'generate_lod'
   const isLodCompleted = isLodTask && currentTask?.status === 'completed'
   const lods = currentTask?.result?.lods || []
   const zipFilename = currentTask?.result?.zip_filename
+
+  const isGenerated = meshInfo?.isGenerated === true
+  const hasTexture = meshInfo?.has_textures === true || isGenerated
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -15,7 +21,8 @@ function LodControls({ meshInfo, onGenerateLod, onLoadLod, currentTask, isProces
     const filename = meshInfo.originalFilename || meshInfo.filename
     onGenerateLod({
       filename,
-      isGenerated: meshInfo.isGenerated === true,
+      isGenerated,
+      preserveTexture: hasTexture && preserveTexture,
     })
   }
 
@@ -55,6 +62,28 @@ function LodControls({ meshInfo, onGenerateLod, onLoadLod, currentTask, isProces
             {(meshInfo.triangles_count || meshInfo.faces_count || 0).toLocaleString()}
           </span>
         </div>
+      )}
+
+      {/* Texture option */}
+      {hasTexture && (
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--v2-spacing-sm)',
+          cursor: 'pointer',
+          fontSize: '0.875rem',
+          color: 'var(--v2-text-secondary)',
+          userSelect: 'none',
+          marginBottom: 'var(--v2-spacing-md)'
+        }}>
+          <input
+            type="checkbox"
+            checked={preserveTexture}
+            onChange={(e) => setPreserveTexture(e.target.checked)}
+            style={{ accentColor: 'var(--v2-accent-primary)', width: '16px', height: '16px', cursor: 'pointer' }}
+          />
+          Conserver la texture (transfert UV)
+        </label>
       )}
 
       {/* Bouton générer */}
