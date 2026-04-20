@@ -6,7 +6,7 @@ Application web pour traiter les sorties brutes de modèles IA génératifs et p
 
 ## Démonstration
 
-> **[→ Démo live](https://your-vps-url)**
+> **[→ Démo live](http://anymesh.xyz)**
 > Les opérations lourdes (génération, retopologie) sont déportées sur GPU RunPod — le serveur principal reste léger.
 
 ---
