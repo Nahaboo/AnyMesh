@@ -48,6 +48,9 @@ yarn-error.log*
 *~
 .DS_Store
 
+# Claude Code
+.claude/
+
 # Archive (code obsolete garde en local)
 archive/
 _archived/
@@ -147,3 +150,4 @@ pip-delete-this-directory.txt
 
 # Fichiers null/temporaires Windows
 nul
+".claude/" 
