@@ -147,7 +147,8 @@ def simplify_mesh_glb(
             'output_size': output_path.stat().st_size,
             'has_textures': has_textures,
             'textures_lost': has_textures and not texture_transferred,
-            'texture_transferred': texture_transferred
+            'texture_transferred': texture_transferred,
+            'is_watertight': bool(mesh_simplified.is_watertight)
         }
 
     except Exception as e:

@@ -251,6 +251,8 @@ class GenerateLodRequest(BaseModel):
     """Auto-LOD generation parameters."""
     filename: str
     is_generated: bool = False
+    is_simplified: bool = False
+    is_retopologized: bool = False
     preserve_texture: bool = False
 
 
@@ -2192,7 +2194,14 @@ def _count_faces_glb(path: Path) -> int:
 @app.post("/generate-lod")
 async def generate_lod(request: GenerateLodRequest):
     """Generate 4 LOD levels (LOD0-LOD3) from a GLB mesh and package them as a downloadable ZIP."""
-    source_dir = DATA_GENERATED_MESHES if request.is_generated else DATA_INPUT
+    if request.is_retopologized:
+        source_dir = DATA_RETOPO
+    elif request.is_simplified:
+        source_dir = DATA_OUTPUT
+    elif request.is_generated:
+        source_dir = DATA_GENERATED_MESHES
+    else:
+        source_dir = DATA_INPUT
     input_path = source_dir / request.filename
     if not input_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")

@@ -147,7 +147,8 @@ function App() {
       isUVUnwrapped: false,
       originalFilename: originalName,  // Fichier source simplifié (bunny_simplified.glb)
       has_textures: result.texture_transferred === true,
-      isGenerated: meshInfo.isGenerated || false
+      isGenerated: meshInfo.isGenerated || false,
+      is_watertight: result.is_watertight === true
     }
 
     console.log('[App] Loading simplified mesh (GLB):', simplifiedMeshInfo)

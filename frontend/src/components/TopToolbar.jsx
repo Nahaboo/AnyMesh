@@ -34,7 +34,7 @@ function TopToolbar({ renderMode, onRenderModeChange, onHomeClick, debugMode, on
         fontWeight: 600,
         color: 'var(--v2-text-primary)'
       }}>
-        Any 3d
+        Any Mesh
       </div>
 
       {/* Center: Render Mode Buttons */}

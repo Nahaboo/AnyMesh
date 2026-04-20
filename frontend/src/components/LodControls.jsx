@@ -13,6 +13,8 @@ function LodControls({ meshInfo, onGenerateLod, onLoadLod, currentTask, isProces
   const zipFilename = currentTask?.result?.zip_filename
 
   const isGenerated = meshInfo?.isGenerated === true
+  const isSimplified = meshInfo?.isSimplified === true
+  const isRetopologized = meshInfo?.isRetopologized === true
   const hasTexture = meshInfo?.has_textures === true || isGenerated
 
   const handleSubmit = (e) => {
@@ -22,6 +24,8 @@ function LodControls({ meshInfo, onGenerateLod, onLoadLod, currentTask, isProces
     onGenerateLod({
       filename,
       isGenerated,
+      isSimplified,
+      isRetopologized,
       preserveTexture: hasTexture && preserveTexture,
     })
   }

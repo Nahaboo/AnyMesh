@@ -52,7 +52,7 @@ function ConfigSidebar({ onConfigComplete }) {
           color: 'var(--v2-text-primary)',
           marginBottom: 'var(--v2-spacing-sm)'
         }}>
-          Any 3D
+          Any Mesh
         </h2>
       </div>
 
