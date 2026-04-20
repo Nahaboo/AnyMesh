@@ -33,7 +33,7 @@ Image(s) → Génération IA → Analyse → Retopologie → Texture Baking → 
 
 Deux providers open-source sont intégrés en production.
 
-**TRELLIS** (Microsoft) tourne sur RunPod Serverless (GPU A40/A100). Meilleure qualité visuelle, texture incluse. Génère une scène multi-géométries — la topologie est fragmentée par design, ce qui implique des contraintes sur les opérations de post-processing (voir section Retopologie).
+**TRELLIS** (Microsoft) tourne sur RunPod Serverless. Meilleure qualité visuelle, texture incluse. Génère une soupe de polygones — la topologie est fragmentée par design, ce qui implique des contraintes sur les opérations de post-processing (voir section Retopologie).
 
 **TripoSR** (Stability/Tripo) tourne en local sur n'importe quel GPU modeste (~30s par génération). Résultat watertight sans texture — topologie propre, directement compatible avec le pipeline de retopologie.
 
@@ -55,7 +55,7 @@ Deux limitations à noter. Les textures sont perdues après simplification : les
 
 Un mesh généré par IA compte souvent plusieurs centaines de milliers à quelques millions de triangles, positionnés sans structure. Pour l'animation, la subdivision ou simplement avoir un mesh propre et léger, il faut recréer la topologie depuis zéro.
 
-L'outil utilisé est Instant Meshes (Disney Research), un remaillage field-aligned qui recrée le mesh avec des quads bien orientés. Le slider permet de viser entre 5% et 50% des faces originales.
+L'outil utilisé est Instant Meshes (Disney Research), un remaillage field-aligned qui recrée le mesh avec une structure quad dominante, orientée selon les lignes de courbure de la surface. Le slider permet de viser entre 5% et 50% des faces originales.
 
 Instant Meshes fonctionne bien sur des meshes propres et fermés. Les meshes TRELLIS posent un problème spécifique : ils sont composés de centaines de géométries séparées non-fermées par design. Instant Meshes produit des trous sur ces meshes — problème connu (issue #78) et non résolu à ce jour. La retopologie est donc désactivée automatiquement sur ces meshes.
 
@@ -67,23 +67,21 @@ Une tentative de réparation a été testée : réparer le mesh avant retopo via
 
 La retopologie recrée un mesh avec une bonne topologie, mais sans texture — la géométrie est refaite de zéro, les coordonnées UV originales ne correspondent plus à rien. Le baking transfère la texture du mesh original (high poly) vers le nouveau mesh low poly.
 
-Pipeline : génération d'UVs via LSCM (voir section UV Unwrapping) sur le low poly, puis pour chaque vertex du low poly, recherche du vertex le plus proche sur le high poly via un KDTree spatial — une structure de données qui organise les points dans l'espace pour accélérer les recherches de proximité. Ce vertex high poly pointe vers une couleur dans la texture originale. La couleur est projetée dans la nouvelle texture, triangle par triangle, par interpolation barycentrique.
-
-L'approche KDTree vertex-to-vertex est une approximation. Un raycasting perpendiculaire à la surface serait plus précis aux bords et dans les zones de fort détail, mais bien plus lent. Pour une prévisualisation web à 60fps, la qualité est suffisante.
+Pipeline : génération d'UVs sur le low poly, puis transfert de couleur depuis le high poly par recherche spatiale et interpolation barycentrique triangle par triangle.
 
 ---
 
 ### UV Unwrapping
 
-Génère des coordonnées UV sur un mesh qui n'en a pas, via LSCM (Least Squares Conformal Maps) — un algorithme qui déplie le mesh 3D en 2D en minimisant la distorsion angulaire. Le viewer propose un mode UV checker (damier) pour visualiser la qualité de l'unwrap.
+Génère des coordonnées UV sur un mesh qui n'en a pas. Le viewer propose un mode UV checker (damier) pour visualiser la qualité de l'unwrap.
 
-Limitations : les seams sont placés automatiquement, pas nécessairement aux endroits les plus judicieux — sur un visage humain par exemple, une couture au milieu du front est techniquement valide mais visuellement problématique. Sur des meshes non-manifold, l'unwrap peut produire des îles UV qui se chevauchent, ce qui provoque des artefacts de texture (deux zones du mesh partagent les mêmes pixels). LSCM préserve les angles mais pas les surfaces — une zone très courbée comme un nez ou une oreille peut être sur-représentée dans l'espace UV et recevoir plus de résolution de texture qu'une zone plate.
+Limitations : les seams sont placés automatiquement, pas nécessairement aux endroits les plus judicieux. Sur des meshes non-manifold, l'unwrap peut produire des îles UV qui se chevauchent, ce qui provoque des artefacts de texture.
 
 ---
 
 ### Segmentation
 
-Découpe un mesh en régions distinctes selon 4 méthodes : connectivité, arêtes vives, courbure, plans géométriques. Feature en cours de développement — l'implémentation actuelle est basique et ne fonctionne pas sur les meshes TRELLIS (non-watertight). La méthode courbure utilise un KMeans sur les normales de surface, fragile sur des meshes complexes. La méthode connectivité sépare simplement les composantes déjà disconnectées.
+Découpe un mesh en régions distinctes selon 4 méthodes : connectivité, arêtes vives, courbure, plans géométriques. Feature expérimentale — nécessite un mesh watertight, incompatible avec les sorties TRELLIS.
 
 ---
 
@@ -106,7 +104,7 @@ La limite principale est le convex hull : un objet en forme de L ou de C aura un
 ## Architecture
 
 ```
-Navigateur (React + RTF)
+Navigateur (React + R3F)
         │ REST API
         ▼
     FastAPI (VPS)
@@ -114,11 +112,8 @@ Navigateur (React + RTF)
     ├── Trimesh / PyMeshLab / SciPy
     └── Instant Meshes (subprocess C++)
         │
-        ├── RunPod Serverless GPU
-        │   └── TRELLIS endpoint
-        │
-        └── Docker worker (même VPS)
-            └── Unique3D
+        └── RunPod Serverless GPU
+            └── TRELLIS endpoint
 ```
 
 Le VPS fait tourner le backend FastAPI et sert les fichiers statiques, sans GPU. Pour TRELLIS, le backend soumet un job via API REST, RunPod alloue un GPU à la demande et retourne le GLB. On ne paie que le temps GPU réellement utilisé. TripoSR tourne en local sur n'importe quel GPU, sans passer par RunPod.
@@ -130,9 +125,9 @@ Le VPS fait tourner le backend FastAPI et sert les fichiers statiques, sans GPU.
 | Couche | Technologie | Pourquoi |
 |--------|-------------|----------|
 | Backend | **FastAPI** | Python async, typage Pydantic, doc API auto-générée |
-| Géométrie 3D | **Trimesh** | Chargement natif GLB/GLTF, QEM, LSCM unwrap |
+| Géométrie 3D | **Trimesh** | Chargement natif GLB/GLTF, analyse topologique |
 | Géométrie 3D | **PyMeshLab** | Triangulation des N-gons produits par Instant Meshes |
-| Calcul numérique | **SciPy / NumPy** | KDTree spatial pour le texture baking |
+| Calcul numérique | **SciPy / NumPy** | Recherche spatiale et calcul numérique pour le texture baking |
 | Images | **Pillow** | Lecture/écriture des textures PNG |
 | Segmentation | **Open3D + scikit-learn** | Normales de surface et KMeans pour la segmentation par courbure |
 | Remaillage | **Instant Meshes** | Field-aligned remeshing C++ (Disney Research) |
@@ -140,7 +135,7 @@ Le VPS fait tourner le backend FastAPI et sert les fichiers statiques, sans GPU.
 | Helpers 3D | **@react-three/drei** | OrbitControls, Environment, ContactShadows |
 | Physique | **Rapier (WASM)** | Moteur physique Rust compilé WebAssembly |
 | Build frontend | **Vite** | HMR instantané, plus rapide que Webpack |
-| Infra | **Docker** | Isolation du worker Unique3D et ses dépendances CUDA |
+| Infra | **Docker** | Packaging du backend et isolation des dépendances |
 | GPU à la demande | **RunPod Serverless** | GPU payés à l'usage |
 
 Open3D et PyVista sont présents dans le code mais leur usage est marginal (segmentation et un handler legacy). Le chemin principal utilise Trimesh.
@@ -160,9 +155,9 @@ cd frontend && npm install && npm run dev
 
 Variables d'environnement (`.env`) :
 ```
-STABILITY_API_KEY=sk-...
 RUNPOD_API_KEY=...
 RUNPOD_TRELLIS_ENDPOINT_ID=...
+GEMINI_API_KEY=...
 ```
 
 ---
