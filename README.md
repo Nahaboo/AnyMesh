@@ -7,7 +7,7 @@ Application web pour traiter les sorties brutes de modèles IA génératifs et p
 ## Démonstration
 
 > **[→ Démo live](http://anymesh.xyz)**
-> Les opérations lourdes (génération, retopologie) sont déportées sur GPU RunPod — le serveur principal reste léger.
+> La génération 3D est déportée sur GPU RunPod
 
 ---
 
@@ -120,6 +120,14 @@ Le VPS fait tourner le backend FastAPI et sert les fichiers statiques, sans GPU.
 
 ---
 
+## Déploiement
+
+Le VPS tourne Ubuntu 24.04 avec Docker. Le backend et nginx sont lancés via `docker compose up -d`. Nginx sert les fichiers statiques React et proxie les requêtes API vers FastAPI.
+
+La partie RunPod a nécessité plusieurs itérations. L'image TRELLIS officielle dépasse 30 GB — trop lourde pour un démarrage serverless rapide. La solution retenue est une image allégée (~3-5 GB) qui charge les modèles depuis un volume persistant au démarrage du worker. Le premier démarrage (allocation GPU + chargement des modèles) prend 60-90 secondes. Le backend gère cette attente avec un système de polling.
+
+---
+
 ## Stack
 
 | Couche | Technologie | Pourquoi |
@@ -127,18 +135,17 @@ Le VPS fait tourner le backend FastAPI et sert les fichiers statiques, sans GPU.
 | Backend | **FastAPI** | Python async, typage Pydantic, doc API auto-générée |
 | Géométrie 3D | **Trimesh** | Chargement natif GLB/GLTF, analyse topologique |
 | Géométrie 3D | **PyMeshLab** | Triangulation des N-gons produits par Instant Meshes |
+| Simplification | **pyfqmr** | QEM avec preserve_border — meilleur contrôle que l'implémentation Trimesh |
 | Calcul numérique | **SciPy / NumPy** | Recherche spatiale et calcul numérique pour le texture baking |
 | Images | **Pillow** | Lecture/écriture des textures PNG |
-| Segmentation | **Open3D + scikit-learn** | Normales de surface et KMeans pour la segmentation par courbure |
-| Remaillage | **Instant Meshes** | Field-aligned remeshing C++ (Disney Research) |
+| Remaillage | **Instant Meshes** | Field-aligned remeshing C++, structure quad-dominante (Disney Research) |
+| Génération IA | **Gemini Imagen** | Génération de textures depuis un prompt |
 | Rendu 3D | **React Three Fiber** | Binding React de Three.js |
 | Helpers 3D | **@react-three/drei** | OrbitControls, Environment, ContactShadows |
 | Physique | **Rapier (WASM)** | Moteur physique Rust compilé WebAssembly |
 | Build frontend | **Vite** | HMR instantané, plus rapide que Webpack |
 | Infra | **Docker** | Packaging du backend et isolation des dépendances |
 | GPU à la demande | **RunPod Serverless** | GPU payés à l'usage |
-
-Open3D et PyVista sont présents dans le code mais leur usage est marginal (segmentation et un handler legacy). Le chemin principal utilise Trimesh.
 
 ---
 
