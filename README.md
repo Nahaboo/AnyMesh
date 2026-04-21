@@ -6,8 +6,8 @@ Application web pour traiter les sorties brutes de modèles IA génératifs et p
 
 ## Démonstration
 
-> **[→ Démo live](http://anymesh.xyz)**
-> La génération 3D est déportée sur GPU RunPod
+> **[anymesh.xyz](http://anymesh.xyz)**
+La génération 3D est déportée sur GPU RunPod
 
 ---
 
