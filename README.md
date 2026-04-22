@@ -41,6 +41,10 @@ Deux autres providers ont été testés et écartés : Stability AI SF3D (API cl
 
 Un script de benchmark (`benchmark_providers.py`) compare les providers sur les mêmes images : temps, taille de fichier, face count, watertight, aspect ratio des triangles, résolution texture.
 
+| Clay | Analyse topologique |
+|------|-------------------|
+| ![](images/chatBleu-Clay.png) | ![](images/chatBleu-Clay-MESH.png) |
+
 ---
 
 ### Simplification de mesh
@@ -48,6 +52,10 @@ Un script de benchmark (`benchmark_providers.py`) compare les providers sur les 
 Réduit le nombre de triangles d'un mesh en préservant la forme. L'algorithme est le Quadric Error Metric (QEM) — pour chaque vertex supprimé, il minimise l'erreur géométrique introduite. Trois niveaux : Basse (garde 70%), Moyenne (garde 50%), Forte (garde 20%), avec une option pour préserver les bords.
 
 Deux limitations à noter. Les textures sont perdues après simplification : les UVs deviennent incohérents quand les vertices sont fusionnés — c'est une contrainte fondamentale du QEM, pas un bug. Sur les meshes TRELLIS avec texture, le taux de réduction atteint peut être inférieur à la cible à cause du grand nombre de boundary edges.
+
+| Avant | Après |
+|-------|-------|
+| ![](images/avantSimpl.png) | ![](images/apresSimpl.png) |
 
 ---
 
@@ -60,6 +68,10 @@ L'outil utilisé est Instant Meshes (Disney Research), un remaillage field-align
 Instant Meshes fonctionne bien sur des meshes propres et fermés. Les meshes TRELLIS posent un problème spécifique : ils sont composés de centaines de géométries séparées non-fermées par design. Instant Meshes produit des trous sur ces meshes — problème connu (issue #78) et non résolu à ce jour. La retopologie est donc désactivée automatiquement sur ces meshes.
 
 Une tentative de réparation a été testée : réparer le mesh avant retopo via pymeshfix pour le rendre watertight. Résultat : pymeshfix ferme les trous en reconstruisant la géométrie autour, ce qui déforme la forme originale. Approche abandonnée.
+
+| Avant | Après |
+|-------|-------|
+| ![](images/avantRetopo.png) | ![](images/apresRetopo.png) |
 
 ---
 
@@ -91,6 +103,8 @@ L'utilisateur entre un prompt textuel ("rusty metal" par exemple), le backend ap
 
 Pour un export production, un bake de texture transfère le résultat dans le GLB — cette étape nécessite un mesh watertight.
 
+![](images/bunnyTextured.png)
+
 ---
 
 ### Physique temps réel
@@ -98,6 +112,8 @@ Pour un export production, un bake de texture transfère le résultat dans le GL
 Feature en cours de développement. Rapier (moteur physique Rust compilé en WebAssembly, via `@react-three/rapier`) tourne dans le navigateur à 60fps sans calcul serveur. Le convex hull du mesh est extrait (simplifié à 128 vertices), utilisé comme collider, et la chute et les rebonds de l'objet sont simulés dans le viewer. Les propriétés physiques (densité, friction, restitution) peuvent être générées depuis un prompt IA.
 
 La limite principale est le convex hull : un objet en forme de L ou de C aura un collider qui ne correspond pas à sa silhouette réelle. Une décomposition convexe (VHACD) serait plus précise mais plus coûteuse dans le navigateur.
+
+![](images/bunnyPhysicMousse.png)
 
 ---
 
