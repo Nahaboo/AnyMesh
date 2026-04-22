@@ -41,12 +41,13 @@ Deux autres providers ont été testés et écartés : Stability AI SF3D (API cl
 
 Un script de benchmark (`benchmark_providers.py`) compare les providers sur les mêmes images : temps, taille de fichier, face count, watertight, aspect ratio des triangles, résolution texture.
 
-| Image | AnalysMesh |
+| Image | Mesh |
 |------|-------------------|
 | ![](images/chatBleu-Clay.png) | ![](images/chatBleu-Clay-MESH.png) |
 
 
-| Analyse |
+| Analyse de la qualité du maillage|
+|-------------------------|
 ![](images/ship-qualityAnalysis.png)
 
 ---
