@@ -33,7 +33,7 @@ Image(s) → Génération IA → Analyse → Retopologie → Texture Baking → 
 
 Deux providers open-source sont intégrés en production.
 
-**TRELLIS** (Microsoft) tourne sur RunPod Serverless. Meilleure qualité visuelle, texture incluse. Génère une soupe de polygones — la topologie est fragmentée par design, ce qui implique des contraintes sur les opérations de post-processing (voir section Retopologie).
+**TRELLIS** (Microsoft) tourne sur RunPod Serverless. Meilleure qualité visuelle, texture incluse. Génère une soupe de polygones — la topologie est fragmentée par design (voir image Analyse ci-dessous), ce qui implique des contraintes sur les opérations de post-processing (voir section Retopologie).
 
 **TripoSR** (Stability/Tripo) tourne en local sur n'importe quel GPU modeste (~30s par génération). Résultat watertight sans texture — topologie propre, directement compatible avec le pipeline de retopologie.
 
@@ -41,9 +41,13 @@ Deux autres providers ont été testés et écartés : Stability AI SF3D (API cl
 
 Un script de benchmark (`benchmark_providers.py`) compare les providers sur les mêmes images : temps, taille de fichier, face count, watertight, aspect ratio des triangles, résolution texture.
 
-| Clay | Analyse topologique |
+| Image | AnalysMesh |
 |------|-------------------|
 | ![](images/chatBleu-Clay.png) | ![](images/chatBleu-Clay-MESH.png) |
+
+
+| Analyse |
+![](images/ship-qualityAnalysis.png)
 
 ---
 
