@@ -58,9 +58,11 @@ Réduit le nombre de triangles d'un mesh en préservant la forme. L'algorithme e
 
 Deux limitations à noter. Les textures sont perdues après simplification : les UVs deviennent incohérents quand les vertices sont fusionnés — c'est une contrainte fondamentale du QEM, pas un bug. Sur les meshes TRELLIS avec texture, le taux de réduction atteint peut être inférieur à la cible à cause du grand nombre de boundary edges.
 
-| Avant | Après |
-|-------|-------|
-| ![](images/avantSimpl.png) | ![](images/apresSimpl.png) |
+**Avant**
+![](images/avantSimpl.png)
+
+**Après**
+![](images/apresSimpl.png)
 
 ---
 
@@ -74,9 +76,11 @@ Instant Meshes fonctionne bien sur des meshes propres et fermés. Les meshes TRE
 
 Une tentative de réparation a été testée : réparer le mesh avant retopo via pymeshfix pour le rendre watertight. Résultat : pymeshfix ferme les trous en reconstruisant la géométrie autour, ce qui déforme la forme originale. Approche abandonnée.
 
-| Avant | Après |
-|-------|-------|
-| ![](images/avantRetopo.png) | ![](images/apresRetopo.png) |
+**Avant**
+![](images/avantRetopo.png)
+
+**Après**
+![](images/apresRetopo.png)
 
 ---
 
