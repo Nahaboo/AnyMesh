@@ -6,7 +6,7 @@ Application web pour traiter les sorties brutes de modèles IA génératifs et p
 
 ## Démonstration
 
-> **[anymesh.xyz](http://anymesh.xyz)** — [Voir la démo (3min)](https://www.youtube.com/watch?v=JchFNbNeioY)
+> **[anymesh.xyz](http://anymesh.xyz)** — [Voir la démo (3min)](https://youtu.be/RftovuUr0LM)
 > La génération 3D est déportée sur GPU RunPod.
 
 ---
@@ -33,7 +33,7 @@ Image(s) → Génération IA → Analyse → Retopologie → Texture Baking → 
 
 Deux providers open-source sont intégrés en production.
 
-**TRELLIS** (Microsoft) tourne sur RunPod Serverless. Meilleure qualité visuelle, texture incluse. Génère une soupe de polygones — le maillage n'est pas watertight, ce qui implique des contraintes sur les opérations de post-processing (voir section Retopologie).
+**TRELLIS.2** (Microsoft) tourne sur RunPod Serverless. Meilleure qualité visuelle, PBR natif inclus (base color, metallic, roughness, opacity). Repose sur O-Voxel, une représentation voxel sparse qui supporte les topologies arbitraires — open surfaces, non-manifold, structures internes. En pratique, les meshes générés sont composés de nombreuses composantes géométriques séparées non-watertight par design, ce qui implique des contraintes sur les opérations de post-processing (voir section Retopologie).
 
 **TripoSR** (Stability/Tripo) tourne en local sur n'importe quel GPU modeste (~30s par génération). Résultat watertight sans texture — topologie propre, directement compatible avec le pipeline de retopologie.
 
@@ -43,7 +43,7 @@ Un script de benchmark (`benchmark_providers.py`) compare les providers sur les 
 
 <table><tr>
 <td align="center"><img src="images/chatBleu-Clay.png"><br><em>Image input</em></td>
-<td align="center"><img src="images/chatBleu-Clay-MESH.png"><br><em>Maillage généré avec TRELLIS</em></td>
+<td align="center"><img src="images/chatBleu-Clay-MESH.png"><br><em>Maillage généré avec TRELLIS.2</em></td>
 </tr></table>
 
 <img src="images/ship-qualityAnalysis.png" width="80%"><br><em>Panel Quality Analysis — détection automatique non-watertight</em>
@@ -54,7 +54,7 @@ Un script de benchmark (`benchmark_providers.py`) compare les providers sur les 
 
 Réduit le nombre de triangles d'un mesh en préservant la forme. L'algorithme est le Quadric Error Metric (QEM) — pour chaque vertex supprimé, il minimise l'erreur géométrique introduite. Trois niveaux : Basse (garde 70%), Moyenne (garde 50%), Forte (garde 20%), avec une option pour préserver les bords.
 
-Deux limitations à noter. Les textures sont perdues après simplification : les UVs deviennent incohérents quand les vertices sont fusionnés — c'est une contrainte fondamentale du QEM, pas un bug. Sur les meshes TRELLIS avec texture, le taux de réduction atteint peut être inférieur à la cible à cause du grand nombre de boundary edges.
+Deux limitations à noter. Les textures sont perdues après simplification : les UVs deviennent incohérents quand les vertices sont fusionnés — c'est une contrainte fondamentale du QEM, pas un bug. Sur les meshes TRELLIS.2 avec texture, le taux de réduction atteint peut être inférieur à la cible à cause du grand nombre de boundary edges.
 
 <table><tr>
 <td align="center"><img src="images/avantSimpl.png"><br><em>Avant — maillage dense</em></td>
@@ -69,7 +69,7 @@ Un mesh généré par IA compte souvent plusieurs centaines de milliers à quelq
 
 L'outil utilisé est Instant Meshes (Disney Research), un remaillage field-aligned qui recrée le mesh avec une structure quad dominante, orientée selon les lignes de courbure de la surface. Le slider permet de viser entre 5% et 50% des faces originales.
 
-Instant Meshes fonctionne bien sur des meshes propres et fermés. Les meshes TRELLIS posent un problème spécifique : ils sont composés de centaines de géométries séparées non-fermées par design. Instant Meshes produit des trous sur ces meshes — problème connu (issue #78) et non résolu à ce jour. La retopologie est donc désactivée automatiquement sur ces meshes.
+Instant Meshes fonctionne bien sur des meshes propres et fermés. Les meshes TRELLIS.2 posent un problème spécifique : la reconstruction voxel par voxel ne garantit pas une surface fermée, ce qui laisse de nombreux boundary edges. Instant Meshes produit des trous sur ces meshes — problème connu (issue #78) et non résolu à ce jour. La retopologie est donc désactivée automatiquement sur ces meshes.
 
 Une tentative de réparation a été testée : réparer le mesh avant retopo via pymeshfix pour le rendre watertight. Résultat : pymeshfix ferme les trous en reconstruisant la géométrie autour, ce qui déforme la forme originale. Approche abandonnée.
 
@@ -98,7 +98,7 @@ Limitations : les seams sont placés automatiquement, pas nécessairement aux en
 
 ### Segmentation
 
-Découpe un mesh en régions distinctes selon 4 méthodes : connectivité, arêtes vives, courbure, plans géométriques. Feature expérimentale — nécessite un mesh watertight, incompatible avec les sorties TRELLIS.
+Découpe un mesh en régions distinctes selon 4 méthodes : connectivité, arêtes vives, courbure, plans géométriques. Feature expérimentale — nécessite un mesh watertight, incompatible avec les sorties TRELLIS.2.
 
 ---
 
@@ -134,10 +134,10 @@ Navigateur (React + R3F)
     └── Instant Meshes (subprocess C++)
         │
         └── RunPod Serverless GPU
-            └── TRELLIS endpoint
+            └── TRELLIS.2 endpoint
 ```
 
-Le VPS fait tourner le backend FastAPI et sert les fichiers statiques, sans GPU. Pour TRELLIS, le backend soumet un job via API REST, RunPod alloue un GPU à la demande et retourne le GLB. On ne paie que le temps GPU réellement utilisé. TripoSR tourne en local sur n'importe quel GPU, sans passer par RunPod.
+Le VPS fait tourner le backend FastAPI et sert les fichiers statiques, sans GPU. Pour TRELLIS.2, le backend soumet un job via API REST, RunPod alloue un GPU à la demande et retourne le GLB. On ne paie que le temps GPU réellement utilisé. TripoSR tourne en local sur n'importe quel GPU, sans passer par RunPod.
 
 ---
 
@@ -145,7 +145,7 @@ Le VPS fait tourner le backend FastAPI et sert les fichiers statiques, sans GPU.
 
 Le VPS tourne Ubuntu 24.04 avec Docker. Le backend et nginx sont lancés via `docker compose up -d`. Nginx sert les fichiers statiques React et proxie les requêtes API vers FastAPI.
 
-La partie RunPod a nécessité plusieurs itérations. L'image TRELLIS officielle dépasse 30 GB — trop lourde pour un démarrage serverless rapide. La solution retenue est une image allégée (~3-5 GB) qui charge les modèles depuis un volume persistant au démarrage du worker. Le premier démarrage (allocation GPU + chargement des modèles) prend 60-90 secondes. Le backend gère cette attente avec un système de polling.
+La partie RunPod a nécessité plusieurs itérations. L'image TRELLIS.2 officielle dépasse 30 GB — trop lourde pour un démarrage serverless rapide. La solution retenue est une image allégée (~3-5 GB) qui charge les modèles depuis un volume persistant au démarrage du worker. Le premier démarrage (allocation GPU + chargement des modèles) prend 60-90 secondes. Le backend gère cette attente avec un système de polling.
 
 ---
 
