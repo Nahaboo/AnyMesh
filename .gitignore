@@ -140,6 +140,7 @@ InstantMesh/
 # Screenshots et images temporaires
 *.png
 !frontend/public/**/*.png
+!images/*.png
 
 # Fichiers pip
 pip-log.txt
