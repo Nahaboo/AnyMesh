@@ -6,8 +6,7 @@ Application web pour traiter les sorties brutes de modèles IA génératifs et p
 
 ## Démonstration
 
-> **[anymesh.xyz](http://anymesh.xyz)**
-La génération 3D est déportée sur GPU RunPod
+> **[anymesh.xyz](http://anymesh.xyz)** — La génération 3D est déportée sur GPU RunPod.
 
 ---
 
@@ -33,7 +32,7 @@ Image(s) → Génération IA → Analyse → Retopologie → Texture Baking → 
 
 Deux providers open-source sont intégrés en production.
 
-**TRELLIS** (Microsoft) tourne sur RunPod Serverless. Meilleure qualité visuelle, texture incluse. Génère une soupe de polygones — la topologie est fragmentée par design (voir image Analyse ci-dessous), ce qui implique des contraintes sur les opérations de post-processing (voir section Retopologie).
+**TRELLIS** (Microsoft) tourne sur RunPod Serverless. Meilleure qualité visuelle, texture incluse. Génère une soupe de polygones — le maillage n'est pas watertight, ce qui implique des contraintes sur les opérations de post-processing (voir section Retopologie).
 
 **TripoSR** (Stability/Tripo) tourne en local sur n'importe quel GPU modeste (~30s par génération). Résultat watertight sans texture — topologie propre, directement compatible avec le pipeline de retopologie.
 
@@ -41,13 +40,8 @@ Deux autres providers ont été testés et écartés : Stability AI SF3D (API cl
 
 Un script de benchmark (`benchmark_providers.py`) compare les providers sur les mêmes images : temps, taille de fichier, face count, watertight, aspect ratio des triangles, résolution texture.
 
-| Image | Mesh |
-|------|-------------------|
-| ![](images/chatBleu-Clay.png) | ![](images/chatBleu-Clay-MESH.png) |
-
-
-| Analyse de la qualité du maillage|
-|-------------------------|
+![](images/chatBleu-Clay.png)
+![](images/chatBleu-Clay-MESH.png)
 ![](images/ship-qualityAnalysis.png)
 
 ---
