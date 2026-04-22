@@ -41,8 +41,8 @@ Deux autres providers ont été testés et écartés : Stability AI SF3D (API cl
 Un script de benchmark (`benchmark_providers.py`) compare les providers sur les mêmes images : temps, taille de fichier, face count, watertight, aspect ratio des triangles, résolution texture.
 
 <table><tr>
-<td align="center"><img src="images/chatBleu-Clay.png"><br><em>Rendu clay</em></td>
-<td align="center"><img src="images/chatBleu-Clay-MESH.png"><br><em>Analyse topologique</em></td>
+<td align="center"><img src="images/chatBleu-Clay.png"><br><em>Image input</em></td>
+<td align="center"><img src="images/chatBleu-Clay-MESH.png"><br><em>Maillage généré par TRELLIS</em></td>
 </tr></table>
 
 <img src="images/ship-qualityAnalysis.png" width="80%"><br><em>Panel Quality Analysis — détection automatique non-watertight</em>
