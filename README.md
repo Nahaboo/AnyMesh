@@ -197,4 +197,14 @@ GEMINI_API_KEY=...
 
 ---
 
+## Exemples
 
+<table><tr>
+<td align="center"><img src="images/Groot.png"><br><em>Groot</em></td>
+<td align="center"><img src="images/Orc.png"><br><em>Orc</em></td>
+<td align="center"><img src="images/Whale.png"><br><em>Baleine</em></td>
+</tr><tr>
+<td align="center"><img src="images/Axe.png"><br><em>Hache</em></td>
+<td align="center"><img src="images/Duck.png"><br><em>Canard</em></td>
+<td></td>
+</tr></table>
