@@ -42,7 +42,7 @@ Un script de benchmark (`benchmark_providers.py`) compare les providers sur les 
 
 <table><tr>
 <td align="center"><img src="images/chatBleu-Clay.png"><br><em>Image input</em></td>
-<td align="center"><img src="images/chatBleu-Clay-MESH.png"><br><em>Maillage généré par TRELLIS</em></td>
+<td align="center"><img src="images/chatBleu-Clay-MESH.png"><br><em>Maillage généré avec TRELLIS</em></td>
 </tr></table>
 
 <img src="images/ship-qualityAnalysis.png" width="80%"><br><em>Panel Quality Analysis — détection automatique non-watertight</em>
@@ -107,7 +107,7 @@ L'utilisateur entre un prompt textuel ("rusty metal" par exemple), le backend ap
 
 Pour un export production, un bake de texture transfère le résultat dans le GLB — cette étape nécessite un mesh watertight.
 
-<img src="images/bunnyTextured.png" width="60%"><br><em>Prompt "fourrure de lapin marron" — texture générée et appliquée via triplanar mapping</em>
+<img src="images/bunnyTextured.png" width="60%"><br><em>Prompt "fourrure de lapin marron" — texture appliquée directement sur le mesh</em>
 
 ---
 
