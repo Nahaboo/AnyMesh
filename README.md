@@ -40,9 +40,12 @@ Deux autres providers ont été testés et écartés : Stability AI SF3D (API cl
 
 Un script de benchmark (`benchmark_providers.py`) compare les providers sur les mêmes images : temps, taille de fichier, face count, watertight, aspect ratio des triangles, résolution texture.
 
-![](images/chatBleu-Clay.png)
-![](images/chatBleu-Clay-MESH.png)
-![](images/ship-qualityAnalysis.png)
+<table><tr>
+<td align="center"><img src="images/chatBleu-Clay.png"><br><em>Rendu clay</em></td>
+<td align="center"><img src="images/chatBleu-Clay-MESH.png"><br><em>Analyse topologique</em></td>
+</tr></table>
+
+<img src="images/ship-qualityAnalysis.png" width="80%"><br><em>Panel Quality Analysis — détection automatique non-watertight</em>
 
 ---
 
@@ -52,11 +55,10 @@ Réduit le nombre de triangles d'un mesh en préservant la forme. L'algorithme e
 
 Deux limitations à noter. Les textures sont perdues après simplification : les UVs deviennent incohérents quand les vertices sont fusionnés — c'est une contrainte fondamentale du QEM, pas un bug. Sur les meshes TRELLIS avec texture, le taux de réduction atteint peut être inférieur à la cible à cause du grand nombre de boundary edges.
 
-**Avant**
-![](images/avantSimpl.png)
-
-**Après**
-![](images/apresSimpl.png)
+<table><tr>
+<td align="center"><img src="images/avantSimpl.png"><br><em>Avant — maillage dense</em></td>
+<td align="center"><img src="images/apresSimpl.png"><br><em>Après — 20% des faces</em></td>
+</tr></table>
 
 ---
 
@@ -70,11 +72,10 @@ Instant Meshes fonctionne bien sur des meshes propres et fermés. Les meshes TRE
 
 Une tentative de réparation a été testée : réparer le mesh avant retopo via pymeshfix pour le rendre watertight. Résultat : pymeshfix ferme les trous en reconstruisant la géométrie autour, ce qui déforme la forme originale. Approche abandonnée.
 
-**Avant**
-![](images/avantRetopo.png)
-
-**Après**
-![](images/apresRetopo.png)
+<table><tr>
+<td align="center"><img src="images/avantRetopo.png"><br><em>Avant — soupe de triangles</em></td>
+<td align="center"><img src="images/apresRetopo.png"><br><em>Après — structure quad-dominante</em></td>
+</tr></table>
 
 ---
 
@@ -106,7 +107,7 @@ L'utilisateur entre un prompt textuel ("rusty metal" par exemple), le backend ap
 
 Pour un export production, un bake de texture transfère le résultat dans le GLB — cette étape nécessite un mesh watertight.
 
-![](images/bunnyTextured.png)
+<img src="images/bunnyTextured.png" width="60%"><br><em>Prompt "fourrure de lapin marron" — texture générée et appliquée via triplanar mapping</em>
 
 ---
 
@@ -116,7 +117,7 @@ Feature en cours de développement. Rapier (moteur physique Rust compilé en Web
 
 La limite principale est le convex hull : un objet en forme de L ou de C aura un collider qui ne correspond pas à sa silhouette réelle. Une décomposition convexe (VHACD) serait plus précise mais plus coûteuse dans le navigateur.
 
-![](images/bunnyPhysicMousse.png)
+<img src="images/bunnyPhysicMousse.png" width="60%"><br><em>Simulation physique temps réel — matériau mousse, 60fps dans le navigateur</em>
 
 ---
 
