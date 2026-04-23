@@ -206,5 +206,5 @@ GEMINI_API_KEY=...
 </tr><tr>
 <td align="center"><img src="images/Axe.png"><br><em>Hache</em></td>
 <td align="center"><img src="images/Duck.png"><br><em>Canard</em></td>
-<td></td>
+<td align="center"><img src="images/Pizza.png"><br><em>Pizza</em></td>
 </tr></table>
