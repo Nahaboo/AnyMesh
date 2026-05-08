@@ -1,6 +1,8 @@
 # AnyMesh — Pipeline 3D post-génération IA
 
-Application web pour traiter les sorties brutes de modèles IA génératifs et produire des assets 3D utilisables en production.
+Application web pour :
+- Générer des modèles 3D à partir d'image ou de texte
+- traiter les sorties brutes de modèles IA génératifs et produire des assets 3D utilisables en production
 
 ---
 
@@ -13,9 +15,7 @@ Application web pour traiter les sorties brutes de modèles IA génératifs et p
 
 ## Pourquoi ce projet
 
-Les sorties des modèles de génération 3D arrivent souvent avec des centaines de composantes géométriques disconnectées, des trous dans le mesh, une topologie chaotique, et un nombre de polygones trop élevé pour une utilisation en temps réel.
-
-AnyMesh traite ces sorties brutes : analyse topologique, simplification, retopologie, transfert de texture, génération de LODs — depuis une interface web.
+La création d'asset 3D peut être fastidieux, AnyMesh permet de faire cela avec juste une phrase ! 
 
 ---
 
