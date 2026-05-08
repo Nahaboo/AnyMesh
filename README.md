@@ -22,7 +22,7 @@ La création d'asset 3D peut être fastidieux, AnyMesh permet de faire cela avec
 ## Workflow général
 
 ```
-Image(s) → Génération IA → Analyse → Retopologie → Texture Baking → LODs → Export
+Image(s) → Génération IA → Analyse → LODs → Export
 ```
 
 ---
